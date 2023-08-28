@@ -29,7 +29,7 @@ namespace entu {
    static constexpr name      SYSTEM_CONTRACT   = "amax"_n;
    static constexpr symbol    VOTE_SYMBOL       = symbol("VOTE", 4);
    static const asset         vote_asset_0      = asset(0, VOTE_SYMBOL);
-   static constexpr symbol    ENTU_SYMBOL       = symbol("ENTU", 8);
+   static constexpr symbol    ENTU_SYMBOL       = symbol("ENTU", 4);
    static constexpr name      ENTU_TOKEN        = "amax.token"_n;
    static const asset         ENTU_ASSET        = asset(0, ENTU_SYMBOL);
 

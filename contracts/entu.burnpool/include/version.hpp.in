@@ -1,0 +1,6 @@
+#pragma once
+
+namespace amax {
+   static const std::string __version = "@VERSION_STRING@";
+   const std::string& version() { return __version; }
+}

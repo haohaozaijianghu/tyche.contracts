@@ -37,10 +37,10 @@ enum class err: uint32_t {
    SYSTEM_ERROR         = 20000
 };
 
-#define ENTU_SWAP_PROP eosio::contract("entu.swap")
-#define ENTU_SWAP  [[ENTU_SWAP_PROP]]
-#define ENTUSWAP_TABLE struct [[eosio::table, ENTU_SWAP_PROP]] 
-#define ENTUSWAP_TABLE_NAME(name) [[eosio::table(name), ENTU_SWAP_PROP]]
+#define ENTU_BURNPOOL_PROP eosio::contract("entu.burnpool")
+#define ENTU_BURNPOOL  [[ENTU_BURNPOOL_PROP]]
+#define ENTU_TABLE struct [[eosio::table, ENTU_BURNPOOL_PROP]] 
+#define ENTU_TABLE_NAME(name) [[eosio::table(name), ENTU_BURNPOOL_PROP]]
 #define SYMBOL(sym_code, precision) symbol(symbol_code(sym_code), precision)
 
 
