@@ -15,4 +15,5 @@ set(TRANSFER_ICON_URI "transfer.png#5dfad0df72772ee1ccc155e670c1d124f5c5122f1d50
 
 add_subdirectory(entu.token)
 add_subdirectory(entu.ido)
-add_subdirectory(entu.save)
+add_subdirectory(entu.swap)
+# add_subdirectory(entu.save)
