@@ -75,10 +75,12 @@ class [[eosio::contract("usdt.save")]] amax_save : public contract {
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
 
    ACTION init();
+   ACTION newconf();
    
    private:
-      void apl_reward(const asset& interest) 
-
+      void apl_reward( const asset& interest );
+      void onredeem( const name& from, const uint64_t& team_code, const asset& quant );
+      reward_conf_map get_new_voted_reward_info(const reward_conf_map& reward_confs);
       global_singleton     _global;
       global_t             _gstate;
       dbc                  _db;
