@@ -24,6 +24,8 @@ static constexpr symbol    CNYD        = symbol(symbol_code("CNYD"), 4);
 static constexpr uint16_t  PCT_BOOST   = 10000;
 static constexpr uint64_t  DAY_SECONDS = 24 * 60 * 60;
 static constexpr uint64_t  YEAR_DAYS   = 365;
+static constexpr int128_t  HIGH_PRECISION    = 1'000'000'000'000'000'000; // 10^18
+
 
 enum class err: uint8_t {
    NONE                 = 0,
@@ -59,28 +61,30 @@ enum class err: uint8_t {
  *
  * Similarly, the `stats` multi-index table, holds instances of `currency_stats` objects for each row, which contains information about current supply, maximum supply, and the creator account for a symbol token. The `stats` table is scoped to the token symbol.  Therefore, when one queries the `stats` table for a token symbol the result is one single entry/row corresponding to the queried symbol token if it was previously created, or nothing, otherwise.
  */
-class [[eosio::contract("usdt.save")]] amax_save : public contract {
+class [[eosio::contract("usdt.save")]] usdt_save : public contract {
    public:
       using contract::contract;
 
-   amax_save(eosio::name receiver, eosio::name code, datastream<const char*> ds): contract(receiver, code, ds),
+   usdt_save(eosio::name receiver, eosio::name code, datastream<const char*> ds): contract(receiver, code, ds),
         _global(get_self(), get_self().value), _db(_self)
     {
         _gstate = _global.exists() ? _global.get() : global_t{};
     }
 
-    ~amax_save() { _global.set( _gstate, get_self() ); }
+    ~usdt_save() { _global.set( _gstate, get_self() ); }
 
    [[eosio::on_notify("*::transfer")]]
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
 
    ACTION init();
-   ACTION newconf();
    
    private:
       void apl_reward( const asset& interest );
       void onredeem( const name& from, const uint64_t& team_code, const asset& quant );
-      reward_conf_map get_new_voted_reward_info(const reward_conf_map& reward_confs);
+      voted_reward_map get_new_voted_reward_info(const reward_conf_map& reward_confs);
+      void onuserdeposit( const name& from, const uint64_t& team_code, const asset& quant );
+      void onrewardrefuel( const name& from, const asset& total_rewards );
+
       global_singleton     _global;
       global_t             _gstate;
       dbc                  _db;

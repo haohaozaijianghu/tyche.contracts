@@ -35,7 +35,7 @@ NTBL("global") global_t {
     extended_symbol     voucher_token;          //代币NUSDT
     extended_symbol     principal_token;        //代币MUSDT,用户存入的本金
     asset               mini_deposit_amount;
-    boolean             enabled;
+    bool                enabled;
 
     EOSLIB_SERIALIZE( global_t, (admin)(principal_token)(voucher_token)(mini_deposit_amount)(enabled) )
 };
@@ -46,9 +46,9 @@ struct reward_conf_t {
     asset           allocating_rewards;                 //待分配的奖励
     asset           allocated_rewards;                  //已分配奖励  = total_rewards - allocating_rewards
     asset           claimed_rewards;                    //已领取奖励
-    int128_t        rewards_per_vote_map    = 0;        //每票已分配奖励
-}
-using reward_conf_map = std::map<name, reward_conf_t>;
+    int128_t        rewards_per_vote    = 0;        //每票已分配奖励
+};
+using reward_conf_map = std::map<uint64_t, reward_conf_t>;
 
 //Scope: _self
 TBL save_conf_t {
@@ -57,8 +57,7 @@ TBL save_conf_t {
     asset           remain_deposit_quant    = asset(0, MUSDT);  //剩余存款金额
     reward_conf_map reward_confs;
     uint64_t        votes_mutli             = 1;
-
-    boolean         on_self                 = true;
+    bool            on_self                 = true;
 
     time_point_sec  created_at;
     save_conf_t() {}
@@ -70,8 +69,7 @@ TBL save_conf_t {
 
     typedef multi_index<"saveconfs"_n, save_conf_t> tbl_t;
 
-    EOSLIB_SERIALIZE( save_conf_t, (code)(total_deposit_quant)(remain_deposit_quant)(total_rewards)
-                                    (allocating_rewards)(allocated_rewards)(rewards_per_vote)(votes_mutli)
+    EOSLIB_SERIALIZE( save_conf_t, (code)(total_deposit_quant)(remain_deposit_quant)(reward_confs)
                                     (on_self)(created_at) )
 };
 
@@ -81,9 +79,9 @@ struct reward_info_t {
     asset               unclaimed_rewards;
     asset               claimed_rewards;
     time_point_sec      last_rewards_settled_at;
-}
+};
 
-using voted_reward_map = std::map<name, reward_info_t>;
+using voted_reward_map = std::map<uint64_t, reward_info_t>;
 
 //Scope: code
 //Note: record will be deleted upon withdrawal/redemption
@@ -100,7 +98,7 @@ TBL save_account_t {
         account = a;
     }
 
-    uint64_t primary_key()const { return account.raw(); }
+    uint64_t primary_key()const { return account.value; }
 
     typedef multi_index<"saveaccounts"_n, save_account_t> tbl_t;
 
@@ -116,10 +114,10 @@ TBL reward_symbol_t {
 
     reward_symbol_t() {}
 
-    uint64_t primary_key() const { return sym.symbol.raw(); }
+    uint64_t primary_key() const { return sym.get_symbol().code().raw(); }
     typedef eosio::multi_index< "rewardsymbol"_n, reward_symbol_t > idx_t;
 
-    EOSLIB_SERIALIZE( reward_symbol_t, (sym)(total_reward_quant)(on_self) )
+    EOSLIB_SERIALIZE( reward_symbol_t, (sym)(total_reward_quant)(on_self)(reward_type) )
 };
 
 } //namespace amax
