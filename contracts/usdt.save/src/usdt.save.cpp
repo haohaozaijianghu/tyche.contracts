@@ -34,11 +34,11 @@ inline static int128_t calc_rewards_per_vote(const int128_t& old_rewards_per_vot
    return new_rewards_per_vote;
 }
 // 根据用户的votes和rewards_per_vote_delta来计算用户的rewards
-inline static asset calc_voter_rewards(const asset& user_votes, const int128_t& rewards_per_vote_delta) {
+inline static asset calc_voter_rewards(const asset& user_votes, const int128_t& rewards_per_vote_delta, const symbol& rewards_symbol) {
    ASSERT( user_votes.amount >= 0 && rewards_per_vote_delta >= 0 );
    int128_t rewards = user_votes.amount * rewards_per_vote_delta / HIGH_PRECISION;
    CHECK( rewards >= 0 && rewards <= std::numeric_limits<int64_t>::max(), "calculated rewards overflow" );
-   return asset( (int64_t)rewards, MUSDT );
+   return asset( (int64_t)rewards, rewards_symbol );
 }
 
 void usdt_save::init() {
@@ -182,7 +182,7 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
             }
             int128_t rewards_per_vote_delta = reward_conf.rewards_per_vote - voted_reward.last_rewards_per_vote;
             if (rewards_per_vote_delta > 0 && older_depost_quant.amount > 0) {
-               new_rewards = calc_voter_rewards(older_depost_quant, rewards_per_vote_delta);
+               new_rewards = calc_voter_rewards(older_depost_quant, rewards_per_vote_delta, reward_conf.total_rewards.symbol);
                reward_conf.allocating_rewards         -= new_rewards;
                reward_conf.allocated_rewards          += new_rewards;
                voted_reward.last_rewards_settled_at   = now;
@@ -248,7 +248,7 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
          auto code            = reward_conf_kv.first;
          auto voted_reward    = acct->voted_rewards.at(code);
          int128_t rewards_per_vote_delta = reward_conf.rewards_per_vote - voted_reward.last_rewards_per_vote;
-         auto new_rewards = calc_voter_rewards(acct->deposit_quant, rewards_per_vote_delta);
+         auto new_rewards = calc_voter_rewards(acct->deposit_quant, rewards_per_vote_delta, reward_conf.total_rewards.symbol);
          auto total_rewards = new_rewards + voted_reward.unclaimed_rewards;
          //内部调用发放利息
          reward_conf.allocating_rewards   -= new_rewards;
