@@ -208,8 +208,7 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
             });
       }
       //transfer nusdt to user
-      auto nusdt_quant =  asset(quant.amount, _gstate.voucher_token.get_symbol());
-      //打出NUSDT
+      TRANSFER( _gstate.voucher_token.get_contract(), from, asset(quant.amount, _gstate.voucher_token.get_symbol()), "depsit credential" )
    }
 
 
@@ -230,8 +229,8 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
    //用户提款只能按全额来提款
    void usdt_save::onredeem( const name& from, const uint64_t& team_code, const asset& quant ){
 
-      auto confs           = save_conf_t::tbl_t(_self, _self.value);
-      auto conf            = confs.find( team_code );
+      auto confs              = save_conf_t::tbl_t(_self, _self.value);
+      auto conf               = confs.find( team_code );
       CHECKC( conf != confs.end(), err::RECORD_NOT_FOUND, "save plan not found" )
 
       auto accts              = save_account_t::tbl_t(_self, team_code);
@@ -244,21 +243,27 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
       auto reward_confs = conf->reward_confs;
       auto vote_rewards = acct->voted_rewards;
       for (auto& reward_conf_kv : conf->reward_confs) { //for循环每一个token
+         auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
+         auto reward_symbol      = reward_symbols.find( quant.symbol.raw() );
+         CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found" )
+         CHECKC( reward_symbol->on_self, err::RECORD_NOT_FOUND, "save plan not found" )
          auto reward_conf     = reward_conf_kv.second;
          auto code            = reward_conf_kv.first;
          auto voted_reward    = acct->voted_rewards.at(code);
          int128_t rewards_per_vote_delta = reward_conf.rewards_per_vote - voted_reward.last_rewards_per_vote;
-         auto new_rewards = calc_voter_rewards(acct->deposit_quant, rewards_per_vote_delta, reward_conf.total_rewards.symbol);
-         auto total_rewards = new_rewards + voted_reward.unclaimed_rewards;
-         //内部调用发放利息
+         auto new_rewards     = calc_voter_rewards(acct->deposit_quant, rewards_per_vote_delta, reward_conf.total_rewards.symbol);
+         auto total_rewards   = new_rewards + voted_reward.unclaimed_rewards;
+        
          reward_conf.allocating_rewards   -= new_rewards;
          reward_conf.allocated_rewards    += new_rewards;
-         reward_conf.allocated_rewards    += total_rewards;
          reward_confs[code]               = reward_conf;
 
          vote_rewards[code].unclaimed_rewards      =  asset(0, total_rewards.symbol);
          vote_rewards[code].claimed_rewards        += total_rewards;
          vote_rewards[code].last_rewards_per_vote  =  reward_conf.rewards_per_vote;
+         //内部调用发放利息
+         //发放利息
+         TRANSFER( reward_symbol->sym.get_contract(), from, total_rewards, "redeem" )
       }
 
       confs.modify( conf, _self, [&]( auto& c ) {
@@ -270,6 +275,8 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
          a.voted_rewards               = vote_rewards;
          a.started_at                  = now;
       });
+      //打出本金MUSDT
+     TRANSFER( MUSDT_BANK, from, asset(quant.amount, MUSDT), "redeem" )
    }
 
    void usdt_save::apl_reward(const asset& interest) {
