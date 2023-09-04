@@ -109,7 +109,7 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
       if( conf_itr->on_self ){
          auto rate = total_rewards.amount * conf_itr->votes_mutli * PCT_BOOST / total_vote;
          auto rewards = asset(total_rewards.amount * rate / PCT_BOOST, total_rewards.symbol);
-
+      
          if(conf_itr->reward_confs.count(total_rewards.symbol.code().raw()) == 0) {
             confs.modify( conf_itr, _self, [&]( auto& c ) {
                auto reward_conf = reward_conf_t();
@@ -117,9 +117,8 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
                reward_conf.allocating_rewards   = rewards;
                reward_conf.allocated_rewards    = asset(0, total_rewards.symbol);
                reward_conf.claimed_rewards      = asset(0, total_rewards.symbol);
-               reward_conf.rewards_per_vote = 0;
-               // c.reward_conf[total_rewards.symbol.code().raw()] = reward_conf;
-               //TODO
+               reward_conf.rewards_per_vote     = 0;
+               c.reward_confs[total_rewards.symbol.code().raw()] = reward_conf;
             });
          } else {
             confs.modify( conf_itr, _self, [&]( auto& c ) {
@@ -127,8 +126,7 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
                older_reward.total_rewards        = older_reward.total_rewards + rewards;
                older_reward.allocating_rewards   = older_reward.allocating_rewards + rewards;
                older_reward.rewards_per_vote = calc_rewards_per_vote(older_reward.rewards_per_vote, rewards, conf_itr->total_deposit_quant);
-               // c.reward_conf[total_rewards.symbol.code().raw()] = older_reward;
-               // TODO
+               c.reward_confs[total_rewards.symbol.code().raw()] = older_reward;
             });
          }
       }
@@ -166,6 +164,8 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
          //当用户充入本金, 要结算充入池子的用户之前的利息，同时要修改充入池子的基本信息
          //循环结算每一种利息代币
 
+         reward_conf_map reward_confs = conf->reward_confs;
+         voted_reward_map voted_rewards  = acct->voted_rewards;
          auto older_depost_quant = acct->deposit_quant;
          for (auto& reward_conf_kv : conf->reward_confs) { //for循环每一个token
             auto reward_conf     = reward_conf_kv.second;
@@ -175,10 +175,10 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
             if(acct->voted_rewards.count(reward_conf_kv.first)) {
                voted_reward = acct->voted_rewards.at(reward_conf_kv.first);
             } else {
-               voted_reward.unclaimed_rewards      = asset(0, reward_conf.total_rewards.symbol);
-               voted_reward.claimed_rewards        = asset(0, reward_conf.total_rewards.symbol);
-               voted_reward.last_rewards_settled_at = now;
-               voted_reward.last_rewards_per_vote  = 0;
+               voted_reward.unclaimed_rewards         = asset(0, reward_conf.total_rewards.symbol);
+               voted_reward.claimed_rewards           = asset(0, reward_conf.total_rewards.symbol);
+               voted_reward.last_rewards_settled_at   = now;
+               voted_reward.last_rewards_per_vote     = 0;
             }
             int128_t rewards_per_vote_delta = reward_conf.rewards_per_vote - voted_reward.last_rewards_per_vote;
             if (rewards_per_vote_delta > 0 && older_depost_quant.amount > 0) {
@@ -191,21 +191,21 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
                voted_reward.claimed_rewards           += quant;
             }
             //TODO
-            // conf->reward_confs[code]                   = reward_conf;
-            // acct->voted_rewards[code]                  = voted_reward;
-            confs.modify( conf, _self, [&]( auto& c ) {
+            reward_confs[code]                   = reward_conf;
+            voted_rewards[code]                  = voted_reward;
+         }
+         confs.modify( conf, _self, [&]( auto& c ) {
                c.total_deposit_quant   += quant;
                c.remain_deposit_quant  += quant;
-               c.reward_confs = conf->reward_confs;
-            });
+               c.reward_confs = reward_confs;
+         });
 
-            accts.modify( acct, _self,  [&]( auto& c ) {
+         accts.modify( acct, _self,  [&]( auto& c ) {
                c.total_deposit_quant   += quant;
                c.deposit_quant         += quant;
-               c.voted_rewards         = acct->voted_rewards;
+               c.voted_rewards         = voted_rewards;
                c.started_at            = now;
             });
-         }
       }
       //transfer nusdt to user
       auto nusdt_quant =  asset(quant.amount, _gstate.voucher_token.get_symbol());
