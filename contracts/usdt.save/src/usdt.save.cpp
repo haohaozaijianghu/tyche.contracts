@@ -256,9 +256,9 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
          reward_conf.allocated_rewards    += total_rewards;
          reward_confs[code]               = reward_conf;
 
-         vote_rewards[code].unclaimed_rewards = asset(0, total_rewards.symbol);
-         vote_rewards[code].claimed_rewards  += total_rewards;
-         vote_rewards[code].last_rewards_per_vote = reward_conf.rewards_per_vote;
+         vote_rewards[code].unclaimed_rewards      =  asset(0, total_rewards.symbol);
+         vote_rewards[code].claimed_rewards        += total_rewards;
+         vote_rewards[code].last_rewards_per_vote  =  reward_conf.rewards_per_vote;
       }
 
       confs.modify( conf, _self, [&]( auto& c ) {
