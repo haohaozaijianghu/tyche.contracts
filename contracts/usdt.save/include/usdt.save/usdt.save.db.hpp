@@ -31,13 +31,13 @@ static constexpr symbol    NUSDT            = symbol(symbol_code("NUSDT"), 6);
 
 NTBL("global") global_t {
     name                admin           = "armoniaadmin"_n;
-    name                refuel_account  = "armoniarefue"_n;
     extended_symbol     voucher_token;          //代币NUSDT
     extended_symbol     principal_token;        //代币MUSDT,用户存入的本金
     asset               mini_deposit_amount;
+    name                usdt_interest_contract = "usdt.intst"_n;
     bool                enabled;
 
-    EOSLIB_SERIALIZE( global_t, (admin)(principal_token)(voucher_token)(mini_deposit_amount)(enabled) )
+    EOSLIB_SERIALIZE( global_t, (admin)(principal_token)(voucher_token)(mini_deposit_amount)(usdt_interest_contract)(enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 

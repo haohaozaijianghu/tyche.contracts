@@ -1,6 +1,7 @@
 #include <usdt.save/usdt.save.hpp>
 #include "safemath.hpp"
 #include <utils.hpp>
+#include <usdt_interest.hpp>
 
 #include <amax.token.hpp>
 
@@ -76,23 +77,20 @@ void usdt_save::ontransfer(const name& from, const name& to, const asset& quant,
       auto term_code = (uint64_t) stoi(string(params[1]));
       onuserdeposit(from, term_code, quant);
       return;
-   } 
-      
-   //管理员打入利息
-   if( memo == "refuel" ){
-      CHECKC(from == _gstate.refuel_account, err::ACCOUNT_INVALID, "only refuel account can refuel")
-      
-      auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
-      auto reward_symbol      = reward_symbols.find( quant.symbol.raw() );
-      CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found" )
-      CHECKC( reward_symbol->on_self, err::RECORD_NOT_FOUND, "save plan not found" )
-      onrewardrefuel( from, quant );
-     return;
    }
+   CHECKC(false, err::PARAM_ERROR, "invalid memo format")
 
 }
+
 //管理员打入奖励
-void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
+void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards ){
+   require_auth(_gstate.usdt_interest_contract);
+   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
+   auto reward_symbol      = reward_symbols.find( total_rewards.symbol.raw() );
+   CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found" )
+   CHECKC( token_bank == reward_symbol->sym.get_contract(), err::RECORD_NOT_FOUND, "bank not equal" )
+   CHECKC( reward_symbol->on_self, err::RECORD_NOT_FOUND, "reward_symbol not on_self" )
+
    auto confs           = save_conf_t::tbl_t(_self, _self.value);
    auto conf_itr        = confs.begin();
    CHECKC( conf_itr != confs.end(), err::RECORD_NOT_FOUND, "save plan not found" )
@@ -135,6 +133,7 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
 }
 
    void usdt_save::onuserdeposit( const name& from, const uint64_t& team_code, const asset& quant ){
+      CHECKC( quant.symbol == _gstate.principal_token.get_symbol(), err::SYMBOL_MISMATCH, "symbol mismatch" )
       CHECKC( _gstate.mini_deposit_amount <= quant, err::INCORRECT_AMOUNT, "deposit amount too small" )
       auto now = time_point_sec(current_time_point());
       CHECKC( _gstate.enabled, err::PAUSED, "not effective yet" )
@@ -208,6 +207,7 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
             });
       }
       //transfer nusdt to user
+   
       TRANSFER( _gstate.voucher_token.get_contract(), from, asset(quant.amount, _gstate.voucher_token.get_symbol()), "depsit credential" )
    }
 
@@ -253,7 +253,6 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
          int128_t rewards_per_vote_delta = reward_conf.rewards_per_vote - voted_reward.last_rewards_per_vote;
          auto new_rewards     = calc_voter_rewards(acct->deposit_quant, rewards_per_vote_delta, reward_conf.total_rewards.symbol);
          auto total_rewards   = new_rewards + voted_reward.unclaimed_rewards;
-        
          reward_conf.allocating_rewards   -= new_rewards;
          reward_conf.allocated_rewards    += new_rewards;
          reward_confs[code]               = reward_conf;
@@ -263,7 +262,8 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
          vote_rewards[code].last_rewards_per_vote  =  reward_conf.rewards_per_vote;
          //内部调用发放利息
          //发放利息
-         TRANSFER( reward_symbol->sym.get_contract(), from, total_rewards, "redeem" )
+          usdt_interest::claimreward_action cliam_reward_act(_gstate.usdt_interest_contract, { {get_self(), "active"_n} });
+         cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards);
       }
 
       confs.modify( conf, _self, [&]( auto& c ) {
