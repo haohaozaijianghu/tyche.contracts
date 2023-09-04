@@ -110,6 +110,7 @@ TBL reward_symbol_t {
     extended_symbol sym;                    //MUSDT,8@amax.mtoken
     asset           total_reward_quant;     //总奖励金额
     bool            on_self;
+    uint64_t        term_interval;          //奖励发放时间间隔
     name            reward_type;            //interest | redpack
 
     reward_symbol_t() {}
