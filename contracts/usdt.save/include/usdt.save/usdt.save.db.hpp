@@ -42,11 +42,11 @@ NTBL("global") global_t {
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
 struct reward_conf_t {
-    asset           total_rewards;
+    asset           total_rewards;                      //总奖励
     asset           allocating_rewards;                 //待分配的奖励
     asset           allocated_rewards;                  //已分配奖励  = total_rewards - allocating_rewards
     asset           claimed_rewards;                    //已领取奖励
-    int128_t        rewards_per_vote    = 0;        //每票已分配奖励
+    int128_t        rewards_per_vote    = 0;            //每票已分配奖励
 };
 using reward_conf_map = std::map<uint64_t, reward_conf_t>;
 

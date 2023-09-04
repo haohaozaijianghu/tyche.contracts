@@ -240,36 +240,36 @@ void usdt_save::onrewardrefuel( const name& from, const asset& total_rewards ){
 
       auto now                = current_time_point();
       CHECKC(acct->deposit_quant.amount == quant.amount, err::INCORRECT_AMOUNT, "insufficient deposit amount" )
+      
+      auto reward_confs = conf->reward_confs;
+      auto vote_rewards = acct->voted_rewards;
+      for (auto& reward_conf_kv : conf->reward_confs) { //for循环每一个token
+         auto reward_conf     = reward_conf_kv.second;
+         auto code            = reward_conf_kv.first;
+         auto voted_reward    = acct->voted_rewards.at(code);
+         int128_t rewards_per_vote_delta = reward_conf.rewards_per_vote - voted_reward.last_rewards_per_vote;
+         auto new_rewards = calc_voter_rewards(acct->deposit_quant, rewards_per_vote_delta);
+         auto total_rewards = new_rewards + voted_reward.unclaimed_rewards;
+         //内部调用发放利息
+         reward_conf.allocating_rewards   -= new_rewards;
+         reward_conf.allocated_rewards    += new_rewards;
+         reward_conf.allocated_rewards    += total_rewards;
+         reward_confs[code]               = reward_conf;
 
-      // conf->reward_confs[quant.symbol.code().raw()];
+         vote_rewards[code].unclaimed_rewards = asset(0, total_rewards.symbol);
+         vote_rewards[code].claimed_rewards  += total_rewards;
+         vote_rewards[code].last_rewards_per_vote = reward_conf.rewards_per_vote;
+      }
 
-      // CHECKC( conf->rewards_per_vote >= acct->last_rewards_per_vote, err::INCORRECT_AMOUNT, "rewards per vote error" )
-      // int128_t rewards_per_vote_delta = conf->rewards_per_vote - acct->last_rewards_per_vote;
-      // auto total_rewards = acct.unclaimed_rewards + calc_voter_rewards(acct.deposit_quant, rewards_per_vote_delta);
-
-      //赎回每一种利息代币
-
-      // confs.modify( conf, _self, [&]( auto& c ) {
-      //    c.remain_deposit_quant.amount       -= quant.amount;
-      //    c.last_deposit_at                   = now;
-      //    if (rewards_per_vote_delta > 0 && votes_old.amount > 0) {
-      //       auto new_rewards = calc_voter_rewards(votes_old, rewards_per_vote_delta);
-      //       CHECK(conf.allocating_rewards >= new_rewards, "producer allocating rewards insufficient");
-      //       c.allocating_rewards    -= total_rewards;
-      //       c.allocated_rewards     += total_rewards;
-      //    }
-      // });
-
-      // accts.modify( acct, _self, [&]( auto& a ) {
-      //    a.deposit_quant.amount        -= quant.amount;
-      //    a.unclaimed_rewards           = asset(0, MUSDT);
-      //    a.claimed_rewards             += total_rewards;
-      //    a.last_rewards_per_vote       = conf.rewards_per_vote;
-      //    a.updated_at                  = now;
-      // });
-
-      // //transfer MUSDT to user
-      // auto total_quant = asset(quant.amount + total_rewards.amount, redeem_interest.symbol);
+      confs.modify( conf, _self, [&]( auto& c ) {
+         c.remain_deposit_quant.amount += quant.amount;
+         c.reward_confs                = reward_confs;
+      });
+      accts.modify( acct, _self, [&]( auto& a ) {
+         a.deposit_quant.amount        -= quant.amount;
+         a.voted_rewards               = vote_rewards;
+         a.started_at                  = now;
+      });
    }
 
    void usdt_save::apl_reward(const asset& interest) {
