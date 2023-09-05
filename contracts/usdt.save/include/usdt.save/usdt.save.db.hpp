@@ -49,7 +49,7 @@ struct reward_conf_t {
     asset           claimed_rewards;                    //已领取奖励
     int128_t        rewards_per_vote            = 0;    //每票已分配奖励
     uint64_t        last_reward_interval        = 0;    //奖励发放时间间隔
-    uint64_t        last_reward_per_vote        = 0;    //奖励发放时间间隔
+    uint64_t        last_reward_per_vote_delta   = 0;    //奖励发放delta
     time_point_sec  last_rewards_settled_at;            //上次奖励发放时间
 };
 using reward_conf_map = std::map<uint64_t, reward_conf_t>;

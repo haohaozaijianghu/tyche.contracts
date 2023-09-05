@@ -81,8 +81,12 @@ class [[eosio::contract("usdt.save")]] usdt_save : public contract {
    ACTION addrewardsym(const extended_symbol& sym, const uint64_t& interval);
 
    ACTION addsaveconf(const uint64_t& code, const uint64_t& term_interval, const uint64_t& votes_mutli);
+   
    ACTION init();
+   
    ACTION symonself(const extended_symbol& sym, const bool& on_self);
+
+   ACTION claimreward(const name& from, const uint64_t& team_code);
    
    private:
       void apl_reward( const asset& interest );
