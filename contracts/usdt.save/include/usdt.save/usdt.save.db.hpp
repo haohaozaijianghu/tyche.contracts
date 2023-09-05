@@ -35,6 +35,7 @@ NTBL("global") global_t {
     extended_symbol     principal_token         = extended_symbol(MUSDT,  MUSDT_BANK);          //代币MUSDT,用户存入的本金
     asset               mini_deposit_amount     = asset(10, MUSDT);
     name                usdt_interest_contract  = "usdt.intst"_n;
+    name                nusdt_refueler          = "usdtrefuel"_n;                            //NUSDT系统充入账户
     uint64_t            apl_multi               = 10;
     bool                enabled                 = true;
 

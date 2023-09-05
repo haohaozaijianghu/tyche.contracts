@@ -82,7 +82,7 @@ class [[eosio::contract("usdt.save")]] usdt_save : public contract {
 
    ACTION addsaveconf(const uint64_t& code, const uint64_t& term_interval, const uint64_t& votes_mutli);
    
-   ACTION init();
+   ACTION init(const name& admin, const name& usdt_interest_contract, const name& nusdt_refueler, const uint64_t& apl_multi, const bool& enabled);
    
    ACTION symonself(const extended_symbol& sym, const bool& on_self);
 

@@ -42,9 +42,15 @@ inline static asset calc_voter_rewards(const asset& user_votes, const int128_t& 
    return asset( (int64_t)rewards, rewards_symbol );
 }
 
-void usdt_save::init() {
+void usdt_save::init(const name& admin, const name& usdt_interest_contract, const name& nusdt_refueler, const uint64_t& apl_multi, const bool& enabled) {
    CHECK(false, "disabled" )
    require_auth( _self );
+
+   _gstate.admin                    = admin;
+   _gstate.usdt_interest_contract   = usdt_interest_contract;
+   _gstate.nusdt_refueler           = nusdt_refueler;
+   _gstate.apl_multi                = apl_multi;
+   _gstate.enabled                  = enabled;
 }
 
 /**
@@ -65,7 +71,7 @@ void usdt_save::ontransfer(const name& from, const name& to, const asset& quant,
    if(quant.symbol == _gstate.voucher_token.get_symbol()) { //提取奖励
       auto term_code = 0;
       CHECKC( _gstate.voucher_token.get_contract() == token_bank, err::CONTRACT_MISMATCH, "interest token contract mismatches" )
-      if(from == name("joss")) //充入NUSDT到合约
+      if(from == _gstate.nusdt_refueler) //充入NUSDT到合约
          return;
       //用户提取奖励和本金
       term_code = (uint64_t) stoi(memo);
