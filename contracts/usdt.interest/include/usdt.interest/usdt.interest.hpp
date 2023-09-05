@@ -79,8 +79,9 @@ class [[eosio::contract("usdt.interest")]] usdt_interest : public contract {
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
 
    //用户领取利息
-   ACTION claimreward( const name& to, const name& bank, const asset& rewards );
-   ACTION init();
+   ACTION claimreward( const name& to, const name& bank, const asset& total_rewards );
+   
+   ACTION init(const name& refuel_account, const name& usdt_save_contract, const bool& enabled);
    
       global_singleton     _global;
       global_t             _gstate;

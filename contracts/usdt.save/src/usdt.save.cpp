@@ -336,10 +336,10 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
     
    }
 
-   void  usdt_save::claimreward(const name& from, const uint64_t& team_code ){
+   void  usdt_save::claimreward(const name& from, const uint64_t& team_code, const symbol& sym ){
       require_auth(from);
       auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
-      auto reward_symbol      = reward_symbols.find( _gstate.voucher_token.get_symbol().code().raw() );
+      auto reward_symbol      = reward_symbols.find( sym.code().raw() );
       CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found" )
       CHECKC( reward_symbol->on_self, err::RECORD_NOT_FOUND, "save plan not on self" )
 
