@@ -78,7 +78,6 @@ TBL save_conf_t {
                                     (term_interval)(votes_mutli)(on_self)(created_at) )
 };
 
-
 struct reward_info_t {
     int128_t            last_rewards_per_vote       = 0;
     asset               unclaimed_rewards;
@@ -112,10 +111,10 @@ TBL save_account_t {
 };
 
 TBL reward_symbol_t {
-    extended_symbol sym;                            //MUSDT,8@amax.mtoken
-    asset           total_reward_quant;             //总奖励金额
-    uint64_t        term_interval;                  //奖励发放时间间隔
-    name            reward_type = name("interest");   //interest | redpack
+    extended_symbol sym;                                //MUSDT,8@amax.mtoken
+    asset           total_reward_quant;                 //总奖励金额
+    uint64_t        claim_term_interval;                //奖励发放时间间隔
+    name            reward_type = name("interest");     //interest | redpack
     bool            on_self;
 
     reward_symbol_t() {}
@@ -123,7 +122,7 @@ TBL reward_symbol_t {
     uint64_t primary_key() const { return sym.get_symbol().code().raw(); }
     typedef eosio::multi_index< "rewardsymbol"_n, reward_symbol_t > idx_t;
 
-    EOSLIB_SERIALIZE( reward_symbol_t, (sym)(total_reward_quant)(term_interval)(reward_type)(on_self) )
+    EOSLIB_SERIALIZE( reward_symbol_t, (sym)(total_reward_quant)(claim_term_interval)(reward_type)(on_self) )
 };
 
 } //namespace amax

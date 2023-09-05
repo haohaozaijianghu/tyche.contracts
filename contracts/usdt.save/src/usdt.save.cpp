@@ -179,6 +179,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
             auto code            = reward_conf_kv.first;
             auto voted_reward    = reward_info_t();
             auto new_rewards     = asset(0, reward_conf.total_rewards.symbol);
+            //初始化voted_reward 信息
             if(acct->voted_rewards.count(reward_conf_kv.first)) {
                voted_reward = acct->voted_rewards.at(reward_conf_kv.first);
             } else {
@@ -187,6 +188,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
                voted_reward.last_rewards_settled_at   = now;
                voted_reward.last_rewards_per_vote     = 0;
             }
+
             int128_t rewards_per_vote_delta = reward_conf.rewards_per_vote - voted_reward.last_rewards_per_vote;
             if (rewards_per_vote_delta > 0 && older_depost_quant.amount > 0) {
                new_rewards = calc_voter_rewards(older_depost_quant, rewards_per_vote_delta, reward_conf.total_rewards.symbol);
@@ -296,7 +298,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
       CHECKC( reward_symbol == reward_symbols.end(), err::RECORD_EXISTING, "save plan not found" )
       reward_symbols.emplace( _self, [&]( auto& s ) {
          s.sym                   = sym;
-         s.term_interval         = interval;
+         s.claim_term_interval   = interval;
          s.total_reward_quant    = asset(0, sym.get_symbol());
          s.reward_type           = name("interest");
          s.on_self               = false;
@@ -339,12 +341,51 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
    void  usdt_save::claimreward(const name& from, const uint64_t& team_code, const symbol& sym ){
       require_auth(from);
       auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
-      auto reward_symbol      = reward_symbols.find( sym.code().raw() );
+      auto code               =  sym.code().raw();
+      auto reward_symbol      = reward_symbols.find( code );
       CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found" )
       CHECKC( reward_symbol->on_self, err::RECORD_NOT_FOUND, "save plan not on self" )
+      // auto interval =  reward_symbol->term_interval;
+      auto now = time_point_sec(current_time_point());
+      auto confs  = save_conf_t::tbl_t(_self, _self.value);
+      auto conf   = confs.find( team_code );
+      CHECKC( conf != confs.end(), err::RECORD_NOT_FOUND, "save conf not found" )
 
+      auto accts  = save_account_t::tbl_t(_self, team_code);
+      auto acct   = accts.find( from.value );
+      CHECKC( acct != accts.end(), err::RECORD_NOT_FOUND, "account not found" )
+     
+      CHECKC(conf->reward_confs.count( code ),  err::RECORD_NOT_FOUND, "reward conf not found" )
+      CHECKC(acct->voted_rewards.count( code ),  err::RECORD_NOT_FOUND, "reward not found" )
+      
+      auto voted_reward    = acct->voted_rewards.at(code);
+      auto reward_conf     = conf->reward_confs.at(code);
+      auto voted_rewards    = acct->voted_rewards;
+      auto reward_confs    = conf->reward_confs;
+      int128_t rewards_per_vote_delta = reward_conf.rewards_per_vote - voted_reward.last_rewards_per_vote;
+      auto new_rewards     = calc_voter_rewards(acct->deposit_quant, rewards_per_vote_delta, reward_conf.total_rewards.symbol);
+      auto total_rewards   = new_rewards + voted_reward.unclaimed_rewards;
+      reward_conf.allocating_rewards   -= new_rewards;
+      reward_conf.allocated_rewards    += new_rewards;
+      reward_confs[code]               = reward_conf;
 
+      voted_reward.unclaimed_rewards         =  asset(0, total_rewards.symbol);
+      voted_reward.claimed_rewards           += total_rewards;
+      voted_reward.last_rewards_per_vote     =  reward_conf.rewards_per_vote;
+      voted_rewards[code]                    =  voted_reward;
+      
+      confs.modify( conf, _self, [&]( auto& c ) {
+         c.reward_confs                = reward_confs;
+      });
+      accts.modify( acct, _self, [&]( auto& a ) {
+         a.voted_rewards               = voted_rewards;
+         a.started_at                  = now;
+      });
 
+      //内部调用发放利息
+      //发放利息
+      usdt_interest::claimreward_action cliam_reward_act(_gstate.usdt_interest_contract, { {get_self(), "active"_n} });
+      cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards);
    }
 
 
