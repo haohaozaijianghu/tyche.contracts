@@ -29,7 +29,7 @@ void usdt_interest::init() {
 //管理员打入奖励
 void usdt_interest::ontransfer(const name& from, const name& to, const asset& quant, const string& memo) {
    CHECKC( from != to, err::ACCOUNT_INVALID, "cannot transfer to self" );
-   CHECKC( from == _gstate.refuel_account, err::ACCOUNT_INVALID, "from must: " + _gstate.refuel_account.to_string())
+   // CHECKC( from == _gstate.refuel_account, err::ACCOUNT_INVALID, "from must: " + _gstate.refuel_account.to_string())
    if (from == get_self() || to != get_self()) return;
    auto token_bank = get_first_receiver();
    usdt_save::onrewardrefuel_action reward_refuel_act(_gstate.usdt_save_contract, { {get_self(), "active"_n} });

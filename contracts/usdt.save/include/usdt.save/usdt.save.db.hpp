@@ -30,12 +30,13 @@ static constexpr symbol    NUSDT            = symbol(symbol_code("NUSDT"), 6);
 #define NTBL(name) struct [[eosio::table(name), eosio::contract("usdt.save")]]
 
 NTBL("global") global_t {
-    name                admin           = "armoniaadmin"_n;
-    extended_symbol     voucher_token;          //代币NUSDT
-    extended_symbol     principal_token;        //代币MUSDT,用户存入的本金
-    asset               mini_deposit_amount;
-    name                usdt_interest_contract = "usdt.intst"_n;
-    bool                enabled;
+    name                admin                   = "armoniaadmin"_n;
+    extended_symbol     voucher_token           = extended_symbol(NUSDT,  NUSDT_BANK);          //代币NUSDT
+    extended_symbol     principal_token         = extended_symbol(MUSDT,  MUSDT_BANK);          //代币MUSDT,用户存入的本金
+    asset               mini_deposit_amount     = asset(10, MUSDT);
+    name                usdt_interest_contract  = "usdt.intst"_n;
+    uint64_t            apl_multi               = 10;
+    bool                enabled                 = true;
 
     EOSLIB_SERIALIZE( global_t, (admin)(principal_token)(voucher_token)(mini_deposit_amount)(usdt_interest_contract)(enabled) )
 };
@@ -46,16 +47,20 @@ struct reward_conf_t {
     asset           allocating_rewards;                 //待分配的奖励
     asset           allocated_rewards;                  //已分配奖励  = total_rewards - allocating_rewards
     asset           claimed_rewards;                    //已领取奖励
-    int128_t        rewards_per_vote    = 0;            //每票已分配奖励
+    int128_t        rewards_per_vote            = 0;    //每票已分配奖励
+    uint64_t        last_reward_interval        = 0;    //奖励发放时间间隔
+    uint64_t        last_reward_per_vote        = 0;    //奖励发放时间间隔
+    time_point_sec  last_rewards_settled_at;            //上次奖励发放时间
 };
 using reward_conf_map = std::map<uint64_t, reward_conf_t>;
 
 //Scope: _self
 TBL save_conf_t {
-    uint64_t        code;                //1,30,180,360
+    uint64_t        code;                //1,2,3,4
     asset           total_deposit_quant     = asset(0, MUSDT);  //总存款金额
     asset           remain_deposit_quant    = asset(0, MUSDT);  //剩余存款金额
     reward_conf_map reward_confs;
+    uint64_t        term_interval           = 0;
     uint64_t        votes_mutli             = 1;
     bool            on_self                 = true;
 
@@ -70,7 +75,7 @@ TBL save_conf_t {
     typedef multi_index<"saveconfs"_n, save_conf_t> tbl_t;
 
     EOSLIB_SERIALIZE( save_conf_t, (code)(total_deposit_quant)(remain_deposit_quant)(reward_confs)
-                                    (on_self)(created_at) )
+                                    (term_interval)(votes_mutli)(on_self)(created_at) )
 };
 
 
@@ -107,18 +112,18 @@ TBL save_account_t {
 };
 
 TBL reward_symbol_t {
-    extended_symbol sym;                    //MUSDT,8@amax.mtoken
-    asset           total_reward_quant;     //总奖励金额
+    extended_symbol sym;                            //MUSDT,8@amax.mtoken
+    asset           total_reward_quant;             //总奖励金额
+    uint64_t        term_interval;                  //奖励发放时间间隔
+    name            reward_type = name("interest");   //interest | redpack
     bool            on_self;
-    uint64_t        term_interval;          //奖励发放时间间隔
-    name            reward_type;            //interest | redpack
 
     reward_symbol_t() {}
 
     uint64_t primary_key() const { return sym.get_symbol().code().raw(); }
     typedef eosio::multi_index< "rewardsymbol"_n, reward_symbol_t > idx_t;
 
-    EOSLIB_SERIALIZE( reward_symbol_t, (sym)(total_reward_quant)(on_self)(reward_type) )
+    EOSLIB_SERIALIZE( reward_symbol_t, (sym)(total_reward_quant)(term_interval)(reward_type)(on_self) )
 };
 
 } //namespace amax

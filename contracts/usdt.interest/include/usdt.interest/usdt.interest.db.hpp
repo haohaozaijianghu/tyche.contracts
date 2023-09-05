@@ -30,8 +30,8 @@ static constexpr symbol    NUSDT            = symbol(symbol_code("NUSDT"), 6);
 #define NTBL(name) struct [[eosio::table(name), eosio::contract("usdt.interest")]]
 
 NTBL("global") global_t {
-    name                admin           = "armoniaadmin"_n;
-    name                refuel_account  = "armoniarefue"_n;
+    name                admin           = "usdtadmin"_n;
+    name                refuel_account  = "usdtrefuel"_n;
     name                usdt_save_contract = "usdt.save"_n;
     bool                enabled;
 
