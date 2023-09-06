@@ -22,30 +22,46 @@ using namespace eosio;
 
 static constexpr name      MUSDT_BANK       = "amax.mtoken"_n;
 static constexpr symbol    MUSDT            = symbol(symbol_code("MUSDT"), 6);
-static constexpr name      NUSDT_BANK       = "amax.mtoken"_n;
-static constexpr symbol    NUSDT            = symbol(symbol_code("TRUSD"), 6);
+static constexpr name      TRUSD_BANK       = "amax.mtoken"_n;
+static constexpr symbol    TRUSD            = symbol(symbol_code("TRUSD"), 6);
 static constexpr name      TWGT_BANK        = "amax.mtoken"_n;
 static constexpr symbol    TWGT             = symbol(symbol_code("TWGT"), 6);
+static constexpr name      APLINK_BANK      = "aplink.token"_n ;
+static constexpr symbol    APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
+
 #define HASH256(str) sha256(const_cast<char*>(str.c_str()), str.size())
 
 #define TBL struct [[eosio::table, eosio::contract("usdt.save")]]
 #define NTBL(name) struct [[eosio::table(name), eosio::contract("usdt.save")]]
 
+
+struct aplink_farm {
+    name contract           = "aplink.farm"_n;
+    uint64_t lease_id       = 9; 
+    asset unit_reward       = asset(1, symbol("APL", 4));
+};
+
+
 NTBL("global") global_t {
     name                admin                   = "armoniaadmin"_n;
-    extended_symbol     voucher_token           = extended_symbol(NUSDT,  NUSDT_BANK);      //代币NUSDT
+    extended_symbol     voucher_token           = extended_symbol(TRUSD,  TRUSD_BANK);      //代币TRUSD
     extended_symbol     principal_token         = extended_symbol(MUSDT,  MUSDT_BANK);      //代币MUSDT,用户存入的本金
     asset               mini_deposit_amount     = asset(10, MUSDT);
     name                usdt_interest_contract  = "usdt.intst"_n;
-    name                nusdt_refueler          = "usdtrefuel"_n;                           //NUSDT系统充入账户
+    name                nusdt_refueler          = "usdtrefuel"_n;                           //TRUSD系统充入账户
     uint64_t            reward_twgt_ratio       = 10;                                       //每100MUSDT 奖励0.1TWGT
     uint64_t            locked_reward_twgt_ratio= 90;                                       //每100MUSDT 锁仓0.9TWGT 
     name                custody_contract        = name("amax.custody");
     uint64_t            custody_id              = -1;
     uint64_t            apl_multi               = 10;
+    aplink_farm         apl_farm;
     bool                enabled                 = true;
 
-    EOSLIB_SERIALIZE( global_t, (admin)(principal_token)(voucher_token)(mini_deposit_amount)(usdt_interest_contract)(enabled) )
+    EOSLIB_SERIALIZE( global_t, (admin)(voucher_token)(principal_token)
+                                (mini_deposit_amount)
+                                (usdt_interest_contract)(nusdt_refueler)(reward_twgt_ratio)
+                                (locked_reward_twgt_ratio)(custody_contract)(custody_id)
+                                (apl_multi)(apl_farm)(enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
@@ -63,11 +79,11 @@ using reward_conf_map = std::map<uint64_t, reward_conf_t>;
 
 //Scope: _self
 TBL save_conf_t {
-    uint64_t        code;                //1,2,3,4
+    uint64_t        code;                //1,2,3,4,5
     asset           total_deposit_quant     = asset(0, MUSDT);  //总存款金额
     asset           remain_deposit_quant    = asset(0, MUSDT);  //剩余存款金额
     reward_conf_map reward_confs;
-    uint64_t        term_interval           = 0;
+    uint64_t        term_interval           = 0;                //多少秒
     uint64_t        votes_mutli             = 1;
     bool            on_self                 = true;
 

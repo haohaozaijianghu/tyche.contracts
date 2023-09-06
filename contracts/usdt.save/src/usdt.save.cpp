@@ -5,6 +5,7 @@
 #include <custody.hpp>
 
 #include <amax.token.hpp>
+#include <aplink.farm/aplink.farm.hpp>
 
 static constexpr eosio::name active_permission{"active"_n};
 
@@ -12,6 +13,9 @@ namespace amax {
 using namespace std;
 using namespace wasm::safemath;
 
+#define ALLOT_APPLE(farm_contract, lease_id, to, quantity, memo) \
+    {   aplink::farm::allot_action(farm_contract, { {_self, active_perm} }).send( \
+            lease_id, to, quantity, memo );}
 
 #define ADD_ISSUE(contract, receiver, ido_id, quantity) \
     {	custody::add_issue_action act{ contract, { {_self, active_permission} } };\
@@ -76,7 +80,7 @@ void usdt_save::ontransfer(const name& from, const name& to, const asset& quant,
    if(quant.symbol == _gstate.voucher_token.get_symbol()) { //提取奖励
       auto term_code = 0;
       CHECKC( _gstate.voucher_token.get_contract() == token_bank, err::CONTRACT_MISMATCH, "interest token contract mismatches" )
-      if(from == _gstate.nusdt_refueler) //充入NUSDT到合约
+      if(from == _gstate.nusdt_refueler) //充入TRUSD到合约
          return;
       //用户提取奖励和本金
       term_code = (uint64_t) stoi(memo);
@@ -401,8 +405,10 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
       cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards);
    }
    
-   void usdt_save::apl_reward(const asset& interest) {
-
+   void usdt_save::apl_reward(const name& from, const asset& interest) {
+      auto apl_amount = interest.amount/get_precision(interest) * get_precision(APLINK_SYMBOL);
+      asset apls = asset(apl_amount, APLINK_SYMBOL);
+      ALLOT_APPLE( _gstate.apl_farm.contract, _gstate.apl_farm.lease_id, from, apls, "truedex creator reward" )
    }
 
 }

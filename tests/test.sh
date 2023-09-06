@@ -3,6 +3,8 @@ reward=usdt.reward1
 save=usdt.save1
 admin=admin1
 
+要建一个锁仓
+
 tnew $reward
 tnew $save
 tset $save usdt.save

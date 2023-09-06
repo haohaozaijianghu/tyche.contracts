@@ -19,14 +19,10 @@ using namespace wasm::db;
 
 static constexpr name      SYS_BANK    = "amax.token"_n;
 static constexpr symbol    AMAX        = symbol(symbol_code("AMAX"), 8);
-static constexpr name      CNYD_BANK   = "cnyd.token"_n;
-static constexpr symbol    CNYD        = symbol(symbol_code("CNYD"), 4);
 static constexpr uint16_t  PCT_BOOST   = 10000;
 static constexpr uint64_t  DAY_SECONDS = 24 * 60 * 60;
 static constexpr uint64_t  YEAR_DAYS   = 365;
 static constexpr int128_t  HIGH_PRECISION    = 1'000'000'000'000'000'000; // 10^18
-
-
 enum class err: uint8_t {
    NONE                 = 0,
    RECORD_NOT_FOUND     = 1,
@@ -89,7 +85,7 @@ class [[eosio::contract("usdt.save")]] usdt_save : public contract {
    ACTION claimreward(const name& from, const uint64_t& team_code, const symbol& sym );
    
    private:
-      void apl_reward( const asset& interest );
+      void apl_reward(const name& from, const asset& interest);
       void onredeem( const name& from, const uint64_t& team_code, const asset& quant );
       voted_reward_map get_new_voted_reward_info(const reward_conf_map& reward_confs);
       void onuserdeposit( const name& from, const uint64_t& team_code, const asset& quant );
