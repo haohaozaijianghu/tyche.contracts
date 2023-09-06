@@ -43,7 +43,6 @@ inline static asset calc_voter_rewards(const asset& user_votes, const int128_t& 
 }
 
 void usdt_save::init(const name& admin, const name& usdt_interest_contract, const name& nusdt_refueler, const uint64_t& apl_multi, const bool& enabled) {
-   CHECK(false, "disabled" )
    require_auth( _self );
 
    _gstate.admin                    = admin;
@@ -297,8 +296,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
    }
 
    void usdt_save::addrewardsym(const extended_symbol& sym, const uint64_t& interval) {
-      // require_auth(_gstate.admin);
-      //TODO
+      require_auth(_self);
       auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
       auto reward_symbol      = reward_symbols.find( sym.get_symbol().code().raw() );
       CHECKC( reward_symbol == reward_symbols.end(), err::RECORD_EXISTING, "save plan not found" )
@@ -312,8 +310,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
    }
 
      void usdt_save::symonself(const extended_symbol& sym, const bool& on_self) {
-      // require_auth(_gstate.admin);
-      //TODO
+      require_auth(_self);
       auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
       auto reward_symbol      = reward_symbols.find( sym.get_symbol().code().raw() );
       CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "reward symbol not found" )
@@ -323,8 +320,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
    }
 
    void usdt_save::addsaveconf(const uint64_t& code, const uint64_t& term_interval, const uint64_t& votes_mutli) {
-      // require_auth(_gstate.admin);
-      //TODO
+      require_auth(_self);
       auto confs           = save_conf_t::tbl_t(_self, _self.value);
       auto conf            = confs.find( code );
       if( conf == confs.end() ) {
