@@ -11,7 +11,7 @@ tcli set account permission $reward active --add-code
 tcli set account permission $save active --add-code
 
 tcli push action $save init '["'$admin'","'$reward'","joss",10, true]' -p $save
-tcli push action $save init '["joss","'$save'", true]' -p $reward
+tcli push action $reward init '["joss","'$save'", true]' -p $reward
 
 tcli push action $save addrewardsym '{"sym":{ "sym":"6,NUSDT", "contract":"amax.mtoken" }, "interval": 86400}' -p usdt.save
 tcli push action $save addrewardsym '{"sym":{ "sym":"6,MUSDC", "contract":"amax.mtoken" }, "interval": 86400}' -p usdt.save

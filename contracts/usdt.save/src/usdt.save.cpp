@@ -2,6 +2,7 @@
 #include "safemath.hpp"
 #include <utils.hpp>
 #include <usdt_interest.hpp>
+#include <custody.hpp>
 
 #include <amax.token.hpp>
 
@@ -10,6 +11,11 @@ static constexpr eosio::name active_permission{"active"_n};
 namespace amax {
 using namespace std;
 using namespace wasm::safemath;
+
+
+#define ADD_ISSUE(contract, receiver, ido_id, quantity) \
+    {	custody::add_issue_action act{ contract, { {_self, active_permission} } };\
+            act.send( receiver, ido_id, quantity );}
 
 #define CHECKC(exp, code, msg) \
    { if (!(exp)) eosio::check(false, string("[[") + to_string((int)code) + string("]] ") + msg); }
@@ -222,6 +228,12 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
       }
       //transfer nusdt to user
       TRANSFER( _gstate.voucher_token.get_contract(), from, asset(quant.amount, _gstate.voucher_token.get_symbol()), "depsit credential" )
+      //打出TWGT
+      auto tgt_amount = quant.amount * _gstate.reward_twgt_ratio / PCT_BOOST;
+      TRANSFER( TWGT_BANK, from, asset(tgt_amount, TWGT), "depsit credential" )
+      //进入到锁仓合约
+      auto tgt_amount_lock_amount = quant.amount * _gstate.locked_reward_twgt_ratio / PCT_BOOST;
+      ADD_ISSUE(_gstate.custody_contract, from,  _gstate.custody_id, asset(tgt_amount_lock_amount, TWGT))
    }
 
    voted_reward_map usdt_save::get_new_voted_reward_info(const reward_conf_map& reward_confs) {
@@ -278,8 +290,8 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
          vote_rewards[code]                     =  voted_reward;
          //内部调用发放利息
          //发放利息
-          usdt_interest::claimreward_action cliam_reward_act(_gstate.usdt_interest_contract, { {get_self(), "active"_n} });
-          cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards);
+         usdt_interest::claimreward_action cliam_reward_act(_gstate.usdt_interest_contract, { {get_self(), "active"_n} });
+         cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards);
       }
 
       confs.modify( conf, _self, [&]( auto& c ) {
@@ -337,7 +349,6 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
             c.on_self        = true;
          });
       }
-    
    }
 
    void  usdt_save::claimreward(const name& from, const uint64_t& team_code, const symbol& sym ){
@@ -356,7 +367,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
       auto accts  = save_account_t::tbl_t(_self, team_code);
       auto acct   = accts.find( from.value );
       CHECKC( acct != accts.end(), err::RECORD_NOT_FOUND, "account not found" )
-     
+
       CHECKC(conf->reward_confs.count( code ),  err::RECORD_NOT_FOUND, "reward conf not found" )
       CHECKC(acct->voted_rewards.count( code ),  err::RECORD_NOT_FOUND, "reward not found" )
       
@@ -389,9 +400,9 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
       usdt_interest::claimreward_action cliam_reward_act(_gstate.usdt_interest_contract, { {get_self(), "active"_n} });
       cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards);
    }
-
-
+   
    void usdt_save::apl_reward(const asset& interest) {
 
    }
+
 }

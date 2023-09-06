@@ -23,7 +23,9 @@ using namespace eosio;
 static constexpr name      MUSDT_BANK       = "amax.mtoken"_n;
 static constexpr symbol    MUSDT            = symbol(symbol_code("MUSDT"), 6);
 static constexpr name      NUSDT_BANK       = "amax.mtoken"_n;
-static constexpr symbol    NUSDT            = symbol(symbol_code("NUSDT"), 6);
+static constexpr symbol    NUSDT            = symbol(symbol_code("TRUSD"), 6);
+static constexpr name      TWGT_BANK        = "amax.mtoken"_n;
+static constexpr symbol    TWGT             = symbol(symbol_code("TWGT"), 6);
 #define HASH256(str) sha256(const_cast<char*>(str.c_str()), str.size())
 
 #define TBL struct [[eosio::table, eosio::contract("usdt.save")]]
@@ -31,11 +33,15 @@ static constexpr symbol    NUSDT            = symbol(symbol_code("NUSDT"), 6);
 
 NTBL("global") global_t {
     name                admin                   = "armoniaadmin"_n;
-    extended_symbol     voucher_token           = extended_symbol(NUSDT,  NUSDT_BANK);          //代币NUSDT
-    extended_symbol     principal_token         = extended_symbol(MUSDT,  MUSDT_BANK);          //代币MUSDT,用户存入的本金
+    extended_symbol     voucher_token           = extended_symbol(NUSDT,  NUSDT_BANK);      //代币NUSDT
+    extended_symbol     principal_token         = extended_symbol(MUSDT,  MUSDT_BANK);      //代币MUSDT,用户存入的本金
     asset               mini_deposit_amount     = asset(10, MUSDT);
     name                usdt_interest_contract  = "usdt.intst"_n;
-    name                nusdt_refueler          = "usdtrefuel"_n;                            //NUSDT系统充入账户
+    name                nusdt_refueler          = "usdtrefuel"_n;                           //NUSDT系统充入账户
+    uint64_t            reward_twgt_ratio       = 10;                                       //每100MUSDT 奖励0.1TWGT
+    uint64_t            locked_reward_twgt_ratio= 90;                                       //每100MUSDT 锁仓0.9TWGT 
+    name                custody_contract        = name("amax.custody");
+    uint64_t            custody_id              = -1;
     uint64_t            apl_multi               = 10;
     bool                enabled                 = true;
 
@@ -50,7 +56,7 @@ struct reward_conf_t {
     asset           claimed_rewards;                    //已领取奖励
     int128_t        rewards_per_vote            = 0;    //每票已分配奖励
     uint64_t        last_reward_interval        = 0;    //奖励发放时间间隔
-    uint64_t        last_reward_per_vote_delta   = 0;    //奖励发放delta
+    uint64_t        last_reward_per_vote_delta  = 0;    //奖励发放delta
     time_point_sec  last_rewards_settled_at;            //上次奖励发放时间
 };
 using reward_conf_map = std::map<uint64_t, reward_conf_t>;
