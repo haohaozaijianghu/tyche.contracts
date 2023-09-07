@@ -371,6 +371,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
       auto reward_symbol      = reward_symbols.find( code );
       CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found" )
       CHECKC( reward_symbol->on_self, err::RECORD_NOT_FOUND, "save plan not on self" )
+      CHECKC( reward_symbol->reward_type == REDPACK, err::RECORD_NOT_FOUND, "save plan not on self" )
       // auto interval =  reward_symbol->term_interval;
       auto now = time_point_sec(current_time_point());
       auto confs  = save_conf_t::tbl_t(_self, _self.value);
