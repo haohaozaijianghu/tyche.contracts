@@ -95,6 +95,10 @@ void usdt_save::ontransfer(const name& from, const name& to, const asset& quant,
       onuserdeposit(from, term_code, quant);
       return;
    }
+   //TWGT奖励充入
+   if(quant.symbol == TWGT && token_bank == TWGT_BANK && from == _gstate.nusdt_refueler) {
+      return;
+   }
    CHECKC(false, err::PARAM_ERROR, "invalid memo format")
 }
 
@@ -232,12 +236,16 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
       }
       //transfer nusdt to user
       TRANSFER( _gstate.voucher_token.get_contract(), from, asset(quant.amount, _gstate.voucher_token.get_symbol()), "depsit credential" )
-      //打出TWGT
-      auto tgt_amount = quant.amount * _gstate.reward_twgt_ratio / PCT_BOOST;
-      TRANSFER( TWGT_BANK, from, asset(tgt_amount, TWGT), "depsit credential" )
-      //进入到锁仓合约
-      auto tgt_amount_lock_amount = quant.amount * _gstate.locked_reward_twgt_ratio / PCT_BOOST;
-      ADD_ISSUE(_gstate.custody_contract, from,  _gstate.custody_id, asset(tgt_amount_lock_amount, TWGT))
+      //TODO只有天池5号才有奖励
+      if(team_code == _gstate.twgt_reward_term_code) {
+         //打出TWGT
+         auto tgt_amount = quant.amount * _gstate.reward_twgt_ratio / PCT_BOOST;
+         TRANSFER( TWGT_BANK, from, asset(tgt_amount, TWGT), "depsit credential" )
+         //进入到锁仓合约
+         auto tgt_amount_lock_amount = quant.amount * _gstate.locked_reward_twgt_ratio / PCT_BOOST;
+         ADD_ISSUE(_gstate.custody_contract, from,  _gstate.custody_id, asset(tgt_amount_lock_amount, TWGT))
+      }
+
    }
 
    voted_reward_map usdt_save::get_new_voted_reward_info(const reward_conf_map& reward_confs) {

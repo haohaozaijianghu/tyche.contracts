@@ -55,13 +55,14 @@ NTBL("global") global_t {
     uint64_t            custody_id              = -1;
     uint64_t            apl_multi               = 10;
     aplink_farm         apl_farm;
+    uint64_t            twgt_reward_term_code   = 5;
     bool                enabled                 = true;
 
     EOSLIB_SERIALIZE( global_t, (admin)(voucher_token)(principal_token)
                                 (mini_deposit_amount)
                                 (usdt_interest_contract)(nusdt_refueler)(reward_twgt_ratio)
                                 (locked_reward_twgt_ratio)(custody_contract)(custody_id)
-                                (apl_multi)(apl_farm)(enabled) )
+                                (apl_multi)(apl_farm)(twgt_reward_term_code)(enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
