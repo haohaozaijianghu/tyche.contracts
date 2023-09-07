@@ -72,8 +72,14 @@ class [[eosio::contract("usdt.save")]] usdt_save : public contract {
    [[eosio::on_notify("*::transfer")]]
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
    
+   //usdt.reward
    ACTION rewardrefuel( const name& token_bank, const asset& total_rewards );
 
+
+   //USER
+   ACTION claimreward(const name& from, const uint64_t& team_code, const symbol& sym );
+   
+   //admin
    ACTION addrewardsym(const extended_symbol& sym, const uint64_t& interval);
 
    ACTION addsaveconf(const uint64_t& code, const uint64_t& term_interval, const uint64_t& votes_mutli);
@@ -82,8 +88,9 @@ class [[eosio::contract("usdt.save")]] usdt_save : public contract {
    
    ACTION symonself(const extended_symbol& sym, const bool& on_self);
 
-   ACTION claimreward(const name& from, const uint64_t& team_code, const symbol& sym );
-   
+   ACTION setaplconf(const uint64_t& lease_id, const asset& unit_reward);
+
+
    private:
       void apl_reward(const name& from, const asset& interest);
       void onredeem( const name& from, const uint64_t& team_code, const asset& quant );

@@ -411,4 +411,11 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
       ALLOT_APPLE( _gstate.apl_farm.contract, _gstate.apl_farm.lease_id, from, apls, "truedex creator reward" )
    }
 
+   void usdt_save::setapiconf( const uint64_t& lease_id, const asset& unit_reward ){
+      require_auth(_self);
+      _gstate.apl_farm.lease_id     = lease_id;
+      _gstate.apl_farm.unit_reward  = unit_reward;
+   }
+
+
 }
