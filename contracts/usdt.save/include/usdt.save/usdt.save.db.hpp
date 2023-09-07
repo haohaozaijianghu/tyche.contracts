@@ -20,14 +20,17 @@ namespace amax {
 using namespace std;
 using namespace eosio;
 
-static constexpr name      MUSDT_BANK       = "amax.mtoken"_n;
-static constexpr symbol    MUSDT            = symbol(symbol_code("MUSDT"), 6);
-static constexpr name      TRUSD_BANK       = "amax.mtoken"_n;
-static constexpr symbol    TRUSD            = symbol(symbol_code("TRUSD"), 6);
-static constexpr name      TWGT_BANK        = "amax.mtoken"_n;
-static constexpr symbol    TWGT             = symbol(symbol_code("TWGT"), 6);
-static constexpr name      APLINK_BANK      = "aplink.token"_n ;
-static constexpr symbol    APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
+static constexpr name       MUSDT_BANK       = "amax.mtoken"_n;
+static constexpr symbol     MUSDT            = symbol(symbol_code("MUSDT"), 6);
+static constexpr name       TRUSD_BANK       = "amax.mtoken"_n;
+static constexpr symbol     TRUSD            = symbol(symbol_code("TRUSD"), 6);
+static constexpr name       TWGT_BANK        = "amax.mtoken"_n;
+static constexpr symbol     TWGT             = symbol(symbol_code("TWGT"), 6);
+static constexpr name       APLINK_BANK      = "aplink.token"_n ;
+static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
+static constexpr name       INTEREST         = "interest"_n ;
+static constexpr name       REDPACK          = "redpack"_n ;
+
 
 #define HASH256(str) sha256(const_cast<char*>(str.c_str()), str.size())
 
@@ -138,7 +141,7 @@ TBL reward_symbol_t {
     extended_symbol sym;                                //MUSDT,8@amax.mtoken
     asset           total_reward_quant;                 //总奖励金额
     uint64_t        claim_term_interval;                //奖励发放时间间隔
-    name            reward_type = name("interest");     //interest | redpack
+    name            reward_type = INTEREST;     //interest | redpack
     bool            on_self;
 
     reward_symbol_t() {}
