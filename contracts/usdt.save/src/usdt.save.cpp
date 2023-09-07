@@ -243,7 +243,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
          TRANSFER( TWGT_BANK, from, asset(tgt_amount, TWGT), "depsit credential" )
          //进入到锁仓合约
          auto tgt_amount_lock_amount = quant.amount * _gstate.locked_reward_twgt_ratio / PCT_BOOST;
-         std::string memo = "issue:${receiver}:${plan_id}:${first_unlock_days}";
+         std::string memo = "issue:";
          memo = memo.append(from.to_string()).append(":").append(to_string(_gstate.custody_id)).append(":").append("365");
          TRANSFER(TWGT_BANK, _gstate.custody_contract, asset(tgt_amount_lock_amount, TWGT), memo )
       }
