@@ -316,6 +316,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
          a.voted_rewards               = vote_rewards;
          a.started_at                  = now;
       });
+      CHECKC(acct->started_at + conf->term_interval > now, err::TIME_PREMATURE, "not due")
       //打出本金MUSDT
       TRANSFER( MUSDT_BANK, from, asset(quant.amount, MUSDT), "redeem" )
    }
