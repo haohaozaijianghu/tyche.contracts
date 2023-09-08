@@ -80,7 +80,7 @@ class [[eosio::contract("usdt.save")]] usdt_save : public contract {
    ACTION claimreward(const name& from, const uint64_t& team_code, const symbol& sym );
    
    //admin
-   ACTION addrewardsym(const extended_symbol& sym, const uint64_t& interval);
+   ACTION addrewardsym(const extended_symbol& sym, const uint64_t& interval, const name& reward_type);
 
    ACTION addsaveconf(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier);
    

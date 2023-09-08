@@ -313,16 +313,17 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
       TRANSFER( MUSDT_BANK, from, asset(quant.amount, MUSDT), "redeem" )
    }
 
-   void usdt_save::addrewardsym(const extended_symbol& sym, const uint64_t& interval) {
+   void usdt_save::addrewardsym(const extended_symbol& sym, const uint64_t& interval, const name& reward_type) {
       require_auth(_self);
       auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
       auto reward_symbol      = reward_symbols.find( sym.get_symbol().code().raw() );
       CHECKC( reward_symbol == reward_symbols.end(), err::RECORD_EXISTING, "save plan not found" )
+      CHECKC( reward_type == INTEREST || reward_type == REDPACK, err::PARAM_ERROR, "reward_type error" )
       reward_symbols.emplace( _self, [&]( auto& s ) {
-         s.sym                   = sym;
-         s.claim_term_interval_sec   = interval;
-         s.reward_type           = name("interest");
-         s.on_shelf               = false;
+         s.sym                         = sym;
+         s.claim_term_interval_sec     = interval;
+         s.reward_type                 = reward_type;
+         s.on_shelf                    = false;
       });
    }
 
