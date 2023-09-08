@@ -30,12 +30,12 @@ static constexpr symbol    TRUSD            = symbol(symbol_code("TRUSD"), 6);
 #define NTBL(name) struct [[eosio::table(name), eosio::contract("usdt.interest")]]
 
 NTBL("global") global_t {
-    name                refuel_account  = "usdtrefuel"_n;
-    name                usdt_save_contract = "usdt.save"_n;
+    name                refueler_account        = "tyche.admin"_n;
+    name                usdt_save_contract      = "usdt.save"_n;
     bool                enabled;
 
 
-    EOSLIB_SERIALIZE( global_t, (refuel_account)(usdt_save_contract)(enabled) )
+    EOSLIB_SERIALIZE( global_t, (refueler_account)(usdt_save_contract)(enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 

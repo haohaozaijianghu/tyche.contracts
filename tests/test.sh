@@ -1,12 +1,13 @@
 
-reward=usdt.reward1
-save=usdt.save1
-admin=admin1
+reward=usdt.reward2
+save=usdt.save2
+admin=admin2
 
 要建一个锁仓
 
 tnew $reward
 tnew $save
+tnew $admin
 tset $save usdt.save
 tset $reward usdt.interest
 tcli set account permission $reward active --add-code
@@ -15,16 +16,16 @@ tcli set account permission $save active --add-code
 tcli push action $save init '["'$admin'","'$reward'","joss",10, true]' -p $save
 tcli push action $reward init '["joss","'$save'", true]' -p $reward
 
-tcli push action $save addrewardsym '{"sym":{ "sym":"6,NUSDT", "contract":"amax.mtoken" }, "interval": 86400}' -p usdt.save
-tcli push action $save addrewardsym '{"sym":{ "sym":"6,MUSDC", "contract":"amax.mtoken" }, "interval": 86400}' -p usdt.save
-tcli push action $save symonself '{"sym":{ "sym":"6,MUSDC", "contract":"amax.mtoken" }, "on_self": true}' -p usdt.save
+tcli push action $save addrewardsym '{"sym":{ "sym":"6,TRUSD", "contract":"amax.mtoken" }, "interval": 86400}' -p $save
+tcli push action $save addrewardsym '{"sym":{ "sym":"6,MUSDC", "contract":"amax.mtoken" }, "interval": 86400}' -p $save
+tcli push action $save symonself '{"sym":{ "sym":"6,MUSDC", "contract":"amax.mtoken" }, "on_self": true}' -p  $save
 //存入NUSDT
-tcli push action amax.mtoken transfer '{"from": "joss", "to": "$save", "quantity": "1000.000000 NUSDT", "memo": "deposit"}' -p joss
+tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$save'", "quantity": "1000.000000 TRUSD", "memo": "deposit"}' -p joss
 
-tcli push action usdt.save addsaveconf '[1, 10, 1]' -p $save
-tcli push action usdt.save addsaveconf '[2, 20, 2]' -p $save
-tcli push action usdt.save addsaveconf '[3, 60, 3]' -p $save
-tcli push action usdt.save addsaveconf '[4, 180, 4]' -p $save
+tcli push action $save addsaveconf '[1, 10, 1]' -p $save
+tcli push action $save addsaveconf '[2, 20, 2]' -p $save
+tcli push action $save addsaveconf '[3, 60, 3]' -p $save
+tcli push action $save addsaveconf '[4, 180, 4]' -p $save
 
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "$save", "quantity": "100.000000 MUSDT", "memo": "deposit:2"}' -p joss
 

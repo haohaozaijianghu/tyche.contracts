@@ -82,11 +82,11 @@ class [[eosio::contract("usdt.save")]] usdt_save : public contract {
    //admin
    ACTION addrewardsym(const extended_symbol& sym, const uint64_t& interval);
 
-   ACTION addsaveconf(const uint64_t& code, const uint64_t& term_interval, const uint64_t& votes_mutli);
+   ACTION addsaveconf(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier);
    
-   ACTION init(const name& admin, const name& usdt_interest_contract, const name& nusdt_refueler, const uint64_t& apl_multi, const bool& enabled);
+   ACTION init(const name& admin, const name& interest_contract, const name& trusd_refueler, const bool& enabled);
    
-   ACTION symonself(const extended_symbol& sym, const bool& on_self);
+   ACTION symonself(const extended_symbol& sym, const bool& on_shelf);
 
    ACTION setaplconf(const uint64_t& lease_id, const asset& unit_reward);
 
@@ -94,7 +94,7 @@ class [[eosio::contract("usdt.save")]] usdt_save : public contract {
    private:
       void apl_reward(const name& from, const asset& interest);
       void onredeem( const name& from, const uint64_t& team_code, const asset& quant );
-      voted_reward_map get_new_voted_reward_info(const reward_conf_map& reward_confs);
+      earner_reward_map get_new_shared_earner_reward(const earn_pool_reward_map& rewards);
       void onuserdeposit( const name& from, const uint64_t& team_code, const asset& quant );
 
       global_singleton     _global;

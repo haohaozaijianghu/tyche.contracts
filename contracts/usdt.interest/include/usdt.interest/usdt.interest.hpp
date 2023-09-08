@@ -49,7 +49,6 @@ enum class err: uint8_t {
    STATUS_ERROR         = 18,
    INCORRECT_AMOUNT     = 19,
    UNAVAILABLE_PURCHASE = 20
-
 };
 
 /**
@@ -73,7 +72,6 @@ class [[eosio::contract("usdt.interest")]] usdt_interest : public contract {
 
     ~usdt_interest() { _global.set( _gstate, get_self() ); }
 
-
    //管理员打入利息
    [[eosio::on_notify("*::transfer")]]
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
@@ -81,10 +79,10 @@ class [[eosio::contract("usdt.interest")]] usdt_interest : public contract {
    //用户领取利息
    ACTION claimreward( const name& to, const name& bank, const asset& total_rewards );
    
-   ACTION init(const name& refuel_account, const name& usdt_save_contract, const bool& enabled);
+   ACTION init(const name& refueler_account, const name& usdt_save_contract, const bool& enabled);
    
-      global_singleton     _global;
-      global_t             _gstate;
-      dbc                  _db;
+   global_singleton     _global;
+   global_t             _gstate;
+   dbc                  _db;
 };
 } //namespace amax

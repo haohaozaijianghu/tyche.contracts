@@ -111,10 +111,10 @@ namespace entu {
          */
          struct [[eosio::table("globalvote")]] global_savevote {
             asset             total_rewards        = ENTU_ASSET(0);  // 现在还剩余的奖励
-            asset             allocating_rewards   = ENTU_ASSET(0);  // 正在分配的奖励
-            asset             allocated_rewards    = ENTU_ASSET(0);  // = total_rewards - allocating_rewards
+            asset             unalloted_rewards   = ENTU_ASSET(0);  // 正在分配的奖励
+            asset             unclaimed_rewards    = ENTU_ASSET(0);  // = total_rewards - unalloted_rewards
             asset             votes                = vote_asset_0;   // 当前投票数
-            int128_t          rewards_per_vote     = 0;              // 每票奖励
+            int128_t          reward_per_vote     = 0;              // 每票奖励
             block_timestamp   update_at;
 
             typedef eosio::singleton< "globalvote"_n, global_savevote > table;
@@ -127,7 +127,7 @@ namespace entu {
          struct [[eosio::table]] voter {
             name                       owner;
             asset                      votes                   = vote_asset_0;
-            int128_t                   last_rewards_per_vote   = 0;
+            int128_t                   last_reward_per_vote   = 0;
             asset                      unclaimed_rewards       = ENTU_ASSET(0);
             asset                      claimed_rewards         = ENTU_ASSET(0);
             block_timestamp            update_at;
@@ -145,7 +145,7 @@ namespace entu {
 
       voter::table            _voter_tbl;
 
-      void allocate_rewards(int128_t &last_rewards_per_vote, const asset& votes_old, const asset& votes_delta, const name& new_payer, asset &allocated_rewards_out);
+      void allocate_rewards(int128_t &last_reward_per_vote, const asset& votes_old, const asset& votes_delta, const name& new_payer, asset &unclaimed_rewards_out);
       void change_vote(const name& voter, const asset& votes, bool is_adding);
    };
 

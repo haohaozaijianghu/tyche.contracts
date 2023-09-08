@@ -24,8 +24,8 @@ static constexpr name       MUSDT_BANK       = "amax.mtoken"_n;
 static constexpr symbol     MUSDT            = symbol(symbol_code("MUSDT"), 6);
 static constexpr name       TRUSD_BANK       = "amax.mtoken"_n;
 static constexpr symbol     TRUSD            = symbol(symbol_code("TRUSD"), 6);
-static constexpr name       TWGT_BANK        = "amax.mtoken"_n;
-static constexpr symbol     TWGT             = symbol(symbol_code("TWGT"), 6);
+static constexpr name       TYCHE_BANK        = "amax.mtoken"_n;
+static constexpr symbol     TYCHE             = symbol(symbol_code("TYCHE"), 6);
 static constexpr name       APLINK_BANK      = "aplink.token"_n ;
 static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
 static constexpr name       INTEREST         = "interest"_n ;
@@ -40,116 +40,105 @@ static constexpr name       REDPACK          = "redpack"_n ;
 
 struct aplink_farm {
     name contract           = "aplink.farm"_n;
-    uint64_t lease_id       = 9; 
+    uint64_t lease_id       = 9;        //TODO 创建
     asset unit_reward       = asset(1, symbol("APL", 4));
 };
 
-
 NTBL("global") global_t {
-    name                admin                   = "armoniaadmin"_n;
-    extended_symbol     voucher_token           = extended_symbol(TRUSD,  TRUSD_BANK);      //代币TRUSD
+    name                admin                   = "tyche.admin"_n;
+    extended_symbol     lp_token                = extended_symbol(TRUSD,  TRUSD_BANK);      //代币TRUSD
     extended_symbol     principal_token         = extended_symbol(MUSDT,  MUSDT_BANK);      //代币MUSDT,用户存入的本金
     asset               mini_deposit_amount     = asset(10, MUSDT);
-    name                usdt_interest_contract  = "usdt.intst"_n;
-    name                nusdt_refueler          = "usdtrefuel"_n;                           //TRUSD系统充入账户
-    uint64_t            reward_twgt_ratio       = 10;                                       //每100MUSDT 奖励0.1TWGT
-    uint64_t            locked_reward_twgt_ratio= 90;                                       //每100MUSDT 锁仓0.9TWGT 
-    name                custody_contract        = name("amax.custody");
-    uint64_t            custody_id              = -1;
-    uint64_t            apl_multi               = 10;
+    name                interest_contract       = "usdt.intst"_n;
+    name                trusd_refueler          = "tyche.admin"_n;                          //TRUSD系统充入账户
+    uint64_t            tyche_farm_ratio        = 10;                                       //每100MUSDT 奖励0.1TYCHE
+    uint64_t            tyche_farm_lock_ratio   = 90;                                       //每100MUSDT 锁仓0.9TYCHE
     aplink_farm         apl_farm;
-    uint64_t            twgt_reward_term_code   = 5;
-    bool                enabled                 = true;
+    uint64_t            tyche_reward_term_code  = 5;
+    bool                enabled                 = true; //TODO
 
-    EOSLIB_SERIALIZE( global_t, (admin)(voucher_token)(principal_token)
+    EOSLIB_SERIALIZE( global_t, (admin)(lp_token)(principal_token)
                                 (mini_deposit_amount)
-                                (usdt_interest_contract)(nusdt_refueler)(reward_twgt_ratio)
-                                (locked_reward_twgt_ratio)(custody_contract)(custody_id)
-                                (apl_multi)(apl_farm)(twgt_reward_term_code)(enabled) )
+                                (interest_contract)(trusd_refueler)(tyche_farm_ratio)
+                                (tyche_farm_lock_ratio)
+                                (apl_farm)(tyche_reward_term_code)(enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
-struct reward_conf_t {
-    asset           total_rewards;                      //总奖励
-    asset           allocating_rewards;                 //待分配的奖励
-    asset           allocated_rewards;                  //已分配奖励  = total_rewards - allocating_rewards
+struct earn_pool_reward_t {                               //MBTC,HSTZ,MUSDT
+    asset           total_rewards;                      //总奖励 = unalloted_rewards + unclaimed_rewards + claimed_rewards
+    asset           unalloted_rewards;                  //未分配的奖励(admin)
+    asset           unclaimed_rewards;                  //已分配未领取奖励(customer)
     asset           claimed_rewards;                    //已领取奖励
-    int128_t        rewards_per_vote            = 0;    //每票已分配奖励
-    uint64_t        last_reward_interval        = 0;    //奖励发放时间间隔
-    uint64_t        last_reward_per_vote_delta  = 0;    //奖励发放delta
-    time_point_sec  last_rewards_settled_at;            //上次奖励发放时间
+    int128_t        reward_per_share            = 0;    //每票已分配奖励
+    int128_t        last_reward_per_share       = 0;    //奖励发放delta TODO
+    time_point_sec  reward_added_at;                    //最近奖励发放时间(admin)
+    time_point_sec  prev_reward_added_at;               //前一次奖励发放时间间隔
 };
-using reward_conf_map = std::map<uint64_t, reward_conf_t>;
+using earn_pool_reward_map = std::map<uint64_t/*reward symbol code*/, earn_pool_reward_t>;
 
 //Scope: _self
-TBL save_conf_t {
-    uint64_t        code;                //1,2,3,4,5
-    asset           total_deposit_quant     = asset(0, MUSDT);  //总存款金额
-    asset           remain_deposit_quant    = asset(0, MUSDT);  //剩余存款金额
-    reward_conf_map reward_confs;
-    uint64_t        term_interval           = 0;                //多少秒
-    uint64_t        votes_mutli             = 1;
-    bool            on_self                 = true;
+TBL earn_pool_t {
+    uint64_t                code;                                   //1,2,3,4,5
+    asset                   sum_quant       = asset(0, MUSDT);      //历史总存款金额
+    asset                   available_quant = asset(0, MUSDT);      //剩余存款金额
+    earn_pool_reward_map    rewards;
+    uint64_t                term_interval_sec       = 0;            //多少秒
+    uint64_t                share_multiplier        = 1;
+    bool                    on_shelf                = true;
+    time_point_sec          created_at;
 
-    time_point_sec  created_at;
-    save_conf_t() {}
-    save_conf_t(const uint64_t& c) {
-        code = c;
-    }
-
+    earn_pool_t() {}
+    earn_pool_t(const uint64_t& c): code(c) {}
     uint64_t primary_key()const { return code; }
 
-    typedef multi_index<"saveconfs"_n, save_conf_t> tbl_t;
+    typedef multi_index<"earnpools"_n, earn_pool_t> tbl_t;
 
-    EOSLIB_SERIALIZE( save_conf_t, (code)(total_deposit_quant)(remain_deposit_quant)(reward_confs)
-                                    (term_interval)(votes_mutli)(on_self)(created_at) )
+    EOSLIB_SERIALIZE( earn_pool_t, (code)(sum_quant)(available_quant)(rewards)
+                                    (term_interval_sec)(share_multiplier)(on_shelf)(created_at) )
 };
 
-struct reward_info_t {
-    int128_t            last_rewards_per_vote       = 0;
+struct earner_reward_t {
+    int128_t            last_reward_per_share       = 0;
     asset               unclaimed_rewards;
     asset               claimed_rewards;
-    time_point_sec      last_rewards_settled_at;
 };
 
-using voted_reward_map = std::map<uint64_t, reward_info_t>;
+using earner_reward_map = std::map<uint64_t/*symbol code*/, earner_reward_t>;
 
 //Scope: code
 //Note: record will be deleted upon withdrawal/redemption
-TBL save_account_t {
-    name                account;                    //PK
-    asset               total_deposit_quant;        //总存款金额
-    asset               deposit_quant;              //当前存款金额
-    voted_reward_map    voted_rewards;              //每票已分配奖励
+TBL earner_t {
+    name                owner;                      //PK
+    asset               sum_quant;                  //总存款金额
+    asset               available_quant;            //当前存款金额
+    earner_reward_map    earner_rewards;             //每票已分配奖励
     time_point_sec      created_at;
-    time_point_sec      started_at;                 //利息开始时间， 一旦有钱充入进来，周期从0开始
+    time_point_sec      term_started_at;            //利息周期开始时间一旦有钱充入进来，周期从当前时间开始
 
-    save_account_t() {}
-    save_account_t(const name& a) {
-        account = a;
-    }
+    earner_t() {}
+    earner_t(const name& a): owner(a) {}
 
-    uint64_t primary_key()const { return account.value; }
+    uint64_t primary_key()const { return owner.value; }
 
-    typedef multi_index<"saveaccounts"_n, save_account_t> tbl_t;
+    typedef multi_index<"earners"_n, earner_t> tbl_t;
 
-    EOSLIB_SERIALIZE( save_account_t,   (account)(total_deposit_quant)(deposit_quant)
-                                        (voted_rewards)(created_at)(started_at) )
+    EOSLIB_SERIALIZE( earner_t,   (owner)(sum_quant)(available_quant)
+                                        (earner_rewards)(created_at)(term_started_at) )
 };
 
 TBL reward_symbol_t {
-    extended_symbol sym;                                //MUSDT,8@amax.mtoken
-    asset           total_reward_quant;                 //总奖励金额
-    uint64_t        claim_term_interval;                //奖励发放时间间隔
-    name            reward_type = INTEREST;     //interest | redpack
-    bool            on_self;
+    extended_symbol sym;                                    //MUSDT,8@amax.mtoken
+    uint64_t        claim_term_interval_sec;                //奖励发放时间间隔
+    name            reward_type             = INTEREST;     //interest | redpack
+    bool            on_shelf;
 
     reward_symbol_t() {}
 
     uint64_t primary_key() const { return sym.get_symbol().code().raw(); }
     typedef eosio::multi_index< "rewardsymbol"_n, reward_symbol_t > idx_t;
 
-    EOSLIB_SERIALIZE( reward_symbol_t, (sym)(total_reward_quant)(claim_term_interval)(reward_type)(on_self) )
+    EOSLIB_SERIALIZE( reward_symbol_t, (sym)(claim_term_interval_sec)(reward_type)(on_shelf) )
 };
 
 } //namespace amax

@@ -46,20 +46,20 @@ namespace db {
 
 }// namespace db
 
-inline static int128_t calc_rewards_per_vote(const int128_t& old_rewards_per_vote, const asset& rewards, const asset& votes) {
+inline static int128_t calc_reward_per_vote(const int128_t& old_reward_per_vote, const asset& rewards, const asset& votes) {
    ASSERT(rewards.amount >= 0 && votes.amount >= 0);
-   int128_t  new_rewards_per_vote = old_rewards_per_vote;
+   int128_t  new_reward_per_vote = old_reward_per_vote;
    if (rewards.amount > 0 && votes.amount > 0) {
-      new_rewards_per_vote = old_rewards_per_vote + rewards.amount * HIGH_PRECISION / votes.amount;
-      CHECK(new_rewards_per_vote >= old_rewards_per_vote, "calculated rewards_per_vote overflow")
+      new_reward_per_vote = old_reward_per_vote + rewards.amount * HIGH_PRECISION / votes.amount;
+      CHECK(new_reward_per_vote >= old_reward_per_vote, "calculated reward_per_vote overflow")
    }
-   return new_rewards_per_vote;
+   return new_reward_per_vote;
 }
 
-inline static asset calc_voter_rewards(const asset& votes, const int128_t& rewards_per_vote) {
-   ASSERT(votes.amount >= 0 && rewards_per_vote >= 0);
-   CHECK(votes.amount * rewards_per_vote >= rewards_per_vote, "calculated rewards overflow");
-   int128_t rewards = votes.amount * rewards_per_vote / HIGH_PRECISION;
+inline static asset calc_voter_rewards(const asset& votes, const int128_t& reward_per_vote) {
+   ASSERT(votes.amount >= 0 && reward_per_vote >= 0);
+   CHECK(votes.amount * reward_per_vote >= reward_per_vote, "calculated rewards overflow");
+   int128_t rewards = votes.amount * reward_per_vote / HIGH_PRECISION;
    CHECK(rewards >= 0 && rewards <= std::numeric_limits<int64_t>::max(), "calculated rewards overflow");
    return ENTU_ASSET((int64_t)rewards);
 }
@@ -92,7 +92,7 @@ void entu_reward::change_vote(const name& voter, const asset& votes, bool is_add
          CHECK(v.votes >= votes, "voter's votes insufficent")
          votes_delta = -votes;
       }
-      allocate_rewards(v.last_rewards_per_vote, v.votes, votes_delta, voter, v.unclaimed_rewards);
+      allocate_rewards(v.last_reward_per_vote, v.votes, votes_delta, voter, v.unclaimed_rewards);
       v.votes        += votes_delta;
       CHECK(v.votes.amount >= 0, "voter's votes can not be negtive")
 
@@ -109,7 +109,7 @@ void entu_reward::claimrewards(const name& voter) {
    check(voter_itr->votes.amount > 0, "voter's votes must be positive");
 
    _voter_tbl.modify(voter_itr, voter, [&]( auto& v) {
-      allocate_rewards(v.last_rewards_per_vote, v.votes, vote_asset_0, voter, v.unclaimed_rewards);
+      allocate_rewards(v.last_reward_per_vote, v.votes, vote_asset_0, voter, v.unclaimed_rewards);
       check(v.unclaimed_rewards.amount > 0, "no rewards to claim");
       TRANSFER_OUT(ENTU_TOKEN, voter, v.unclaimed_rewards, "voted rewards");
 
@@ -131,37 +131,37 @@ void entu_reward::ontransfer(    const name &from,
    _global.set(_gstate, get_self());
 
    _gvote.total_rewards         += quantity;
-   _gvote.allocating_rewards    += quantity;
-   _gvote.rewards_per_vote      = calc_rewards_per_vote(_gvote.rewards_per_vote, quantity, _gvote.votes);
+   _gvote.unalloted_rewards    += quantity;
+   _gvote.reward_per_vote      = calc_reward_per_vote(_gvote.reward_per_vote, quantity, _gvote.votes);
    _gvote.update_at             = eosio::current_time_point();
    _gvote_tbl.set(_gvote, get_self());
 }
 
 void entu_reward::allocate_rewards(
-         int128_t &last_rewards_per_vote,
+         int128_t &last_reward_per_vote,
          const asset& votes_old,
          const asset& votes_delta, 
          const name& new_payer, 
-         asset &allocated_rewards_out ){
+         asset &unclaimed_rewards_out ){
 
    auto now = eosio::current_time_point();
-   CHECK(_gvote.rewards_per_vote >= last_rewards_per_vote, "last_rewards_per_vote invalid");
-   int128_t rewards_per_vote_delta = _gvote.rewards_per_vote - last_rewards_per_vote;
-   if (rewards_per_vote_delta > 0 && votes_old.amount > 0) {
+   CHECK(_gvote.reward_per_vote >= last_reward_per_vote, "last_reward_per_vote invalid");
+   int128_t reward_per_vote_delta = _gvote.reward_per_vote - last_reward_per_vote;
+   if (reward_per_vote_delta > 0 && votes_old.amount > 0) {
       ASSERT(votes_old <= _gvote.votes)
-      asset new_rewards = calc_voter_rewards(votes_old, rewards_per_vote_delta);
-      CHECK(_gvote.allocating_rewards >= new_rewards, "producer allocating rewards insufficient");
-      _gvote.allocating_rewards -= new_rewards;
-      _gvote.allocated_rewards += new_rewards;
-      ASSERT(_gvote.total_rewards == _gvote.allocating_rewards + _gvote.allocated_rewards)
-      allocated_rewards_out += new_rewards; // update allocated_rewards for voter
+      asset new_rewards = calc_voter_rewards(votes_old, reward_per_vote_delta);
+      CHECK(_gvote.unalloted_rewards >= new_rewards, "producer allocating rewards insufficient");
+      _gvote.unalloted_rewards -= new_rewards;
+      _gvote.unclaimed_rewards += new_rewards;
+      ASSERT(_gvote.total_rewards == _gvote.unalloted_rewards + _gvote.unclaimed_rewards)
+      unclaimed_rewards_out += new_rewards; // update unclaimed_rewards for voter
    }
 
    _gvote.votes += votes_delta;
    CHECK(_gvote.votes.amount >= 0, "producer votes can not be negtive")
    _gvote.update_at = now;
 
-   last_rewards_per_vote = _gvote.rewards_per_vote; // update for voted_prod
+   last_reward_per_vote = _gvote.reward_per_vote; // update for voted_prod
 
 }
 
