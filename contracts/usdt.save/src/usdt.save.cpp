@@ -165,16 +165,16 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
       auto now = time_point_sec(current_time_point());
       CHECKC( _gstate.enabled, err::PAUSED, "not effective yet" )
 
-      auto confs           = earn_pool_t::tbl_t(_self, _self.value);
-      auto conf            = confs.find( team_code );
+      auto confs              = earn_pool_t::tbl_t(_self, _self.value);
+      auto conf               = confs.find( team_code );
       CHECKC( conf != confs.end(), err::RECORD_NOT_FOUND, "save plan not found" )
 
       auto accts              = earner_t::tbl_t(_self, team_code);
       auto acct               = accts.find( from.value );
       if( acct == accts.end() ) {
          confs.modify( conf, _self, [&]( auto& c ) {
-            c.sum_quant   += quant;
-            c.available_quant  += quant;
+            c.sum_quant             += quant;
+            c.available_quant       += quant;
          });
 
          acct = accts.emplace( _self, [&]( auto& a ) {
@@ -209,14 +209,14 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
             int128_t reward_per_share_delta = reward_conf.reward_per_share - earner_reward.last_reward_per_share;
             if (reward_per_share_delta > 0 && older_deposit_quant.amount > 0) {
                new_rewards = calc_sharer_rewards(older_deposit_quant, reward_per_share_delta, reward_conf.total_rewards.symbol);
-               reward_conf.unalloted_rewards         -= new_rewards;
+               reward_conf.unalloted_rewards          -= new_rewards;
                reward_conf.unclaimed_rewards          += new_rewards;
-               earner_reward.last_reward_per_share     = reward_conf.reward_per_share;
-               earner_reward.unclaimed_rewards         += quant;
-               earner_reward.claimed_rewards           += quant;
+               earner_reward.last_reward_per_share    = reward_conf.reward_per_share;
+               earner_reward.unclaimed_rewards        += quant;
+               earner_reward.claimed_rewards          += quant;
             }
-            rewards[code]                   = reward_conf;
-            earner_rewards[code]                  = earner_reward;
+            rewards[code]                             = reward_conf;
+            earner_rewards[code]                      = earner_reward;
          }
          confs.modify( conf, _self, [&]( auto& c ) {
                c.sum_quant   += quant;
