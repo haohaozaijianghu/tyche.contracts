@@ -196,6 +196,8 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
          earn_pool_reward_map rewards = conf->rewards;
          earner_reward_map earner_rewards  = acct->earner_rewards;
          auto older_deposit_quant = acct->available_quant;
+
+
          for (auto& reward_conf_kv : conf->rewards) { //for循环每一个token
             auto reward_conf     = reward_conf_kv.second;
             auto code            = reward_conf_kv.first;
@@ -207,6 +209,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
             } else {
                earner_reward.unclaimed_rewards         = asset(0, reward_conf.total_rewards.symbol);
                earner_reward.claimed_rewards           = asset(0, reward_conf.total_rewards.symbol);
+               earner_reward.total_claimed_rewards     = asset(0, reward_conf.total_rewards.symbol);
                earner_reward.last_reward_per_share     = 0;
             }
 
@@ -216,8 +219,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
                reward_conf.unalloted_rewards          -= new_rewards;
                reward_conf.unclaimed_rewards          += new_rewards;
                earner_reward.last_reward_per_share    = reward_conf.reward_per_share;
-               earner_reward.unclaimed_rewards        += quant;
-               earner_reward.claimed_rewards          += quant;
+               earner_reward.unclaimed_rewards        += new_rewards;
             }
             rewards[code]                             = reward_conf;
             earner_rewards[code]                      = earner_reward;
@@ -243,7 +245,6 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
          //打出TYCHE
          auto tyche_amount = quant.amount * _gstate.tyche_farm_ratio / PCT_BOOST;
          TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "tyche farm reward" )
-       
       }
    }
 
@@ -254,6 +255,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
          earner_reward.last_reward_per_share = reward_conf.second.reward_per_share;
          earner_reward.unclaimed_rewards = asset(0, reward_conf.second.total_rewards.symbol);
          earner_reward.claimed_rewards = asset(0, reward_conf.second.total_rewards.symbol);
+         earner_reward.total_claimed_rewards = asset(0, reward_conf.second.total_rewards.symbol);
          earner_rewards[reward_conf.first] = earner_reward;
       }
       return earner_rewards;
@@ -318,6 +320,12 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
       CHECKC(acct->term_started_at + conf->term_interval_sec > now, err::TIME_PREMATURE, "not due")
       //打出本金MUSDT
       TRANSFER( MUSDT_BANK, from, asset(quant.amount, MUSDT), "redeem" )
+
+       if(team_code == _gstate.tyche_reward_term_code) {
+         //打出TYCHE
+         auto tyche_amount = quant.amount * _gstate.tyche_farm_lock_ratio / PCT_BOOST;
+         TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "tyche farm reward" )
+      }
    }
 
    void usdt_save::addrewardsym(const extended_symbol& sym, const uint64_t& interval, const name& reward_type) {
