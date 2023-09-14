@@ -127,10 +127,12 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
       if( conf_itr->on_shelf ){
          auto rate = conf_itr->available_quant.amount * conf_itr->share_multiplier * PCT_BOOST / total_share;
          auto rewards = asset(total_rewards.amount * rate / PCT_BOOST, total_rewards.symbol);
-      
+
+         auto conf_id = _global_state->new_reward_conf_id();
          if(conf_itr->rewards.count(total_rewards.symbol.code().raw()) == 0) {
             confs.modify( conf_itr, _self, [&]( auto& c ) {
                auto reward_conf = earn_pool_reward_t();
+               reward_conf.id                         = conf_id;
                reward_conf.total_rewards              = rewards;
                reward_conf.last_rewards               = rewards;
                reward_conf.unalloted_rewards          = rewards;
@@ -144,6 +146,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
          } else {
             confs.modify( conf_itr, _self, [&]( auto& c ) {
                auto older_reward = conf_itr->rewards.at(rewards.symbol.code().raw());
+               older_reward.id                           = conf_id;
                older_reward.total_rewards                = older_reward.total_rewards + rewards;
                older_reward.last_rewards                 = rewards;
                older_reward.unalloted_rewards            = older_reward.unalloted_rewards + rewards;
@@ -291,10 +294,11 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
          reward_conf.unclaimed_rewards    += new_rewards;
          rewards[code]                    = reward_conf;
 
-         earner_reward.unclaimed_rewards         =  asset(0, total_rewards.symbol);
-         earner_reward.claimed_rewards           += total_rewards;
-         earner_reward.last_reward_per_share    =  reward_conf.reward_per_share;
-         vote_rewards[code]                     =  earner_reward;
+         earner_reward.unclaimed_rewards           =  asset(0, total_rewards.symbol);
+         earner_reward.claimed_rewards             += asset(0, total_rewards.symbol);
+         earner_reward.total_claimed_rewards       += total_rewards;
+         earner_reward.last_reward_per_share       =  reward_conf.reward_per_share;
+         vote_rewards[code]                        =  earner_reward;
          //内部调用发放利息
          //发放利息
          usdt_interest::claimreward_action cliam_reward_act(_gstate.interest_contract, { {get_self(), "active"_n} });
@@ -392,8 +396,9 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
       reward_conf.unclaimed_rewards    += new_rewards;
       rewards[code]               = reward_conf;
 
-      earner_reward.unclaimed_rewards         =  asset(0, total_rewards.symbol);
-      earner_reward.claimed_rewards           += total_rewards;
+      earner_reward.unclaimed_rewards        =  asset(0, total_rewards.symbol);
+      earner_reward.claimed_rewards          =  asset(0, total_rewards.symbol);
+      earner_reward.total_claimed_rewards    += total_rewards;
       earner_reward.last_reward_per_share     =  reward_conf.reward_per_share;
       earner_rewards[code]                    =  earner_reward;
       

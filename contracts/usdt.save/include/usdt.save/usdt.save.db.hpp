@@ -66,6 +66,7 @@ NTBL("global") global_t {
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
 struct earn_pool_reward_t {                             //MBTC,HSTZ,MUSDT
+    uint64_t        id;
     asset           total_rewards;                      //总奖励 = unalloted_rewards + unclaimed_rewards + claimed_rewards
     asset           last_rewards;                       //上一次总奖励金额
     asset           unalloted_rewards;                  //未分配的奖励(admin)
@@ -103,6 +104,7 @@ struct earner_reward_t {
     int128_t            last_reward_per_share       = 0;
     asset               unclaimed_rewards;
     asset               claimed_rewards;
+    asset               total_claimed_rewards;          
 };
 
 using earner_reward_map = std::map<uint64_t/*symbol code*/, earner_reward_t>;
@@ -142,6 +144,65 @@ TBL reward_symbol_t {
     typedef eosio::multi_index< "rewardsymbol"_n, reward_symbol_t > idx_t;
 
     EOSLIB_SERIALIZE( reward_symbol_t, (sym)(claim_term_interval_sec)(reward_type)(on_shelf) )
+};
+
+TBL globalidx {
+    uint64_t        reward_conf_id              = 0;               // the auto-increament id of order
+    uint64_t        deposit_id                  = 0;               // 本金提取后再存入，id变化
+    uint64_t        interest_withdraw_id        = 0;               // the auto-increament id of deal item
+};
+typedef eosio::singleton< "globalidx"_n, globalidx > global_table;
+
+struct global_state: public globalidx {
+    public:
+        bool changed = false;
+
+        using ptr_t = std::unique_ptr<global_state>;
+
+        static ptr_t make_global(const name &contract) {
+            std::shared_ptr<global_table> global_tbl;
+            auto ret = std::make_unique<global_state>();
+            ret->_global_tbl = std::make_unique<global_table>(contract, contract.value);
+
+            if (ret->_global_tbl->exists()) {
+                static_cast<globalidx&>(*ret) = ret->_global_tbl->get();
+            }
+            return ret;
+        }
+
+        inline uint64_t new_auto_inc_id(uint64_t &id) {
+            if (id == 0 || id == std::numeric_limits<uint64_t>::max()) {
+                id = 1;
+            } else {
+                id++;
+            }
+            change();
+            return id;
+        }
+
+        inline uint64_t new_reward_conf_id() {
+            return new_auto_inc_id(reward_conf_id);
+        }
+
+        inline uint64_t new_deposit_id() {
+            return new_auto_inc_id(deposit_id);
+        }
+        inline uint64_t new_interest_withdraw_id() {
+            return new_auto_inc_id(interest_withdraw_id);
+        }
+        inline void change() {
+            changed = true;
+        }
+
+        inline void save(const name &payer) {
+            if (changed) {
+                auto &g = static_cast<globalidx&>(*this);
+                _global_tbl->set(g, payer);
+                changed = false;
+            }
+        }
+    private:
+        std::unique_ptr<global_table> _global_tbl;  
 };
 
 } //namespace amax

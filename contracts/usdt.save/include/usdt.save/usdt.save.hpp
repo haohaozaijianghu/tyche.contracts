@@ -100,5 +100,7 @@ class [[eosio::contract("usdt.save")]] usdt_save : public contract {
       global_singleton     _global;
       global_t             _gstate;
       dbc                  _db;
+      global_state::ptr_t   _global_state;
+
 };
 } //namespace amax
