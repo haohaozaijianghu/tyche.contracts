@@ -39,9 +39,9 @@ void usdt_interest::ontransfer(const name& from, const name& to, const asset& qu
 }
 
 //提出奖励
-void usdt_interest::claimreward( const name& to, const name& bank, const asset& total_rewards ){
+void usdt_interest::claimreward( const name& to, const name& bank, const asset& total_rewards, const string& memo){
    require_auth(_gstate.usdt_save_contract);
-   TRANSFER( bank, to, total_rewards, "reward claim" )
+   TRANSFER( bank, to, total_rewards, memo )
 }
 
 }

@@ -14,7 +14,7 @@ namespace amax {
 class usdt_interest {
    public:
       [[eosio::action]] 
-      void claimreward( const name& to, const name& bank, const asset& rewards );
+      void claimreward( const name& to, const name& bank, const asset& rewards, const string& memo );
 
       using claimreward_action = eosio::action_wrapper<"claimreward"_n, &usdt_interest::claimreward>;
 };

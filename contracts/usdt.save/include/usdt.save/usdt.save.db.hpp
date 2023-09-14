@@ -65,8 +65,9 @@ NTBL("global") global_t {
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
-struct earn_pool_reward_t {                               //MBTC,HSTZ,MUSDT
+struct earn_pool_reward_t {                             //MBTC,HSTZ,MUSDT
     asset           total_rewards;                      //总奖励 = unalloted_rewards + unclaimed_rewards + claimed_rewards
+    asset           last_rewards;                       //上一次总奖励金额
     asset           unalloted_rewards;                  //未分配的奖励(admin)
     asset           unclaimed_rewards;                  //已分配未领取奖励(customer)
     asset           claimed_rewards;                    //已领取奖励
@@ -80,8 +81,8 @@ using earn_pool_reward_map = std::map<uint64_t/*reward symbol code*/, earn_pool_
 //Scope: _self
 TBL earn_pool_t {
     uint64_t                code;                                   //1,2,3,4,5
-    asset                   sum_quant       = asset(0, MUSDT);      //历史总存款金额
-    asset                   available_quant = asset(0, MUSDT);      //剩余存款金额
+    asset                   sum_quant               = asset(0, MUSDT);      //历史总存款金额
+    asset                   available_quant         = asset(0, MUSDT);      //剩余存款金额
     earn_pool_reward_map    rewards;
     uint64_t                term_interval_sec       = 0;            //多少秒
     uint64_t                share_multiplier        = 1;
@@ -108,6 +109,7 @@ using earner_reward_map = std::map<uint64_t/*symbol code*/, earner_reward_t>;
 
 //Scope: code
 //Note: record will be deleted upon withdrawal/redemption
+
 TBL earner_t {
     name                owner;                      //PK
     asset               sum_quant;                  //总存款金额
@@ -115,6 +117,7 @@ TBL earner_t {
     earner_reward_map    earner_rewards;             //每票已分配奖励
     time_point_sec      created_at;
     time_point_sec      term_started_at;            //利息周期开始时间一旦有钱充入进来，周期从当前时间开始
+    time_point_sec      term_end_at;                //利息周期结束时间
 
     earner_t() {}
     earner_t(const name& a): owner(a) {}
@@ -124,7 +127,7 @@ TBL earner_t {
     typedef multi_index<"earners"_n, earner_t> tbl_t;
 
     EOSLIB_SERIALIZE( earner_t,   (owner)(sum_quant)(available_quant)
-                                        (earner_rewards)(created_at)(term_started_at) )
+                                        (earner_rewards)(created_at)(term_started_at)(term_end_at) )
 };
 
 TBL reward_symbol_t {

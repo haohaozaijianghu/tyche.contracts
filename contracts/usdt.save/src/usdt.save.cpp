@@ -35,11 +35,11 @@ inline int64_t get_precision(const asset &a) {
 }
 
 //根据新打入rewards来计算新的reward_per_share
-inline static int128_t calc_reward_per_share_delta(const int128_t& old_reward_per_share, const asset& rewards, const asset& total_shares) {
+inline static int128_t calc_reward_per_share_delta( const asset& rewards, const asset& total_shares) {
    ASSERT(rewards.amount >= 0 && total_shares.amount >= 0);
    int128_t new_reward_per_share_delta = 0;
    if (rewards.amount > 0 && total_shares.amount > 0) {
-      new_reward_per_share_delta = old_reward_per_share + rewards.amount * HIGH_PRECISION / total_shares.amount;
+      new_reward_per_share_delta = rewards.amount * HIGH_PRECISION / total_shares.amount;
    }
    return new_reward_per_share_delta;
 }
@@ -132,6 +132,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
             confs.modify( conf_itr, _self, [&]( auto& c ) {
                auto reward_conf = earn_pool_reward_t();
                reward_conf.total_rewards              = rewards;
+               reward_conf.last_rewards               = rewards;
                reward_conf.unalloted_rewards          = rewards;
                reward_conf.unclaimed_rewards          = asset(0, total_rewards.symbol);
                reward_conf.claimed_rewards            = asset(0, total_rewards.symbol);
@@ -144,13 +145,12 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
             confs.modify( conf_itr, _self, [&]( auto& c ) {
                auto older_reward = conf_itr->rewards.at(rewards.symbol.code().raw());
                older_reward.total_rewards                = older_reward.total_rewards + rewards;
+               older_reward.last_rewards                 = rewards;
                older_reward.unalloted_rewards            = older_reward.unalloted_rewards + rewards;
-               older_reward.last_reward_per_share        = calc_reward_per_share_delta(older_reward.reward_per_share, rewards, conf_itr->sum_quant);
-               older_reward.reward_per_share             = older_reward.reward_per_share + older_reward.last_reward_per_share;
-               older_reward.prev_reward_added_at          = older_reward.reward_added_at;
+               older_reward.last_reward_per_share        = older_reward.reward_per_share ;
+               older_reward.reward_per_share             = older_reward.reward_per_share + calc_reward_per_share_delta(rewards, conf_itr->sum_quant);
+               older_reward.prev_reward_added_at         = older_reward.reward_added_at;
                older_reward.reward_added_at              = now;
-
-
                c.rewards[total_rewards.symbol.code().raw()] = older_reward;
             });
          }
@@ -184,6 +184,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
             a.earner_rewards        = get_new_shared_earner_reward( conf->rewards);
             a.created_at            = now;
             a.term_started_at       = now;
+            a.term_end_at           = now + conf->term_interval_sec;
          });
 
       } else {
@@ -219,16 +220,17 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
             earner_rewards[code]                      = earner_reward;
          }
          confs.modify( conf, _self, [&]( auto& c ) {
-               c.sum_quant   += quant;
-               c.available_quant  += quant;
-               c.rewards = rewards;
+               c.sum_quant          += quant;
+               c.available_quant    += quant;
+               c.rewards            = rewards;
          });
 
          accts.modify( acct, _self,  [&]( auto& c ) {
-               c.sum_quant   += quant;
-               c.available_quant         += quant;
-               c.earner_rewards         = earner_rewards;
-               c.term_started_at            = now;
+               c.sum_quant             += quant;
+               c.available_quant       += quant;
+               c.earner_rewards        = earner_rewards;
+               c.term_started_at       = now;
+               c.term_end_at           = now  + conf->term_interval_sec;
             });
       }
       //transfer nusdt to user
@@ -287,7 +289,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
 
          reward_conf.unalloted_rewards   -= new_rewards;
          reward_conf.unclaimed_rewards    += new_rewards;
-         rewards[code]               = reward_conf;
+         rewards[code]                    = reward_conf;
 
          earner_reward.unclaimed_rewards         =  asset(0, total_rewards.symbol);
          earner_reward.claimed_rewards           += total_rewards;
@@ -296,7 +298,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
          //内部调用发放利息
          //发放利息
          usdt_interest::claimreward_action cliam_reward_act(_gstate.interest_contract, { {get_self(), "active"_n} });
-         cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards);
+         cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "interest");
       }
 
       confs.modify( conf, _self, [&]( auto& c ) {
@@ -304,9 +306,10 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
          c.rewards                = rewards;
       });
       accts.modify( acct, _self, [&]( auto& a ) {
-         a.available_quant.amount        -= quant.amount;
-         a.earner_rewards               = vote_rewards;
-         a.term_started_at                  = now;
+         a.available_quant.amount         -= quant.amount;
+         a.earner_rewards                 = vote_rewards;
+         a.term_started_at                = now;
+         a.term_end_at                    = now + seconds(conf->term_interval_sec);
       });
       CHECKC(acct->term_started_at + conf->term_interval_sec > now, err::TIME_PREMATURE, "not due")
       //打出本金MUSDT
@@ -398,14 +401,15 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
          c.rewards                = rewards;
       });
       accts.modify( acct, _self, [&]( auto& a ) {
-         a.earner_rewards               = earner_rewards;
-         a.term_started_at                  = now;
+         a.earner_rewards                 = earner_rewards;
+         a.term_started_at                = now;
+         a.term_end_at                    = now + conf->term_interval_sec;
       });
 
       //内部调用发放利息
       //发放利息
       usdt_interest::claimreward_action cliam_reward_act(_gstate.interest_contract, { {get_self(), "active"_n} });
-      cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards);
+      cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "interest");
    }
    
    void usdt_save::apl_reward(const name& from, const asset& interest) {

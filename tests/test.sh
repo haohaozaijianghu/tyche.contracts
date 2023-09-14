@@ -1,6 +1,6 @@
 
-reward=usdt.reward3
-save=usdt.save3
+reward=tyche.r11
+save=tyche.s11
 admin=admin2
 
 要建一个锁仓
@@ -47,5 +47,5 @@ tcli push action amax.mtoken transfer '{"from": "josstest", "to": "'$save'", "qu
 
 tcli push action amax.mtoken transfer '{"from": "ad", "to": "joss", "quantity": "10000.000000 MUSDC", "memo": "deposit:1"}' -p ad
 
-tcli push action amax.mtoken transfer '{"from": "joss", "to": "usdt.intst", "quantity": "100.000000 MUSDC", "memo": ""}' -p joss
+tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$reward'", "quantity": "100.000000 MUSDC", "memo": ""}' -p joss
 
