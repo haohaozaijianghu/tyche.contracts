@@ -26,6 +26,7 @@ tcli push action $save addsaveconf '[1, 10, 1]' -p $save
 tcli push action $save addsaveconf '[2, 20, 2]' -p $save
 tcli push action $save addsaveconf '[3, 60, 3]' -p $save
 tcli push action $save addsaveconf '[4, 180, 4]' -p $save
+tcli push action $save addsaveconf '[5, 360, 5]' -p $save
 
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$save'", "quantity": "100.000000 MUSDT", "memo": "deposit:2"}' -p joss
 

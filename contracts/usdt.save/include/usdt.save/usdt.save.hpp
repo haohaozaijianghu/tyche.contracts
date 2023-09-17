@@ -62,12 +62,15 @@ class [[eosio::contract("usdt.save")]] usdt_save : public contract {
       using contract::contract;
 
    usdt_save(eosio::name receiver, eosio::name code, datastream<const char*> ds): contract(receiver, code, ds),
-        _global(get_self(), get_self().value), _db(_self)
+        _global(get_self(), get_self().value), _db(_self),
+        _global_state(global_state::make_global(get_self()))
     {
-        _gstate = _global.exists() ? _global.get() : global_t{};
+      _gstate = _global.exists() ? _global.get() : global_t{};
     }
 
-    ~usdt_save() { _global.set( _gstate, get_self() ); }
+    ~usdt_save() { _global.set( _gstate, get_self() );
+      _global_state->save(get_self());
+   }
 
    [[eosio::on_notify("*::transfer")]]
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);

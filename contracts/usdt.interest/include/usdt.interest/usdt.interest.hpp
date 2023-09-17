@@ -80,6 +80,8 @@ class [[eosio::contract("usdt.interest")]] usdt_interest : public contract {
    ACTION claimreward( const name& to, const name& bank, const asset& total_rewards, const string& memo );
    
    ACTION init(const name& refueler_account, const name& usdt_save_contract, const bool& enabled);
+
+   ACTION setlinterest();
    
    global_singleton     _global;
    global_t             _gstate;
