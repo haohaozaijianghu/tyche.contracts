@@ -127,7 +127,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
       if( conf_itr->on_shelf ){
          auto rate = conf_itr->available_quant.amount * conf_itr->share_multiplier * PCT_BOOST / total_share;
          auto rewards = asset(total_rewards.amount * rate / PCT_BOOST, total_rewards.symbol);
-
+       
          auto conf_id = _global_state->new_reward_conf_id();
          if(conf_itr->rewards.count(total_rewards.symbol.code().raw()) == 0) {
             confs.modify( conf_itr, _self, [&]( auto& c ) {
@@ -143,7 +143,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
                
                c.rewards[total_rewards.symbol.code().raw()] = reward_conf;
             });
-         } else {
+         } else if( rewards.amount > 0) {
             confs.modify( conf_itr, _self, [&]( auto& c ) {
                auto older_reward = conf_itr->rewards.at(rewards.symbol.code().raw());
                older_reward.id                           = conf_id;
