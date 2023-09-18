@@ -69,8 +69,8 @@ void usdt_interest::onpoolstart(){
 }
 
 void usdt_interest::setlinterest(){
-   auto interval =  (time_point_sec(current_time_point())- _gstate.instert_allocated_started_at);
-   auto seconds = interval.count();
+   auto interval =  (time_point_sec(current_time_point()) - _gstate.instert_allocated_started_at);
+   auto seconds = interval.count()/1000000;
    CHECKC( seconds > 0, err::TIME_PREMATURE, "time premature" )
    //获取本金总数
    auto confs         = earn_pool_t::tbl_t(_gstate.usdt_save_contract, _gstate.usdt_save_contract.value);
@@ -83,10 +83,16 @@ void usdt_interest::setlinterest(){
       conf_itr++;
    }
    auto total_interest = total_quant * _gstate.annual_interest_rate / (YEAR_DAYS* DAY_SECONDS) * seconds /PCT_BOOST;
+   CHECKC(total_interest.amount > 10, err::INCORRECT_AMOUNT,  "interet too small: " + total_interest.to_string() )
    _gstate.allocated_interest_quant       += total_interest;
    _gstate.instert_allocated_started_at   = current_time_point();
    usdt_save::onrewardrefuel_action reward_refuel_act(_gstate.usdt_save_contract, { {get_self(), "active"_n} });
    reward_refuel_act.send(MUSDT_BANK, total_interest, seconds, 0);
+}
+
+
+void usdt_interest::setrate(uint64_t& rate){
+   _gstate.annual_interest_rate = rate;
 }
 
 }

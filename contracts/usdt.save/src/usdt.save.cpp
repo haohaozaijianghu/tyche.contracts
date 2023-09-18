@@ -134,8 +134,8 @@ void usdt_save::rewardrefuel_to_one( const name& token_bank, const asset& total_
          reward_conf.unclaimed_rewards          = asset(0, total_rewards.symbol);
          reward_conf.claimed_rewards            = asset(0, total_rewards.symbol);
          reward_conf.last_reward_per_share      = 0; 
-         reward_conf.reward_per_share           = calc_reward_per_share_delta(total_rewards, conf_itr->sum_quant);
-         reward_conf.annual_interest_rate       = get_annual_interest_rate(total_rewards, seconds);
+         reward_conf.reward_per_share           = calc_reward_per_share_delta(total_rewards, conf_itr->available_quant);
+         reward_conf.annual_interest_rate       = get_annual_interest_rate(total_rewards, conf_itr->available_quant, seconds);
          reward_conf.prev_reward_added_at       = reward_conf.reward_added_at;
          reward_conf.reward_added_at            = now;
          c.rewards[total_rewards.symbol.code().raw()] = reward_conf;
@@ -148,8 +148,8 @@ void usdt_save::rewardrefuel_to_one( const name& token_bank, const asset& total_
          older_reward.last_rewards                 = total_rewards;
          older_reward.unalloted_rewards            = older_reward.unalloted_rewards + total_rewards;
          older_reward.last_reward_per_share        = older_reward.reward_per_share ;
-         older_reward.reward_per_share             = older_reward.reward_per_share + calc_reward_per_share_delta(total_rewards, conf_itr->sum_quant);
-         older_reward.annual_interest_rate         = get_annual_interest_rate(total_rewards, seconds);
+         older_reward.reward_per_share             = older_reward.reward_per_share + calc_reward_per_share_delta(total_rewards, conf_itr->available_quant);
+         older_reward.annual_interest_rate         = get_annual_interest_rate(total_rewards, conf_itr->available_quant, seconds);
          older_reward.prev_reward_added_at         = older_reward.reward_added_at;
          older_reward.reward_added_at              = now;
          c.rewards[total_rewards.symbol.code().raw()] = older_reward;
@@ -197,8 +197,8 @@ void usdt_save::rewardrefuel_to_all( const name& token_bank, const asset& total_
                reward_conf.unclaimed_rewards          = asset(0, total_rewards.symbol);
                reward_conf.claimed_rewards            = asset(0, total_rewards.symbol);
                reward_conf.last_reward_per_share      = 0; 
-               reward_conf.reward_per_share           = calc_reward_per_share_delta(total_rewards, conf_itr->sum_quant);
-               reward_conf.annual_interest_rate       = get_annual_interest_rate(rewards, seconds);
+               reward_conf.reward_per_share           = calc_reward_per_share_delta(total_rewards, conf_itr->available_quant);
+               reward_conf.annual_interest_rate       = get_annual_interest_rate(rewards, conf_itr->available_quant, seconds);
                reward_conf.prev_reward_added_at       = reward_conf.reward_added_at;
                reward_conf.reward_added_at            = now;
                c.rewards[total_rewards.symbol.code().raw()] = reward_conf;
@@ -211,8 +211,8 @@ void usdt_save::rewardrefuel_to_all( const name& token_bank, const asset& total_
                older_reward.last_rewards                 = rewards;
                older_reward.unalloted_rewards            = older_reward.unalloted_rewards + rewards;
                older_reward.last_reward_per_share        = older_reward.reward_per_share ;
-               older_reward.reward_per_share             = older_reward.reward_per_share + calc_reward_per_share_delta(rewards, conf_itr->sum_quant);
-               older_reward.annual_interest_rate         = get_annual_interest_rate(rewards, seconds);
+               older_reward.reward_per_share             = older_reward.reward_per_share + calc_reward_per_share_delta(rewards, conf_itr->available_quant);
+               older_reward.annual_interest_rate         = get_annual_interest_rate(rewards, conf_itr->available_quant, seconds);
                older_reward.prev_reward_added_at         = older_reward.reward_added_at;
                older_reward.reward_added_at              = now;
                c.rewards[total_rewards.symbol.code().raw()] = older_reward;
@@ -223,10 +223,10 @@ void usdt_save::rewardrefuel_to_all( const name& token_bank, const asset& total_
    }
 }
 
-uint64_t usdt_save::get_annual_interest_rate(const asset& interest, const uint64_t& term_interval_sec) {
+uint64_t usdt_save::get_annual_interest_rate(const asset& interest,const asset& total_quant, const uint64_t& term_interval_sec) {
    auto annual_interest_rate = 0;
    if (interest.amount > 0 && term_interval_sec > 0) {
-      annual_interest_rate = interest.amount * PCT_BOOST / term_interval_sec *  (YEAR_DAYS* DAY_SECONDS) / get_precision(interest.symbol);
+      annual_interest_rate = interest.amount * YEAR_DAYS * DAY_SECONDS * PCT_BOOST  / total_quant.amount * PCT_BOOST  / term_interval_sec;
    }
    return annual_interest_rate;
 }
@@ -342,6 +342,7 @@ uint64_t usdt_save::get_annual_interest_rate(const asset& interest, const uint64
 
       auto now    = current_time_point();
       CHECKC(acct->available_quant.amount == quant.amount, err::INCORRECT_AMOUNT, "insufficient deposit amount" )
+      CHECKC(acct->term_end_at <= now, err::TIME_PREMATURE, "plase wait, not finished" )
       
       auto rewards = conf->rewards;
       auto vote_rewards = acct->earner_rewards;

@@ -103,7 +103,7 @@ class [[eosio::contract("usdt.save")]] usdt_save : public contract {
 
       void onuserdeposit( const name& from, const uint64_t& team_code, const asset& quant );
       //得到年化利率
-      uint64_t get_annual_interest_rate(const asset& interest, const uint64_t& term_interval_sec);
+      uint64_t get_annual_interest_rate(const asset& interest, const asset& total_quant, const uint64_t& term_interval_sec);
 
       void rewardrefuel_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds);
          

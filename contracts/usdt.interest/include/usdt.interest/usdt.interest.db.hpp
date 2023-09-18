@@ -35,7 +35,7 @@ NTBL("global") global_t {
     asset               total_interest_quant    = asset(0, MUSDT);
     asset               allocated_interest_quant= asset(0, MUSDT);
     time_point_sec      instert_allocated_started_at;                //利息周期结束时间,TODO set
-    uint64_t            annual_interest_rate    = 300;
+    uint64_t            annual_interest_rate    = 5000;             //TODO 300
 
     bool                enabled;
  

@@ -1,6 +1,6 @@
 
-reward=tyche.r12
-save=tyche.s12
+reward=tyche.r23
+save=tyche.s23
 admin=admin2
 
 要建一个锁仓
@@ -18,7 +18,11 @@ tcli push action $reward init '["joss","'$save'", true]' -p $reward
 
 tcli push action $save addrewardsym '{"sym":{ "sym":"6,TRUSD", "contract":"amax.mtoken" }, "interval": 86400, "reward_type":"interest"}' -p $save
 tcli push action $save addrewardsym '{"sym":{ "sym":"6,MUSDC", "contract":"amax.mtoken" }, "interval": 86400, "reward_type":"interest"}' -p $save
+tcli push action $save addrewardsym '{"sym":{ "sym":"6,MUSDT", "contract":"amax.mtoken" }, "interval": 86400, "reward_type":"interest"}' -p $save
+
 tcli push action $save symonself '{"sym":{ "sym":"6,MUSDC", "contract":"amax.mtoken" }, "on_shelf": true}' -p  $save
+tcli push action $save symonself '{"sym":{ "sym":"6,MUSDT", "contract":"amax.mtoken" }, "on_shelf": true}' -p  $save
+
 //存入NUSDT
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$save'", "quantity": "1000.000000 TRUSD", "memo": "deposit"}' -p joss
 
@@ -33,6 +37,11 @@ tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$save'", "quanti
 tcli get currency balance amax.mtoken $save
 
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "josstest", "quantity": "1000.000000 MUSDT", "memo": "deposit:2"}' -p joss
+
+tcli push action $reward onpoolstart '{}' -p $reward
+tcli push action $reward setlinterest '{}' -p joss
+
+tcli push action $reward setrate '[5000]' -p joss
 
 
 

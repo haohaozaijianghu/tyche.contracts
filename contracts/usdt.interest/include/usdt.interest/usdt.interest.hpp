@@ -85,6 +85,8 @@ class [[eosio::contract("usdt.interest")]] usdt_interest : public contract {
    ACTION onpoolstart();
 
    ACTION setlinterest();
+
+   ACTION setrate(uint64_t& rate);
    
    global_singleton     _global;
    global_t             _gstate;
