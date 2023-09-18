@@ -373,8 +373,10 @@ uint64_t usdt_save::get_annual_interest_rate(const asset& interest,const asset& 
          vote_rewards[code]                        =  earner_reward;
          //内部调用发放利息
          //发放利息
-         usdt_interest::claimreward_action cliam_reward_act(_gstate.interest_contract, { {get_self(), "active"_n} });
-         cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "interest");
+         if(total_rewards.amount > 0 ) {
+            usdt_interest::claimreward_action cliam_reward_act(_gstate.interest_contract, { {get_self(), "active"_n} });
+            cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "interest");
+         }
       }
 
       confs.modify( conf, _self, [&]( auto& c ) {
@@ -384,14 +386,12 @@ uint64_t usdt_save::get_annual_interest_rate(const asset& interest,const asset& 
       accts.modify( acct, _self, [&]( auto& a ) {
          a.available_quant.amount         -= quant.amount;
          a.earner_rewards                 = vote_rewards;
-         a.term_started_at                = now;
-         a.term_end_at                    = now + seconds(conf->term_interval_sec);
       });
-      CHECKC(acct->term_started_at + conf->term_interval_sec > now, err::TIME_PREMATURE, "not due")
+
       //打出本金MUSDT
       TRANSFER( MUSDT_BANK, from, asset(quant.amount, MUSDT), "redeem" )
 
-       if(team_code == _gstate.tyche_reward_term_code) {
+      if(team_code == _gstate.tyche_reward_term_code) {
          //打出TYCHE
          auto tyche_amount = quant.amount * _gstate.tyche_farm_lock_ratio / PCT_BOOST;
          TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "tyche farm reward" )
