@@ -76,7 +76,7 @@ class [[eosio::contract("usdt.save")]] usdt_save : public contract {
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
    
    //usdt.reward
-   ACTION rewardrefuel( const name& token_bank, const asset& total_rewards );
+   ACTION rewardrefuel( const name& token_bank, const asset& total_rewards, const uint64_t& seconds, const uint64_t& pool_conf_code );
 
 
    //USER
@@ -96,9 +96,19 @@ class [[eosio::contract("usdt.save")]] usdt_save : public contract {
 
    private:
       void apl_reward(const name& from, const asset& interest);
+
       void onredeem( const name& from, const uint64_t& team_code, const asset& quant );
+
       earner_reward_map get_new_shared_earner_reward(const earn_pool_reward_map& rewards);
+
       void onuserdeposit( const name& from, const uint64_t& team_code, const asset& quant );
+      //得到年化利率
+      uint64_t get_annual_interest_rate(const asset& interest, const uint64_t& term_interval_sec);
+
+      void rewardrefuel_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds);
+         
+      void rewardrefuel_to_one( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code );
+      
 
       global_singleton     _global;
       global_t             _gstate;

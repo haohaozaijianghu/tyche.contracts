@@ -73,6 +73,7 @@ struct earn_pool_reward_t {                             //MBTC,HSTZ,MUSDT
     asset           unclaimed_rewards;                  //已分配未领取奖励(customer)
     asset           claimed_rewards;                    //已领取奖励
     int128_t        reward_per_share            = 0;    //每票已分配奖励
+    uint64_t        annual_interest_rate        = 0;     //上一次年化利率
     int128_t        last_reward_per_share       = 0;    //奖励发放delta TODO
     time_point_sec  reward_added_at;                    //最近奖励发放时间(admin)
     time_point_sec  prev_reward_added_at;               //前一次奖励发放时间间隔

@@ -14,7 +14,7 @@ namespace amax {
 class usdt_save {
    public:
       [[eosio::action]] 
-      void rewardrefuel( const name& token_bank, const asset& total_rewards);
+      void rewardrefuel( const name& token_bank, const asset& total_rewards, const uint64_t& days, const uint64_t& );
    public:
       using onrewardrefuel_action = eosio::action_wrapper<"rewardrefuel"_n, &usdt_save::rewardrefuel>;
 };

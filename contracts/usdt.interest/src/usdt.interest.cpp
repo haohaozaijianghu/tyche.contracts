@@ -28,7 +28,9 @@ void usdt_interest::init(const name& refueler_account, const name& usdt_save_con
  * @param from
  * @param to
  * @param quantity
- * @param memo
+ * @param memo:1. deposit
+ *             2. interest:pool_conf_code(1,2,3,4,5)
+ *             
  */
 //管理员打入奖励
 void usdt_interest::ontransfer(const name& from, const name& to, const asset& quant, const string& memo) {
@@ -43,24 +45,33 @@ void usdt_interest::ontransfer(const name& from, const name& to, const asset& qu
       //用户存入本金
       _gstate.total_interest_quant += quant;
    } else {
+      vector<string_view> memo_params = split(memo, ":"); 
+      CHECKC(memo_params.size() == 2, err::PARAM_INVALID, "memo invalid")
+      auto action = memo_params[0];
+      CHECKC(action == "interest", err::PARAM_INVALID, "memo invalid")
+      auto pool_conf_code = std::stoi(string(memo_params[1]));
       usdt_save::onrewardrefuel_action reward_refuel_act(_gstate.usdt_save_contract, { {get_self(), "active"_n} });
-      reward_refuel_act.send(token_bank, quant);
+      reward_refuel_act.send(token_bank, quant, DAY_SECONDS, pool_conf_code);
    }
-   
    
 }
 
 //提出奖励
 void usdt_interest::claimreward( const name& to, const name& bank, const asset& total_rewards, const string& memo){
    require_auth(_gstate.usdt_save_contract);
-   TRANSFER( bank, to, total_rewards, memo )
+   TRANSFER( bank, to, total_rewards, memo)
+}
+
+
+void usdt_interest::onpoolstart(){
+   require_auth(_self);
+   _gstate.instert_allocated_started_at = current_time_point();
 }
 
 void usdt_interest::setlinterest(){
-   _gstate.instert_allocated_started_at = current_time_point();
    auto interval =  (time_point_sec(current_time_point())- _gstate.instert_allocated_started_at);
-   auto days = interval.count() / DAY_SECONDS;
-   CHECKC( days > 0, err::TIME_PREMATURE, "time premature" )
+   auto seconds = interval.count();
+   CHECKC( seconds > 0, err::TIME_PREMATURE, "time premature" )
    //获取本金总数
    auto confs         = earn_pool_t::tbl_t(_gstate.usdt_save_contract, _gstate.usdt_save_contract.value);
    auto conf_itr        = confs.begin();
@@ -71,12 +82,11 @@ void usdt_interest::setlinterest(){
       total_quant += conf_itr->available_quant;
       conf_itr++;
    }
-   auto total_interest = total_quant * _gstate.annual_interest_rate/ PCT_BOOST / YEAR_DAYS * days;
+   auto total_interest = total_quant * _gstate.annual_interest_rate / (YEAR_DAYS* DAY_SECONDS) * seconds /PCT_BOOST;
    _gstate.allocated_interest_quant       += total_interest;
    _gstate.instert_allocated_started_at   = current_time_point();
    usdt_save::onrewardrefuel_action reward_refuel_act(_gstate.usdt_save_contract, { {get_self(), "active"_n} });
-   reward_refuel_act.send(MUSDT_BANK, total_interest);
+   reward_refuel_act.send(MUSDT_BANK, total_interest, seconds, 0);
 }
-
 
 }

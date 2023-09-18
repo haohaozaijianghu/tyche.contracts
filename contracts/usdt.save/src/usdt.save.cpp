@@ -102,8 +102,66 @@ void usdt_save::ontransfer(const name& from, const name& to, const asset& quant,
 }
 
 //管理员打入奖励
-void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards ){
+void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards, const uint64_t& seconds, const uint64_t& pool_conf_code){
    require_auth(_gstate.interest_contract);
+   if(pool_conf_code == 0)
+      rewardrefuel_to_all(token_bank, total_rewards, seconds);
+   else
+      rewardrefuel_to_one(token_bank, total_rewards, seconds, pool_conf_code);
+
+}
+void usdt_save::rewardrefuel_to_one( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code ){
+   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
+   auto reward_symbol      = reward_symbols.find( total_rewards.symbol.code().raw() );
+   CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "reward symbol not found:" + total_rewards.to_string()  )
+   CHECKC( token_bank == reward_symbol->sym.get_contract(), err::RECORD_NOT_FOUND, "bank not equal" )
+   CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "reward_symbol not on_shelf" )
+   auto now             = time_point_sec(current_time_point());
+   auto confs           = earn_pool_t::tbl_t(_self, _self.value);
+   auto conf_itr        = confs.find( pool_conf_code );
+   CHECKC( conf_itr != confs.end(), err::RECORD_NOT_FOUND, "save plan not found" )
+   CHECKC( conf_itr->on_shelf, err::RECORD_NOT_FOUND, "save plan not on_shelf" )
+   CHECKC( total_rewards.symbol != MUSDT, err::PARAM_ERROR, "reward symbol must be not MUSDT" )
+
+   auto conf_id = _global_state->new_reward_conf_id();
+   if(conf_itr->rewards.count(total_rewards.symbol.code().raw()) == 0) {
+      confs.modify( conf_itr, _self, [&]( auto& c ) {
+         auto reward_conf = earn_pool_reward_t();
+         reward_conf.id                         = conf_id;
+         reward_conf.total_rewards              = total_rewards;
+         reward_conf.last_rewards               = total_rewards;
+         reward_conf.unalloted_rewards          = total_rewards;
+         reward_conf.unclaimed_rewards          = asset(0, total_rewards.symbol);
+         reward_conf.claimed_rewards            = asset(0, total_rewards.symbol);
+         reward_conf.last_reward_per_share      = 0; 
+         reward_conf.reward_per_share           = calc_reward_per_share_delta(total_rewards, conf_itr->sum_quant);
+         reward_conf.annual_interest_rate       = get_annual_interest_rate(total_rewards, seconds);
+         reward_conf.prev_reward_added_at       = reward_conf.reward_added_at;
+         reward_conf.reward_added_at            = now;
+         c.rewards[total_rewards.symbol.code().raw()] = reward_conf;
+      });
+   } else if( total_rewards.amount > 0) {
+      confs.modify( conf_itr, _self, [&]( auto& c ) {
+         auto older_reward = conf_itr->rewards.at(total_rewards.symbol.code().raw());
+         older_reward.id                           = conf_id;
+         older_reward.total_rewards                = older_reward.total_rewards + total_rewards;
+         older_reward.last_rewards                 = total_rewards;
+         older_reward.unalloted_rewards            = older_reward.unalloted_rewards + total_rewards;
+         older_reward.last_reward_per_share        = older_reward.reward_per_share ;
+         older_reward.reward_per_share             = older_reward.reward_per_share + calc_reward_per_share_delta(total_rewards, conf_itr->sum_quant);
+         older_reward.annual_interest_rate         = get_annual_interest_rate(total_rewards, seconds);
+         older_reward.prev_reward_added_at         = older_reward.reward_added_at;
+         older_reward.reward_added_at              = now;
+         c.rewards[total_rewards.symbol.code().raw()] = older_reward;
+      });
+   } else {
+      CHECKC(false, err::PARAM_ERROR, "total_rewards must be greater than zero")
+   }
+   
+}
+
+void usdt_save::rewardrefuel_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds){
+   
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
    auto reward_symbol      = reward_symbols.find( total_rewards.symbol.code().raw() );
    CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "reward symbol not found:" + total_rewards.to_string()  )
@@ -138,9 +196,11 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
                reward_conf.unalloted_rewards          = rewards;
                reward_conf.unclaimed_rewards          = asset(0, total_rewards.symbol);
                reward_conf.claimed_rewards            = asset(0, total_rewards.symbol);
+               reward_conf.last_reward_per_share      = 0; 
+               reward_conf.reward_per_share           = calc_reward_per_share_delta(total_rewards, conf_itr->sum_quant);
+               reward_conf.annual_interest_rate       = get_annual_interest_rate(rewards, seconds);
                reward_conf.prev_reward_added_at       = reward_conf.reward_added_at;
                reward_conf.reward_added_at            = now;
-               
                c.rewards[total_rewards.symbol.code().raw()] = reward_conf;
             });
          } else if( rewards.amount > 0) {
@@ -152,6 +212,7 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
                older_reward.unalloted_rewards            = older_reward.unalloted_rewards + rewards;
                older_reward.last_reward_per_share        = older_reward.reward_per_share ;
                older_reward.reward_per_share             = older_reward.reward_per_share + calc_reward_per_share_delta(rewards, conf_itr->sum_quant);
+               older_reward.annual_interest_rate         = get_annual_interest_rate(rewards, seconds);
                older_reward.prev_reward_added_at         = older_reward.reward_added_at;
                older_reward.reward_added_at              = now;
                c.rewards[total_rewards.symbol.code().raw()] = older_reward;
@@ -160,6 +221,14 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
       }
       conf_itr++;
    }
+}
+
+uint64_t usdt_save::get_annual_interest_rate(const asset& interest, const uint64_t& term_interval_sec) {
+   auto annual_interest_rate = 0;
+   if (interest.amount > 0 && term_interval_sec > 0) {
+      annual_interest_rate = interest.amount * PCT_BOOST / term_interval_sec *  (YEAR_DAYS* DAY_SECONDS) / get_precision(interest.symbol);
+   }
+   return annual_interest_rate;
 }
 
    void usdt_save::onuserdeposit( const name& from, const uint64_t& team_code, const asset& quant ){
