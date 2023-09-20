@@ -312,61 +312,61 @@ void tyche_earn::onuserdeposit( const name& from, const uint64_t& team_code, con
    } else {
       //当用户充入本金, 要结算充入池子的用户之前的利息，同时要修改充入池子的基本信息
       //循环结算每一种利息代币
-      earn_pool_reward_map rewards           = pool_itr->airdrop_rewards;
-      earner_reward_map    airdrop_rewards   = acct->airdrop_rewards;
-      auto older_deposit_quant               = acct->avl_principal;
+      earn_pool_reward_map pool_airdrop_rewards       = pool_itr->airdrop_rewards;
+      earner_reward_map    earner_airdrop_rewards     = acct->airdrop_rewards;
+      auto older_deposit_quant                        = acct->avl_principal;
       //结算奖励
-      for (auto& reward_conf_kv : pool_itr->airdrop_rewards) { //for循环每一个token
-         auto reward_conf     = reward_conf_kv.second;
-         auto code            = reward_conf_kv.first;
-         auto earner_reward   = earner_reward_st();
-         auto new_rewards     = asset(0, reward_conf.total_rewards.symbol);
+      for (auto& pool_airdrop_rewards_kv : pool_itr->airdrop_rewards) { //for循环每一个token
+         auto pool_airdrop_reward   = pool_airdrop_rewards_kv.second;
+         auto code                  = pool_airdrop_rewards_kv.first;
+         auto earner_airdrop_reward = earner_reward_st();
+         auto new_rewards           = asset(0, pool_airdrop_reward.total_rewards.symbol);
          //初始化earner_reward 信息
-         if(acct->airdrop_rewards.count(reward_conf_kv.first)) {
-            earner_reward = acct->airdrop_rewards.at(reward_conf_kv.first);
+         if(acct->airdrop_rewards.count(code)) {
+            earner_airdrop_reward   = acct->airdrop_rewards.at(code);
          } else {
-            earner_reward.unclaimed_rewards         = asset(0, reward_conf.total_rewards.symbol);
-            earner_reward.claimed_rewards           = asset(0, reward_conf.total_rewards.symbol);
-            earner_reward.total_claimed_rewards     = asset(0, reward_conf.total_rewards.symbol);
-            earner_reward.last_reward_per_share     = 0;
+            earner_airdrop_reward.unclaimed_rewards         = asset(0, pool_airdrop_reward.total_rewards.symbol);
+            earner_airdrop_reward.claimed_rewards           = asset(0, pool_airdrop_reward.total_rewards.symbol);
+            earner_airdrop_reward.total_claimed_rewards     = asset(0, pool_airdrop_reward.total_rewards.symbol);
+            earner_airdrop_reward.last_reward_per_share     = 0;
          }
 
-         int128_t reward_per_share_delta = reward_conf.reward_per_share - earner_reward.last_reward_per_share;
+         int128_t reward_per_share_delta = pool_airdrop_reward.reward_per_share - earner_airdrop_reward.last_reward_per_share;
          if (reward_per_share_delta > 0 && older_deposit_quant.amount > 0) {
-            new_rewards = calc_sharer_rewards(older_deposit_quant, reward_per_share_delta, reward_conf.total_rewards.symbol);
-            reward_conf.unalloted_rewards          -= new_rewards;
-            reward_conf.unclaimed_rewards          += new_rewards;
-            earner_reward.last_reward_per_share    = reward_conf.reward_per_share;
-            earner_reward.unclaimed_rewards        += new_rewards;
+            new_rewards = calc_sharer_rewards(older_deposit_quant, reward_per_share_delta, pool_airdrop_reward.total_rewards.symbol);
+            pool_airdrop_reward.unalloted_rewards          -= new_rewards;
+            pool_airdrop_reward.unclaimed_rewards          += new_rewards;
+            earner_airdrop_reward.last_reward_per_share    = pool_airdrop_reward.reward_per_share;
+            earner_airdrop_reward.unclaimed_rewards        += new_rewards;
          }
-         rewards[code]                             = reward_conf;
-         airdrop_rewards[code]                      = earner_reward;
+         pool_airdrop_rewards[code]                         = pool_airdrop_reward;
+         earner_airdrop_rewards[code]                       = earner_airdrop_reward;
       }
 
-      auto interest_reward                = acct->interest_reward;
-      auto pool_interest_reward           = pool_itr->interest_reward;
+      auto earner_interest_reward                           = acct->interest_reward;
+      auto pool_interest_reward                             = pool_itr->interest_reward;
       //结算利息
       {
-         int128_t reward_per_share_delta              = pool_interest_reward.reward_per_share - interest_reward.last_reward_per_share;
+         int128_t reward_per_share_delta              = pool_interest_reward.reward_per_share - earner_interest_reward.last_reward_per_share;
          auto new_rewards                             = calc_sharer_rewards(older_deposit_quant, reward_per_share_delta, pool_interest_reward.total_rewards.symbol);
          pool_interest_reward.unalloted_rewards       -= new_rewards;
          pool_interest_reward.unclaimed_rewards       += new_rewards;
-         interest_reward.last_reward_per_share        = pool_interest_reward.reward_per_share;
-         interest_reward.unclaimed_rewards            += new_rewards;
+         earner_interest_reward.last_reward_per_share = pool_interest_reward.reward_per_share;
+         earner_interest_reward.unclaimed_rewards     += new_rewards;
       }
    
       pools.modify( pool_itr, _self, [&]( auto& c ) {
          c.cum_principal               += quant;
          c.avl_principal               += quant;
          c.interest_reward             = pool_interest_reward;
-         c.airdrop_rewards             = rewards;
+         c.airdrop_rewards             = pool_airdrop_rewards;
       });
 
       accts.modify( acct, _self,  [&]( auto& c ) {
          c.cum_principal               += quant;
          c.avl_principal               += quant;
-         c.airdrop_rewards             = airdrop_rewards;
-         c.interest_reward             = interest_reward;
+         c.airdrop_rewards             = earner_airdrop_rewards;
+         c.interest_reward             = earner_interest_reward;
          c.term_started_at             = now;
          c.term_ended_at               = now + pool_itr->term_interval_sec;
       });
@@ -395,23 +395,23 @@ void tyche_earn::onredeem( const name& from, const uint64_t& team_code, const as
    CHECKC(acct->avl_principal.amount == quant.amount, err::INCORRECT_AMOUNT, "insufficient deposit amount" )
    CHECKC(acct->term_ended_at <= now, err::TIME_PREMATURE, "plase wait, not finished" )
    
-   auto rewards      = pool_itr->airdrop_rewards;
-   auto vote_rewards = acct->airdrop_rewards;
-   for (auto& reward_conf_kv : pool_itr->airdrop_rewards) { //for循环每一个token
-      auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
-      auto reward_conf        = reward_conf_kv.second;
-      auto code               = reward_conf_kv.first;
+   auto pool_airdrop_rewards      = pool_itr->airdrop_rewards;
+   auto earner_airdrop_rewards    = acct->airdrop_rewards;
+   for (auto& pool_airdrop_rewards_kv : pool_itr->airdrop_rewards) { //for循环每一个token
+      auto reward_symbols        = reward_symbol_t::idx_t(_self, _self.value);
+      auto pool_airdrop_reward   = pool_airdrop_rewards_kv.second;
+      auto code                  = pool_airdrop_rewards_kv.first;
       
-      auto reward_symbol      = reward_symbols.find( reward_conf.total_rewards.symbol.code().raw());
-      CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found: " + reward_conf.total_rewards.symbol.code().to_string() )
-      CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "save plan not on self: "+ reward_conf.total_rewards.symbol.code().to_string() )
-      earner_reward_st earner_reward = {0, asset(0, reward_conf.total_rewards.symbol), asset(0, reward_conf.total_rewards.symbol)};
+      auto reward_symbol         = reward_symbols.find( pool_airdrop_reward.total_rewards.symbol.code().raw());
+      CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found: " + pool_airdrop_reward.total_rewards.symbol.code().to_string() )
+      CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "save plan not on self: "+ pool_airdrop_reward.total_rewards.symbol.code().to_string() )
+      earner_reward_st earner_airdrop_reward = {0, asset(0, pool_airdrop_reward.total_rewards.symbol), asset(0, pool_airdrop_reward.total_rewards.symbol)};
       if( acct->airdrop_rewards.count(code) ){
-         earner_reward  = acct->airdrop_rewards.at(code);
+         earner_airdrop_reward  = acct->airdrop_rewards.at(code);
       }
-      auto total_rewards   = _update_reward_info(reward_conf, earner_reward, acct->avl_principal);
-      rewards[code]        = reward_conf;
-      vote_rewards[code]   = earner_reward;
+      auto total_rewards               = _update_reward_info(pool_airdrop_reward, earner_airdrop_reward, acct->avl_principal);
+      pool_airdrop_rewards[code]       = pool_airdrop_reward;
+      earner_airdrop_rewards[code]     = earner_airdrop_reward;
       //内部调用发放利息
       //发放利息
       if(total_rewards.amount > 0 ) {
@@ -420,10 +420,10 @@ void tyche_earn::onredeem( const name& from, const uint64_t& team_code, const as
       }
    }
 
-   auto interest_reward_conf  = pool_itr->interest_reward;
-   auto interest_reward       = acct->interest_reward;
+   auto pool_interest_reward     = pool_itr->interest_reward;
+   auto eraner_interest_reward   = acct->interest_reward;
    {
-      auto total_rewards      = _update_reward_info(interest_reward_conf, interest_reward, acct->avl_principal);
+      auto total_rewards         = _update_reward_info(pool_interest_reward, eraner_interest_reward, acct->avl_principal);
       //内部调用发放利息
       //发放利息
       if(total_rewards.amount > 0) {
@@ -433,15 +433,15 @@ void tyche_earn::onredeem( const name& from, const uint64_t& team_code, const as
    }
 
    pools.modify( pool_itr, _self, [&]( auto& c ) {
-      c.interest_reward                = interest_reward_conf;
+      c.interest_reward                = pool_interest_reward;
       c.avl_principal.amount           -= quant.amount;
-      c.airdrop_rewards                = rewards;
+      c.airdrop_rewards                = pool_airdrop_rewards;
    });
 
    accts.modify( acct, _self, [&]( auto& a ) {
-      a.interest_reward                = interest_reward; 
+      a.interest_reward                = eraner_interest_reward; 
       a.avl_principal.amount           -= quant.amount;
-      a.airdrop_rewards                = vote_rewards;
+      a.airdrop_rewards                = earner_airdrop_rewards;
    });
 
    //打出本金MUSDT
@@ -485,22 +485,20 @@ void  tyche_earn::claimreward(const name& from, const uint64_t& team_code, const
    CHECKC(pool_itr->airdrop_rewards.count( code ),  err::RECORD_NOT_FOUND, "reward conf not found" )
    CHECKC(acct->airdrop_rewards.count( code ),  err::RECORD_NOT_FOUND, "reward not found" )
    
-   auto earner_reward   = acct->airdrop_rewards.at(code);
-   auto reward_conf     = pool_itr->airdrop_rewards.at(code);
+   auto earner_airdrop_reward   = acct->airdrop_rewards.at(code);
+   auto pool_airdrop_reward     = pool_itr->airdrop_rewards.at(code);
 
-   auto airdrop_rewards  = acct->airdrop_rewards;
-   auto rewards         = pool_itr->airdrop_rewards;
-   auto total_rewards   = _update_reward_info(reward_conf, earner_reward, acct->avl_principal);
-   rewards[code]        = reward_conf;
-   airdrop_rewards[code] = earner_reward;
+   auto earner_airdrop_rewards   = acct->airdrop_rewards;
+   auto pool_airdrop_rewards     = pool_itr->airdrop_rewards;
+   auto total_rewards            = _update_reward_info(pool_airdrop_reward, earner_airdrop_reward, acct->avl_principal);
+   earner_airdrop_rewards[code]  = earner_airdrop_reward;
+   pool_airdrop_rewards[code]    = pool_airdrop_reward;
    
    pools.modify( pool_itr, _self, [&]( auto& c ) {
-      c.airdrop_rewards  = rewards;
+      c.airdrop_rewards          = pool_airdrop_rewards;
    });
    accts.modify( acct, _self, [&]( auto& a ) {
-      a.airdrop_rewards  = airdrop_rewards;
-      a.term_started_at = now;
-      a.term_ended_at     = now + pool_itr->term_interval_sec;
+      a.airdrop_rewards          = earner_airdrop_rewards;
    });
 
    //内部调用发放利息
@@ -512,28 +510,28 @@ void  tyche_earn::claimreward(const name& from, const uint64_t& team_code, const
 }
 
 //领取奖励,返回要领取的奖励
-asset tyche_earn::_update_reward_info( earn_pool_reward_st& reward_conf, earner_reward_st& earner_reward, const asset& earner_avl_principal) {
-   int128_t reward_per_share_delta = reward_conf.reward_per_share - earner_reward.last_reward_per_share;
+asset tyche_earn::_update_reward_info( earn_pool_reward_st& pool_reward, earner_reward_st& earner_reward, const asset& earner_avl_principal) {
+   int128_t reward_per_share_delta = pool_reward.reward_per_share - earner_reward.last_reward_per_share;
 
-   auto new_rewards        = calc_sharer_rewards(earner_avl_principal, reward_per_share_delta, reward_conf.total_rewards.symbol);
+   auto new_rewards        = calc_sharer_rewards(earner_avl_principal, reward_per_share_delta, pool_reward.total_rewards.symbol);
    auto total_rewards      = new_rewards + earner_reward.unclaimed_rewards;
 
-   reward_conf.unalloted_rewards          -= new_rewards;
-   reward_conf.unclaimed_rewards          -= earner_reward.unclaimed_rewards;
-   reward_conf.claimed_rewards            += total_rewards;
+   pool_reward.unalloted_rewards          -= new_rewards;
+   pool_reward.unclaimed_rewards          -= earner_reward.unclaimed_rewards;
+   pool_reward.claimed_rewards            += total_rewards;
 
    earner_reward.unclaimed_rewards        = asset(0, total_rewards.symbol);
    earner_reward.claimed_rewards          = asset(0, total_rewards.symbol);
    earner_reward.total_claimed_rewards    += total_rewards;
-   earner_reward.last_reward_per_share    = reward_conf.reward_per_share;
+   earner_reward.last_reward_per_share    = pool_reward.reward_per_share;
    return total_rewards;
 }
 
 
 earner_reward_map tyche_earn::_get_new_shared_earner_reward_map(const earn_pool_reward_map& rewards) {
    earner_reward_map airdrop_rewards;
-   for (auto& reward_conf : rewards) {
-      airdrop_rewards[reward_conf.first]   = _get_new_shared_earner_reward(reward_conf.second);
+   for (auto& pool_airdrop_reward : rewards) {
+      airdrop_rewards[pool_airdrop_reward.first]   = _get_new_shared_earner_reward(pool_airdrop_reward.second);
    }
    return airdrop_rewards;
 }
@@ -541,8 +539,8 @@ earner_reward_map tyche_earn::_get_new_shared_earner_reward_map(const earn_pool_
 void tyche_earn::addsaveconf(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier) {
    require_auth(_self);
    auto pools           = earn_pool_t::tbl_t(_self, _self.value);
-   auto conf            = pools.find( code );
-   if( conf == pools.end() ) {
+   auto pool_itr            = pools.find( code );
+   if( pool_itr == pools.end() ) {
       pools.emplace( _self, [&]( auto& c ) {
          c.code                  = code;
          c.term_interval_sec     = term_interval_sec;
@@ -551,7 +549,7 @@ void tyche_earn::addsaveconf(const uint64_t& code, const uint64_t& term_interval
          c.on_shelf              = true;
       });
    } else {
-      pools.modify( conf, _self, [&]( auto& c ) {
+      pools.modify( pool_itr, _self, [&]( auto& c ) {
          c.term_interval_sec     = term_interval_sec;
          c.share_multiplier      = share_multiplier;
          c.on_shelf              = true;
