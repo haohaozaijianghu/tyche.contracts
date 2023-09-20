@@ -95,7 +95,7 @@ void tyche_reward::splitintr(){
       conf_itr++;
    }
    auto total_interest = total_quant * _gstate.annual_interest_rate / (YEAR_DAYS* DAY_SECONDS) * seconds /PCT_BOOST;
-   CHECKC(total_interest.amount > 10, err::INCORRECT_AMOUNT,  "interet too small: " + total_interest.to_string() )
+   CHECKC(total_interest.amount > 10, err::INCORRECT_AMOUNT,  "interest too small: " + total_interest.to_string() )
    _gstate.allocated_interest_quant       += total_interest;
    _gstate.instert_allocated_started_at   = current_time_point();
    tyche_earn::onintrrefuel_action interest_refuel_act(_gstate.tyche_earn_contract, { {get_self(), "active"_n} });
