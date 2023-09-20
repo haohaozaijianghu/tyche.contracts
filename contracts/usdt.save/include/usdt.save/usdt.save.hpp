@@ -77,7 +77,7 @@ class [[eosio::contract("usdt.save")]] usdt_save : public contract {
    
    //usdt.reward
    ACTION rewardrefuel( const name& token_bank, const asset& total_rewards, const uint64_t& seconds, const uint64_t& pool_conf_code );
-
+   ACTION intrrefuel( const name& token_bank, const asset& total_rewards, const uint64_t& seconds );
 
    //USER
    ACTION claimreward(const name& from, const uint64_t& team_code, const symbol& sym );

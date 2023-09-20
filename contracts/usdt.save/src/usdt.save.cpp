@@ -110,6 +110,48 @@ void usdt_save::rewardrefuel( const name& token_bank, const asset& total_rewards
 
 }
 
+void usdt_save::intrrefuel( const name& token_bank, const asset& total_rewards, const uint64_t& seconds){ 
+   CHECKC( token_bank == MUSDT_BANK, err::RECORD_NOT_FOUND, "bank not equal" )
+   auto now             = time_point_sec(current_time_point());
+   auto confs           = earn_pool_t::tbl_t(_self, _self.value);
+   auto conf_itr        = confs.begin();
+   CHECKC( conf_itr != confs.end(), err::RECORD_NOT_FOUND, "save plan not found" )
+
+   auto total_share = 0;
+   while( conf_itr != confs.end()) {
+      if(conf_itr->on_shelf) 
+         total_share += conf_itr->share_multiplier * conf_itr->available_quant.amount;
+      conf_itr++;
+   }
+   CHECKC( total_share > 0, err::INCORRECT_AMOUNT, "total vote is zero" )
+   conf_itr        = confs.begin();
+   while( conf_itr != confs.end() ){
+      if( conf_itr->on_shelf ){
+         auto rate = conf_itr->available_quant.amount * conf_itr->share_multiplier * PCT_BOOST / total_share;
+         auto rewards = asset(total_rewards.amount * rate / PCT_BOOST, total_rewards.symbol);
+         auto conf_id = _global_state->new_reward_conf_id();
+         if( rewards.amount > 0) {
+            auto older_reward = conf_itr->interest_reward;
+            
+            confs.modify( conf_itr, _self, [&]( auto& c ) {
+               older_reward.id                        = conf_id;
+               older_reward.total_rewards                += rewards;
+               older_reward.last_rewards                 = rewards;
+               older_reward.unalloted_rewards            = older_reward.unalloted_rewards + rewards;
+               older_reward.last_reward_per_share        = older_reward.reward_per_share ;
+               older_reward.reward_per_share             = older_reward.reward_per_share + calc_reward_per_share_delta(rewards, conf_itr->available_quant);
+               older_reward.annual_interest_rate         = get_annual_interest_rate(rewards, conf_itr->available_quant, seconds);
+               older_reward.prev_reward_added_at         = older_reward.reward_added_at;
+               older_reward.reward_added_at              = now;
+               c.interest_reward = older_reward;
+            });
+         }
+      }
+      conf_itr++;
+   }
+   
+}
+
 void usdt_save::rewardrefuel_to_one( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code ){
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
    auto reward_symbol      = reward_symbols.find( total_rewards.symbol.code().raw() );
