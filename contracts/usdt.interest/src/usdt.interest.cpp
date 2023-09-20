@@ -97,8 +97,8 @@ void usdt_interest::splitintr(){
    CHECKC(total_interest.amount > 10, err::INCORRECT_AMOUNT,  "interet too small: " + total_interest.to_string() )
    _gstate.allocated_interest_quant       += total_interest;
    _gstate.instert_allocated_started_at   = current_time_point();
-   usdt_save::onrewardrefuel_action reward_refuel_act(_gstate.usdt_save_contract, { {get_self(), "active"_n} });
-   reward_refuel_act.send(MUSDT_BANK, total_interest, seconds, 0);
+   usdt_save::onintrrefuel_action interest_refuel_act(_gstate.usdt_save_contract, { {get_self(), "active"_n} });
+   interest_refuel_act.send(MUSDT_BANK, total_interest, seconds);
 }
 
 //设置年化利率

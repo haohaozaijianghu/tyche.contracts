@@ -33,6 +33,7 @@ struct earn_pool_reward_t {                             //MBTC,HSTZ,MUSDT
     asset           claimed_rewards;                    //已领取奖励
     int128_t        reward_per_share            = 0;    //每票已分配奖励
     int128_t        last_reward_per_share       = 0;    //奖励发放delta TODO
+    uint64_t        annual_interest_rate        = 0;     //上一次年化利率
     time_point_sec  reward_added_at;                    //最近奖励发放时间(admin)
     time_point_sec  prev_reward_added_at;               //前一次奖励发放时间间隔
 };
@@ -40,11 +41,12 @@ using earn_pool_reward_map = std::map<uint64_t/*reward symbol code*/, earn_pool_
 
 //Scope: _self
 TBL earn_pool_t {
-    uint64_t                code;                                   //1,2,3,4,5
+    uint64_t                code;                                           //1,2,3,4,5
     asset                   sum_quant               = asset(0, MUSDT);      //历史总存款金额
     asset                   available_quant         = asset(0, MUSDT);      //剩余存款金额
     earn_pool_reward_map    rewards;
-    uint64_t                term_interval_sec       = 0;            //多少秒
+    earn_pool_reward_t      interest_reward;                                //利息信息
+    uint64_t                term_interval_sec       = 0;                    //多少秒
     uint64_t                share_multiplier        = 1;
     bool                    on_shelf                = true;
     time_point_sec          created_at;
@@ -55,8 +57,11 @@ TBL earn_pool_t {
 
     typedef multi_index<"earnpools"_n, earn_pool_t> tbl_t;
 
-    EOSLIB_SERIALIZE( earn_pool_t, (code)(sum_quant)(available_quant)(rewards)
-                                    (term_interval_sec)(share_multiplier)(on_shelf)(created_at) )
+    EOSLIB_SERIALIZE( earn_pool_t, (code)(sum_quant)(available_quant)
+                                    (rewards)(interest_reward)
+                                    (term_interval_sec)(share_multiplier)
+                                    (on_shelf)(created_at) )
 };
+
 
 } //namespace amax
