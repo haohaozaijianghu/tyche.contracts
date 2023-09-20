@@ -85,6 +85,7 @@ TBL earn_pool_t {
     uint64_t                code;                                   //1,2,3,4,5
     asset                   sum_quant               = asset(0, MUSDT);      //历史总存款金额
     asset                   available_quant         = asset(0, MUSDT);      //剩余存款金额
+    earn_pool_reward_t      interest_reward;
     earn_pool_reward_map    rewards;
     uint64_t                term_interval_sec       = 0;            //多少秒
     uint64_t                share_multiplier        = 1;

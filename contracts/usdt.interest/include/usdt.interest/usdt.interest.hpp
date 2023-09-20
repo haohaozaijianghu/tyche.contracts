@@ -77,17 +77,23 @@ class [[eosio::contract("usdt.interest")]] usdt_interest : public contract {
    [[eosio::on_notify("*::transfer")]]
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
 
-   //用户领取利息
+   //提取空投奖励
    ACTION claimreward( const name& to, const name& bank, const asset& total_rewards, const string& memo );
+
+   //提取利息
+   ACTION claimintr( const name& to, const name& bank, const asset& total_interest, const string& memo);
    
    ACTION init(const name& refueler_account, const name& usdt_save_contract, const bool& enabled);
 
    ACTION onpoolstart();
 
-   ACTION setlinterest();
+   ACTION splitintr();
 
    ACTION setrate(uint64_t& rate);
-   
+
+private:
+   void _save_reward_info(const asset& quant, const name& token_bank, const uint64_t& pool_conf_code);
+   void _sub_reward(const asset& quant, const name& token_bank);
    global_singleton     _global;
    global_t             _gstate;
    dbc                  _db;
