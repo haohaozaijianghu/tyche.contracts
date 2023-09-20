@@ -263,15 +263,14 @@ void usdt_save::onuserdeposit( const name& from, const uint64_t& team_code, cons
    } else {
       //当用户充入本金, 要结算充入池子的用户之前的利息，同时要修改充入池子的基本信息
       //循环结算每一种利息代币
-      earn_pool_reward_map rewards = conf->rewards;
-      earner_reward_map earner_rewards  = acct->earner_rewards;
-      auto older_deposit_quant = acct->available_quant;
-
-
+      earn_pool_reward_map rewards        = conf->rewards;
+      earner_reward_map    earner_rewards = acct->earner_rewards;
+      auto older_deposit_quant            = acct->available_quant;
+      //结算奖励
       for (auto& reward_conf_kv : conf->rewards) { //for循环每一个token
          auto reward_conf     = reward_conf_kv.second;
          auto code            = reward_conf_kv.first;
-         auto earner_reward    = earner_reward_t();
+         auto earner_reward   = earner_reward_t();
          auto new_rewards     = asset(0, reward_conf.total_rewards.symbol);
          //初始化earner_reward 信息
          if(acct->earner_rewards.count(reward_conf_kv.first)) {
@@ -294,19 +293,34 @@ void usdt_save::onuserdeposit( const name& from, const uint64_t& team_code, cons
          rewards[code]                             = reward_conf;
          earner_rewards[code]                      = earner_reward;
       }
+
+      auto earner_interest                = acct->earner_interest;
+      auto conf_interest_reward           = conf->interest_reward;
+      //结算利息
+      {
+         int128_t reward_per_share_delta     = conf_interest_reward.reward_per_share - earner_interest.last_reward_per_share;
+         auto new_rewards                    = calc_sharer_rewards(older_deposit_quant, reward_per_share_delta, conf_interest_reward.total_rewards.symbol);
+         conf_interest_reward.unalloted_rewards       -= new_rewards;
+         conf_interest_reward.unclaimed_rewards       += new_rewards;
+         earner_interest.last_reward_per_share        = conf_interest_reward.reward_per_share;
+         earner_interest.unclaimed_rewards            += new_rewards;
+      }
+   
       confs.modify( conf, _self, [&]( auto& c ) {
-            c.sum_quant          += quant;
-            c.available_quant    += quant;
-            c.rewards            = rewards;
+         c.sum_quant             += quant;
+         c.available_quant       += quant;
+         c.interest_reward       = conf_interest_reward;
+         c.rewards               = rewards;
       });
 
       accts.modify( acct, _self,  [&]( auto& c ) {
-            c.sum_quant             += quant;
-            c.available_quant       += quant;
-            c.earner_rewards        = earner_rewards;
-            c.term_started_at       = now;
-            c.term_end_at           = now  + conf->term_interval_sec;
-         });
+         c.sum_quant             += quant;
+         c.available_quant       += quant;
+         c.earner_rewards        = earner_rewards;
+         c.term_started_at       = now;
+         c.earner_interest       = earner_interest;
+         c.term_end_at           = now + conf->term_interval_sec;
+      });
    }
    //transfer nusdt to user
    TRANSFER( _gstate.lp_token.get_contract(), from, asset(quant.amount, _gstate.lp_token.get_symbol()), "depsit credential" )
@@ -320,19 +334,19 @@ void usdt_save::onuserdeposit( const name& from, const uint64_t& team_code, cons
 
 //用户提款只能按全额来提款
 void usdt_save::onredeem( const name& from, const uint64_t& team_code, const asset& quant ){
-   auto confs  = earn_pool_t::tbl_t(_self, _self.value);
-   auto conf   = confs.find( team_code );
+   auto confs        = earn_pool_t::tbl_t(_self, _self.value);
+   auto conf         = confs.find( team_code );
    CHECKC( conf != confs.end(), err::RECORD_NOT_FOUND, "save conf not found" )
 
-   auto accts  = earner_t::tbl_t(_self, team_code);
-   auto acct   = accts.find( from.value );
+   auto accts        = earner_t::tbl_t(_self, team_code);
+   auto acct         = accts.find( from.value );
    CHECKC( acct != accts.end(), err::RECORD_NOT_FOUND, "account not found" )
 
-   auto now    = current_time_point();
+   auto now          = current_time_point();
    CHECKC(acct->available_quant.amount == quant.amount, err::INCORRECT_AMOUNT, "insufficient deposit amount" )
    CHECKC(acct->term_end_at <= now, err::TIME_PREMATURE, "plase wait, not finished" )
    
-   auto rewards = conf->rewards;
+   auto rewards      = conf->rewards;
    auto vote_rewards = acct->earner_rewards;
    for (auto& reward_conf_kv : conf->rewards) { //for循环每一个token
       auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
@@ -357,11 +371,25 @@ void usdt_save::onredeem( const name& from, const uint64_t& team_code, const ass
       }
    }
 
+   auto interest_reward_conf  = conf->interest_reward;
+   auto earner_interest       = acct->earner_interest;
+   {
+      auto total_rewards      = _update_reward_info(interest_reward_conf, earner_interest, acct->available_quant);
+      //内部调用发放利息
+      //发放利息
+      if(total_rewards.amount > 0) {
+         usdt_interest::claimintr_action cliam_interest_act(_gstate.interest_contract, { {get_self(), "active"_n} });
+         cliam_interest_act.send(from, MUSDT_BANK, total_rewards, "interest");
+      }
+   }
+
    confs.modify( conf, _self, [&]( auto& c ) {
+      c.interest_reward       = interest_reward_conf;
       c.available_quant.amount -= quant.amount;
       c.rewards                = rewards;
    });
    accts.modify( acct, _self, [&]( auto& a ) {
+      a.earner_interest                = earner_interest; 
       a.available_quant.amount         -= quant.amount;
       a.earner_rewards                 = vote_rewards;
    });
@@ -372,6 +400,67 @@ void usdt_save::onredeem( const name& from, const uint64_t& team_code, const ass
       //打出TYCHE
       auto tyche_amount = quant.amount * _gstate.tyche_farm_lock_ratio / PCT_BOOST;
       TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "tyche farm reward" )
+   }
+}
+
+
+void usdt_save::addrewardsym(const extended_symbol& sym, const uint64_t& interval, const name& reward_type) {
+   require_auth(_self);
+   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
+   auto reward_symbol      = reward_symbols.find( sym.get_symbol().code().raw() );
+   CHECKC( reward_symbol == reward_symbols.end(), err::RECORD_EXISTING, "save plan not found" )
+   CHECKC( reward_type == INTEREST || reward_type == REDPACK, err::PARAM_ERROR, "reward_type error" )
+   reward_symbols.emplace( _self, [&]( auto& s ) {
+      s.sym                         = sym;
+      s.claim_term_interval_sec     = interval;
+      s.reward_type                 = reward_type;
+      s.on_shelf                    = false;
+   });
+}
+
+void  usdt_save::claimreward(const name& from, const uint64_t& team_code, const symbol& sym ){
+   require_auth(from);
+   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
+   auto code               =  sym.code().raw();
+   auto reward_symbol      = reward_symbols.find( code );
+   CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found" )
+   CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "save plan not on self" )
+   
+   auto now = time_point_sec(current_time_point());
+   auto confs  = earn_pool_t::tbl_t(_self, _self.value);
+   auto conf   = confs.find( team_code );
+   CHECKC( conf != confs.end(), err::RECORD_NOT_FOUND, "save conf not found" )
+
+   auto accts  = earner_t::tbl_t(_self, team_code);
+   auto acct   = accts.find( from.value );
+   CHECKC( acct != accts.end(), err::RECORD_NOT_FOUND, "account not found" )
+
+   CHECKC(conf->rewards.count( code ),  err::RECORD_NOT_FOUND, "reward conf not found" )
+   CHECKC(acct->earner_rewards.count( code ),  err::RECORD_NOT_FOUND, "reward not found" )
+   
+   auto earner_reward   = acct->earner_rewards.at(code);
+   auto reward_conf     = conf->rewards.at(code);
+
+   auto earner_rewards  = acct->earner_rewards;
+   auto rewards         = conf->rewards;
+   auto total_rewards   = _update_reward_info(reward_conf, earner_reward, acct->available_quant);
+   rewards[code]        = reward_conf;
+   earner_rewards[code] = earner_reward;
+   
+   confs.modify( conf, _self, [&]( auto& c ) {
+      c.rewards         = rewards;
+   });
+   accts.modify( acct, _self, [&]( auto& a ) {
+      a.earner_rewards  = earner_rewards;
+      a.term_started_at = now;
+      a.term_end_at     = now + conf->term_interval_sec;
+   });
+
+   //内部调用发放利息
+   //发放利息
+   if(total_rewards.amount > 0) {
+      usdt_interest::claimreward_action cliam_reward_act(_gstate.interest_contract, { {get_self(), "active"_n} });
+      cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "reward");
    }
 }
 
@@ -389,87 +478,10 @@ asset usdt_save::_update_reward_info( earn_pool_reward_t& reward_conf, earner_re
    earner_reward.unclaimed_rewards        = asset(0, total_rewards.symbol);
    earner_reward.claimed_rewards          = asset(0, total_rewards.symbol);
    earner_reward.total_claimed_rewards    += total_rewards;
-   earner_reward.last_reward_per_share    =  reward_conf.reward_per_share;
+   earner_reward.last_reward_per_share    = reward_conf.reward_per_share;
    return total_rewards;
 }
 
-void usdt_save::addrewardsym(const extended_symbol& sym, const uint64_t& interval, const name& reward_type) {
-   require_auth(_self);
-   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
-   auto reward_symbol      = reward_symbols.find( sym.get_symbol().code().raw() );
-   CHECKC( reward_symbol == reward_symbols.end(), err::RECORD_EXISTING, "save plan not found" )
-   CHECKC( reward_type == INTEREST || reward_type == REDPACK, err::PARAM_ERROR, "reward_type error" )
-   reward_symbols.emplace( _self, [&]( auto& s ) {
-      s.sym                         = sym;
-      s.claim_term_interval_sec     = interval;
-      s.reward_type                 = reward_type;
-      s.on_shelf                    = false;
-   });
-}
-
-   void usdt_save::symonself(const extended_symbol& sym, const bool& on_shelf) {
-   require_auth(_self);
-   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
-   auto reward_symbol      = reward_symbols.find( sym.get_symbol().code().raw() );
-   CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "reward symbol not found" )
-   reward_symbols.modify( reward_symbol, _self, [&]( auto& s ) {
-      s.on_shelf               = on_shelf;
-   });
-}
-
-
-void  usdt_save::claimreward(const name& from, const uint64_t& team_code, const symbol& sym ){
-   require_auth(from);
-   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
-   auto code               =  sym.code().raw();
-   auto reward_symbol      = reward_symbols.find( code );
-   CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found" )
-   CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "save plan not on self" )
-   CHECKC( reward_symbol->reward_type == REDPACK, err::RECORD_NOT_FOUND, "save plan not on self" )
-   // auto interval =  reward_symbol->term_interval_sec;
-   auto now = time_point_sec(current_time_point());
-   auto confs  = earn_pool_t::tbl_t(_self, _self.value);
-   auto conf   = confs.find( team_code );
-   CHECKC( conf != confs.end(), err::RECORD_NOT_FOUND, "save conf not found" )
-
-   auto accts  = earner_t::tbl_t(_self, team_code);
-   auto acct   = accts.find( from.value );
-   CHECKC( acct != accts.end(), err::RECORD_NOT_FOUND, "account not found" )
-
-   CHECKC(conf->rewards.count( code ),  err::RECORD_NOT_FOUND, "reward conf not found" )
-   CHECKC(acct->earner_rewards.count( code ),  err::RECORD_NOT_FOUND, "reward not found" )
-   
-   auto earner_reward    = acct->earner_rewards.at(code);
-   auto reward_conf     = conf->rewards.at(code);
-   auto earner_rewards    = acct->earner_rewards;
-   auto rewards    = conf->rewards;
-   int128_t reward_per_share_delta = reward_conf.reward_per_share - earner_reward.last_reward_per_share;
-   auto new_rewards     = calc_sharer_rewards(acct->available_quant, reward_per_share_delta, reward_conf.total_rewards.symbol);
-   auto total_rewards   = new_rewards + earner_reward.unclaimed_rewards;
-   reward_conf.unalloted_rewards   -= new_rewards;
-   reward_conf.unclaimed_rewards    += new_rewards;
-   rewards[code]               = reward_conf;
-
-   earner_reward.unclaimed_rewards        =  asset(0, total_rewards.symbol);
-   earner_reward.claimed_rewards          =  asset(0, total_rewards.symbol);
-   earner_reward.total_claimed_rewards    += total_rewards;
-   earner_reward.last_reward_per_share     =  reward_conf.reward_per_share;
-   earner_rewards[code]                    =  earner_reward;
-   
-   confs.modify( conf, _self, [&]( auto& c ) {
-      c.rewards                = rewards;
-   });
-   accts.modify( acct, _self, [&]( auto& a ) {
-      a.earner_rewards                 = earner_rewards;
-      a.term_started_at                = now;
-      a.term_end_at                    = now + conf->term_interval_sec;
-   });
-
-   //内部调用发放利息
-   //发放利息
-   usdt_interest::claimreward_action cliam_reward_act(_gstate.interest_contract, { {get_self(), "active"_n} });
-   cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "interest");
-}
 
 earner_reward_map usdt_save::_get_new_shared_earner_reward_map(const earn_pool_reward_map& rewards) {
    earner_reward_map earner_rewards;
@@ -499,6 +511,17 @@ void usdt_save::addsaveconf(const uint64_t& code, const uint64_t& term_interval_
       });
    }
 }
+
+void usdt_save::symonself(const extended_symbol& sym, const bool& on_shelf) {
+   require_auth(_self);
+   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
+   auto reward_symbol      = reward_symbols.find( sym.get_symbol().code().raw() );
+   CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "reward symbol not found" )
+   reward_symbols.modify( reward_symbol, _self, [&]( auto& s ) {
+      s.on_shelf               = on_shelf;
+   });
+}
+
 earn_pool_reward_t usdt_save::_init_interest_conf(){
    auto conf_id = _global_state->new_reward_conf_id();
    earn_pool_reward_t pool_reward = {conf_id, 
@@ -534,6 +557,5 @@ void usdt_save::setaplconf( const uint64_t& lease_id, const asset& unit_reward )
    _gstate.apl_farm.lease_id     = lease_id;
    _gstate.apl_farm.unit_reward  = unit_reward;
 }
-
 
 }
