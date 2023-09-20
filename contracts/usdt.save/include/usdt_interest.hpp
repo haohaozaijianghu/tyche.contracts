@@ -16,7 +16,12 @@ class usdt_interest {
       [[eosio::action]] 
       void claimreward( const name& to, const name& bank, const asset& rewards, const string& memo );
 
-      using claimreward_action = eosio::action_wrapper<"claimreward"_n, &usdt_interest::claimreward>;
+      //提取利息
+      [[eosio::action]] 
+      void claimintr( const name& to, const name& bank, const asset& total_interest, const string& memo);
+
+      using claimreward_action   = eosio::action_wrapper<"claimreward"_n,  &usdt_interest::claimreward>;
+      using claimintr_action     = eosio::action_wrapper<"claimintr"_n,    &usdt_interest::claimintr>;
 };
 
 } //namespace amax

@@ -82,12 +82,12 @@ using earn_pool_reward_map = std::map<uint64_t/*reward symbol code*/, earn_pool_
 
 //Scope: _self
 TBL earn_pool_t {
-    uint64_t                code;                                   //1,2,3,4,5
+    uint64_t                code;                                           //1,2,3,4,5
     asset                   sum_quant               = asset(0, MUSDT);      //历史总存款金额
     asset                   available_quant         = asset(0, MUSDT);      //剩余存款金额
-    earn_pool_reward_t      interest_reward;
     earn_pool_reward_map    rewards;
-    uint64_t                term_interval_sec       = 0;            //多少秒
+    earn_pool_reward_t      interest_reward;                                //利息信息
+    uint64_t                term_interval_sec       = 0;                    //多少秒
     uint64_t                share_multiplier        = 1;
     bool                    on_shelf                = true;
     time_point_sec          created_at;
@@ -98,8 +98,10 @@ TBL earn_pool_t {
 
     typedef multi_index<"earnpools"_n, earn_pool_t> tbl_t;
 
-    EOSLIB_SERIALIZE( earn_pool_t, (code)(sum_quant)(available_quant)(rewards)
-                                    (term_interval_sec)(share_multiplier)(on_shelf)(created_at) )
+    EOSLIB_SERIALIZE( earn_pool_t, (code)(sum_quant)(available_quant)
+                                    (rewards)(interest_reward)
+                                    (term_interval_sec)(share_multiplier)
+                                    (on_shelf)(created_at) )
 };
 
 struct earner_reward_t {
@@ -115,13 +117,14 @@ using earner_reward_map = std::map<uint64_t/*symbol code*/, earner_reward_t>;
 //Note: record will be deleted upon withdrawal/redemption
 
 TBL earner_t {
-    name                owner;                      //PK
-    asset               sum_quant;                  //总存款金额
-    asset               available_quant;            //当前存款金额
-    earner_reward_map    earner_rewards;             //每票已分配奖励
+    name                owner;                          //PK
+    asset               sum_quant;                      //总存款金额
+    asset               available_quant;                //当前存款金额
+    earner_reward_map    earner_rewards;                //每票已分配奖励
+    earner_reward_t     earner_interest;                //利息信息
     time_point_sec      created_at;
-    time_point_sec      term_started_at;            //利息周期开始时间一旦有钱充入进来，周期从当前时间开始
-    time_point_sec      term_end_at;                //利息周期结束时间
+    time_point_sec      term_started_at;                //利息周期开始时间一旦有钱充入进来，周期从当前时间开始
+    time_point_sec      term_end_at;                    //利息周期结束时间
 
     earner_t() {}
     earner_t(const name& a): owner(a) {}
@@ -130,8 +133,9 @@ TBL earner_t {
 
     typedef multi_index<"earners"_n, earner_t> tbl_t;
 
-    EOSLIB_SERIALIZE( earner_t,   (owner)(sum_quant)(available_quant)
-                                        (earner_rewards)(created_at)(term_started_at)(term_end_at) )
+    EOSLIB_SERIALIZE( earner_t,     (owner)(sum_quant)(available_quant)
+                                    (earner_rewards)(earner_interest)
+                                    (created_at)(term_started_at)(term_end_at) )
 };
 
 TBL reward_symbol_t {
