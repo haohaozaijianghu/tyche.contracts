@@ -8,8 +8,8 @@ admin=admin2
 tnew $reward
 tnew $save
 tnew $admin
-tset $save usdt.save
-tset $reward usdt.interest
+tset $save tyche.earn
+tset $reward tyche.reward
 tcli set account permission $reward active --add-code
 tcli set account permission $save active --add-code
 

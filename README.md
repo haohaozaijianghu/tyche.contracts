@@ -1,3 +1,3 @@
-# entu.contracts
+# tyche.contracts
 
-## Enterprise Union Token Project
+## TycheFi Projects
