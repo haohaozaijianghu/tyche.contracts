@@ -38,10 +38,10 @@ struct earn_pool_reward_t {                             //MBTC,HSTZ,MUSDT
 using earn_pool_reward_map = std::map<uint64_t/*reward symbol code*/, earn_pool_reward_t>;
 
 //Scope: _self
-TBL earn_pool_t {
+struct [[eosio::table, eosio::contract("tyche.earn")]] earn_pool_t {
     uint64_t                code;                                           //1,2,3,4,5
-    asset                   sum_quant               = asset(0, MUSDT);      //历史总存款金额
-    asset                   available_quant         = asset(0, MUSDT);      //剩余存款金额
+    asset                   sum_quant               = asset(0, symbol(symbol_code("TRUSD"), 6));      //历史总存款金额
+    asset                   available_quant         = asset(0, symbol(symbol_code("TRUSD"), 6));      //剩余存款金额
     earn_pool_reward_map    rewards;
     earn_pool_reward_t      interest_reward;                                //利息信息
     uint64_t                term_interval_sec       = 0;                    //多少秒

@@ -1,4 +1,5 @@
 #include <tyche.earn/tyche.earn.hpp>
+#include <tyche.earn/tyche.earn.db.hpp>
 #include <tyche.reward/tyche.reward.hpp>
 #include <amax.token.hpp>
 
