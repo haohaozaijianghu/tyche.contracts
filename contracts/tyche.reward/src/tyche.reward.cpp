@@ -9,6 +9,7 @@
 static constexpr eosio::name active_permission{"active"_n};
 
 namespace tychefi {
+
 using namespace std;
 using namespace wasm::safemath;
 
@@ -140,4 +141,4 @@ void tyche_reward::_sub_reward(const asset& quant, const name& token_bank){
    });
 }  
 
-}
+} //namespace tychefi

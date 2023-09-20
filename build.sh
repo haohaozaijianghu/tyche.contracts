@@ -73,7 +73,7 @@ if [[ ${BUILD_TESTS} == true ]]; then
    export CMAKE_FRAMEWORK_PATH="${AMAX_INSTALL_DIR}:${CMAKE_FRAMEWORK_PATH}"
 fi
 
-printf "\t=========== Building entu.contracts ===========\n\n"
+printf "\t=========== Building tyche.contracts ===========\n\n"
 RED='\033[0;31m'
 NC='\033[0m'
 CPU_CORES=$(getconf _NPROCESSORS_ONLN)

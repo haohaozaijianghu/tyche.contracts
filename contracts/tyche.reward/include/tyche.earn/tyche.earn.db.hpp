@@ -20,8 +20,6 @@ namespace tychefi {
 using namespace std;
 using namespace eosio;
 
-
-
 #define HASH256(str) sha256(const_cast<char*>(str.c_str()), str.size()) 
 
 struct earn_pool_reward_t {                             //MBTC,HSTZ,MUSDT
