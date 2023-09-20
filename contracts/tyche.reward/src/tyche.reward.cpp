@@ -92,7 +92,7 @@ void tyche_reward::splitintr(){
 
    auto total_quant = asset(0, _gstate.total_interest_quant.symbol);
    while( conf_itr != confs.end()) {
-      total_quant += conf_itr->available_quant;
+      total_quant += conf_itr->avl_principal;
       conf_itr++;
    }
    auto total_interest = total_quant * _gstate.annual_interest_rate / (YEAR_DAYS* DAY_SECONDS) * seconds /PCT_BOOST;

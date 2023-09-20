@@ -17,12 +17,6 @@ using std::vector;
 using namespace eosio;
 using namespace wasm::db;
 
-static constexpr name      SYS_BANK    = "amax.token"_n;
-static constexpr symbol    AMAX        = symbol(symbol_code("AMAX"), 8);
-static constexpr uint16_t  PCT_BOOST   = 10000;
-static constexpr uint64_t  DAY_SECONDS = 24 * 60 * 60;
-static constexpr uint64_t  YEAR_DAYS   = 365;
-static constexpr int128_t  HIGH_PRECISION    = 1'000'000'000'000'000'000; // 10^18
 enum class err: uint8_t {
    NONE                 = 0,
    RECORD_NOT_FOUND     = 1,
@@ -87,7 +81,7 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
 
    ACTION addsaveconf(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier);
    
-   ACTION init(const name& admin, const name& interest_contract, const name& trusd_refueler, const bool& enabled);
+   ACTION init(const name& admin, const name& reward_contract, const name& lp_refueler, const bool& enabled);
    
    ACTION symonself(const extended_symbol& sym, const bool& on_shelf);
 
@@ -100,16 +94,16 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
       void onredeem( const name& from, const uint64_t& team_code, const asset& quant );
 
       //初始化全局利息的配置
-      earn_pool_reward_t _init_interest_conf();
+      earn_pool_reward_st _init_interest_conf();
 
       earner_reward_map _get_new_shared_earner_reward_map(const earn_pool_reward_map& rewards);
-      earner_reward_t   _get_new_shared_earner_reward(const earn_pool_reward_t& pool_reward);
+      earner_reward_st   _get_new_shared_earner_reward(const earn_pool_reward_st& pool_reward);
       //更新奖励信息
-      asset _update_reward_info( earn_pool_reward_t& reward_conf, earner_reward_t& earner_reward, const asset& earner_available_quant);
+      asset _update_reward_info( earn_pool_reward_st& reward_conf, earner_reward_st& earner_reward, const asset& earner_avl_principal);
 
       void onuserdeposit( const name& from, const uint64_t& team_code, const asset& quant );
       //得到年化利率
-      uint64_t get_annual_interest_rate(const asset& interest, const asset& total_quant, const uint64_t& term_interval_sec);
+      uint64_t calc_annual_interest_rate(const asset& interest, const asset& total_quant, const uint64_t& term_interval_sec);
 
       void rewardrefuel_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds);
          
