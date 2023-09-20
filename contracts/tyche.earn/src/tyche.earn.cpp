@@ -445,16 +445,13 @@ void tyche_earn::onredeem( const name& from, const uint64_t& team_code, const as
 }
 
 
-void tyche_earn::addrewardsym(const extended_symbol& sym, const uint64_t& interval, const name& reward_type) {
+void tyche_earn::addrewardsym(const extended_symbol& sym) {
    require_auth(_self);
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
    auto reward_symbol      = reward_symbols.find( sym.get_symbol().code().raw() );
    CHECKC( reward_symbol == reward_symbols.end(), err::RECORD_EXISTING, "save plan not found" )
-   CHECKC( reward_type == INTEREST || reward_type == REDPACK, err::PARAM_ERROR, "reward_type error" )
    reward_symbols.emplace( _self, [&]( auto& s ) {
       s.sym                         = sym;
-      s.claim_term_interval_sec     = interval;
-      s.reward_type                 = reward_type;
       s.on_shelf                    = false;
    });
 }

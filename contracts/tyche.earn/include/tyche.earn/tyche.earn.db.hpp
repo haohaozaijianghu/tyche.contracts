@@ -24,12 +24,12 @@ static constexpr name       MUSDT_BANK       = "amax.mtoken"_n;
 static constexpr symbol     MUSDT            = symbol(symbol_code("MUSDT"), 6);
 static constexpr name       TRUSD_BANK       = "amax.mtoken"_n;
 static constexpr symbol     TRUSD            = symbol(symbol_code("TRUSD"), 6);
-static constexpr name       TYCHE_BANK        = "amax.mtoken"_n;
-static constexpr symbol     TYCHE             = symbol(symbol_code("TYCHE"), 6);
+static constexpr name       TYCHE_BANK       = "amax.mtoken"_n;
+static constexpr symbol     TYCHE            = symbol(symbol_code("TYCHE"), 6);
 static constexpr name       APLINK_BANK      = "aplink.token"_n ;
 static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
-static constexpr name       INTEREST         = "interest"_n ;
-static constexpr name       REDPACK          = "redpack"_n ;
+// static constexpr name       INTEREST         = "interest"_n ;
+// static constexpr name       REDPACK          = "redpack"_n ;
 
 
 #define HASH256(str) sha256(const_cast<char*>(str.c_str()), str.size())
@@ -138,10 +138,9 @@ TBL earner_t {
                                     (created_at)(term_started_at)(term_end_at) )
 };
 
+//Scope: _self
 TBL reward_symbol_t {
     extended_symbol sym;                                    //MUSDT,8@amax.mtoken
-    uint64_t        claim_term_interval_sec;                //奖励发放时间间隔
-    name            reward_type             = INTEREST;     //interest | redpack
     bool            on_shelf;
 
     reward_symbol_t() {}
@@ -149,7 +148,7 @@ TBL reward_symbol_t {
     uint64_t primary_key() const { return sym.get_symbol().code().raw(); }
     typedef eosio::multi_index< "rewardsymbol"_n, reward_symbol_t > idx_t;
 
-    EOSLIB_SERIALIZE( reward_symbol_t, (sym)(claim_term_interval_sec)(reward_type)(on_shelf) )
+    EOSLIB_SERIALIZE( reward_symbol_t, (sym)(on_shelf) )
 };
 
 TBL globalidx {
