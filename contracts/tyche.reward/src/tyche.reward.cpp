@@ -86,14 +86,14 @@ void tyche_reward::splitintr(){
    auto seconds = interval.count()/1000000;
    CHECKC( seconds > 0, err::TIME_PREMATURE, "time premature" )
    //获取本金总数
-   auto confs         = earn_pool_t::tbl_t(_gstate.tyche_earn_contract, _gstate.tyche_earn_contract.value);
-   auto conf_itr      = confs.begin();
-   CHECKC( conf_itr != confs.end(), err::RECORD_NOT_FOUND, "save plan not found" )
+   auto pools         = earn_pool_t::tbl_t(_gstate.tyche_earn_contract, _gstate.tyche_earn_contract.value);
+   auto pool_itr      = pools.begin();
+   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "save plan not found" )
 
-   auto total_quant = asset(0, _gstate.total_interest_quant.symbol);
-   while( conf_itr != confs.end()) {
-      total_quant += conf_itr->avl_principal;
-      conf_itr++;
+   auto total_quant  = asset(0, _gstate.total_interest_quant.symbol);
+   while( pool_itr != pools.end()) {
+      total_quant += pool_itr->avl_principal;
+      pool_itr++;
    }
    auto total_interest = total_quant * _gstate.annual_interest_rate / (YEAR_DAYS* DAY_SECONDS) * seconds /PCT_BOOST;
    CHECKC(total_interest.amount > 10, err::INCORRECT_AMOUNT,  "interest amount too small: " + total_interest.to_string() )

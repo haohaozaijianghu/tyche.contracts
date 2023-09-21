@@ -125,26 +125,26 @@ void tyche_earn::intrrefuel( const name& token_bank, const asset& total_rewards,
    CHECKC( total_share > 0, err::INCORRECT_AMOUNT, "total vote is zero" )
    pool_itr        = pools.begin();
    while( pool_itr != pools.end() ){
-      if( pool_itr->on_shelf ){
-         auto rate = pool_itr->avl_principal.amount * pool_itr->share_multiplier * PCT_BOOST / total_share;
-         auto rewards = asset(total_rewards.amount * rate / PCT_BOOST, total_rewards.symbol);
-         auto new_reward_id = _global_state->new_reward_id();
-         if( rewards.amount > 0) {
-            auto last_reward = pool_itr->interest_reward;
-            
-            pools.modify( pool_itr, _self, [&]( auto& c ) {
-               last_reward.reward_id                     = new_reward_id;
-               last_reward.total_rewards                 += rewards;
-               last_reward.last_rewards                  = rewards;
-               last_reward.unalloted_rewards             = last_reward.unalloted_rewards + rewards;
-               last_reward.last_reward_per_share         = last_reward.reward_per_share ;
-               last_reward.reward_per_share              = last_reward.reward_per_share + calc_reward_per_share_delta(rewards, pool_itr->avl_principal);
-               last_reward.annual_interest_rate          = calc_annual_interest_rate(rewards, pool_itr->avl_principal, seconds);
-               last_reward.prev_reward_added_at          = last_reward.reward_added_at;
-               last_reward.reward_added_at               = now;
-               c.interest_reward                         = last_reward;
-            });
-         }
+      if( !pool_itr->on_shelf ) {pool_itr++; continue;}
+
+      auto rate = pool_itr->avl_principal.amount * pool_itr->share_multiplier * PCT_BOOST / total_share;
+      auto rewards = asset(total_rewards.amount * rate / PCT_BOOST, total_rewards.symbol);
+      auto new_reward_id = _global_state->new_reward_id();
+      if( rewards.amount > 0) {
+         auto last_reward = pool_itr->interest_reward;
+         
+         pools.modify( pool_itr, _self, [&]( auto& c ) {
+            last_reward.reward_id                     = new_reward_id;
+            last_reward.total_rewards                 += rewards;
+            last_reward.last_rewards                  = rewards;
+            last_reward.unalloted_rewards             = last_reward.unalloted_rewards + rewards;
+            last_reward.last_reward_per_share         = last_reward.reward_per_share;
+            last_reward.reward_per_share              = last_reward.reward_per_share + calc_reward_per_share_delta(rewards, pool_itr->avl_principal);
+            last_reward.annual_interest_rate          = calc_annual_interest_rate(rewards, pool_itr->avl_principal, seconds);
+            last_reward.prev_reward_added_at          = last_reward.reward_added_at;
+            last_reward.reward_added_at               = now;
+            c.interest_reward                         = last_reward;
+         });
       }
       pool_itr++;
    }
@@ -275,10 +275,15 @@ void tyche_earn::rewardrefuel_to_all( const name& token_bank, const asset& total
 uint64_t tyche_earn::calc_annual_interest_rate(const asset& interest,const asset& total_quant, const uint64_t& term_interval_sec) {
    auto annual_interest_rate = 0;
    if (interest.amount > 0 && term_interval_sec > 0) {
-      annual_interest_rate = interest.amount * YEAR_DAYS * DAY_SECONDS * PCT_BOOST  / total_quant.amount * PCT_BOOST  / term_interval_sec;
+      annual_interest_rate = calc_annual_interest_rate(interest.amount, total_quant.amount, term_interval_sec);
    }
    return annual_interest_rate;
 }
+
+uint128_t tyche_earn::calc_annual_interest_rate(uint128_t interest_amount, uint128_t total_amount, const uint128_t term_interval_sec) {
+   return  interest_amount * YEAR_DAYS * DAY_SECONDS * PCT_BOOST  / total_amount * PCT_BOOST  / term_interval_sec;
+}
+
 
 void tyche_earn::onuserdeposit( const name& from, const uint64_t& team_code, const asset& quant ){
    CHECKC( quant.symbol == _gstate.principal_token.get_symbol(), err::SYMBOL_MISMATCH, "symbol mismatch" )
@@ -409,7 +414,7 @@ void tyche_earn::onredeem( const name& from, const uint64_t& team_code, const as
       if( acct->airdrop_rewards.count(code) ){
          earner_airdrop_reward  = acct->airdrop_rewards.at(code);
       }
-      auto total_rewards               = _update_reward_info(pool_airdrop_reward, earner_airdrop_reward, acct->avl_principal);
+      auto total_rewards               = _update_reward_info(pool_airdrop_reward, earner_airdrop_reward, acct->avl_principal, true);
       pool_airdrop_rewards[code]       = pool_airdrop_reward;
       earner_airdrop_rewards[code]     = earner_airdrop_reward;
       //内部调用发放利息
@@ -423,7 +428,7 @@ void tyche_earn::onredeem( const name& from, const uint64_t& team_code, const as
    auto pool_interest_reward     = pool_itr->interest_reward;
    auto eraner_interest_reward   = acct->interest_reward;
    {
-      auto total_rewards         = _update_reward_info(pool_interest_reward, eraner_interest_reward, acct->avl_principal);
+      auto total_rewards         = _update_reward_info(pool_interest_reward, eraner_interest_reward, acct->avl_principal, true);
       //内部调用发放利息
       //发放利息
       if(total_rewards.amount > 0) {
@@ -483,14 +488,16 @@ void  tyche_earn::claimreward(const name& from, const uint64_t& team_code, const
    CHECKC( acct != accts.end(), err::RECORD_NOT_FOUND, "account not found" )
 
    CHECKC(pool_itr->airdrop_rewards.count( code ),  err::RECORD_NOT_FOUND, "reward conf not found" )
-   CHECKC(acct->airdrop_rewards.count( code ),  err::RECORD_NOT_FOUND, "reward not found" )
+   earner_reward_st earner_airdrop_reward = {0, asset(0, sym), asset(0,sym), asset(0, sym)};
+   if(acct->airdrop_rewards.count( code ) >0) {
+      earner_airdrop_reward   = acct->airdrop_rewards.at(code);
+   }
    
-   auto earner_airdrop_reward   = acct->airdrop_rewards.at(code);
    auto pool_airdrop_reward     = pool_itr->airdrop_rewards.at(code);
 
    auto earner_airdrop_rewards   = acct->airdrop_rewards;
    auto pool_airdrop_rewards     = pool_itr->airdrop_rewards;
-   auto total_rewards            = _update_reward_info(pool_airdrop_reward, earner_airdrop_reward, acct->avl_principal);
+   auto total_rewards            = _update_reward_info(pool_airdrop_reward, earner_airdrop_reward, acct->avl_principal, false);
    earner_airdrop_rewards[code]  = earner_airdrop_reward;
    pool_airdrop_rewards[code]    = pool_airdrop_reward;
    
@@ -510,7 +517,7 @@ void  tyche_earn::claimreward(const name& from, const uint64_t& team_code, const
 }
 
 //领取奖励,返回要领取的奖励
-asset tyche_earn::_update_reward_info( earn_pool_reward_st& pool_reward, earner_reward_st& earner_reward, const asset& earner_avl_principal) {
+asset tyche_earn::_update_reward_info( earn_pool_reward_st& pool_reward, earner_reward_st& earner_reward, const asset& earner_avl_principal, const bool& term_end_flag) {
    int128_t reward_per_share_delta = pool_reward.reward_per_share - earner_reward.last_reward_per_share;
 
    auto new_rewards        = calc_sharer_rewards(earner_avl_principal, reward_per_share_delta, pool_reward.total_rewards.symbol);
@@ -521,7 +528,11 @@ asset tyche_earn::_update_reward_info( earn_pool_reward_st& pool_reward, earner_
    pool_reward.claimed_rewards            += total_rewards;
 
    earner_reward.unclaimed_rewards        = asset(0, total_rewards.symbol);
-   earner_reward.claimed_rewards          = asset(0, total_rewards.symbol);
+   if( term_end_flag ){
+      earner_reward.claimed_rewards       = asset(0, total_rewards.symbol);
+   } else {
+      earner_reward.claimed_rewards       += total_rewards;
+   }
    earner_reward.total_claimed_rewards    += total_rewards;
    earner_reward.last_reward_per_share    = pool_reward.reward_per_share;
    return total_rewards;

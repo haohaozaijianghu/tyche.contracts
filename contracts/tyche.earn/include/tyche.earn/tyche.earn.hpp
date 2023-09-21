@@ -99,7 +99,7 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
       earner_reward_map _get_new_shared_earner_reward_map(const earn_pool_reward_map& rewards);
       earner_reward_st   _get_new_shared_earner_reward(const earn_pool_reward_st& pool_reward);
       //更新奖励信息
-      asset _update_reward_info( earn_pool_reward_st& reward_conf, earner_reward_st& earner_reward, const asset& earner_avl_principal);
+      asset _update_reward_info( earn_pool_reward_st& reward_conf, earner_reward_st& earner_reward, const asset& earner_avl_principal, const bool& term_end_flag);
 
       void onuserdeposit( const name& from, const uint64_t& team_code, const asset& quant );
       //得到年化利率
@@ -109,6 +109,7 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
          
       void rewardrefuel_to_one( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code );
 
+      uint128_t calc_annual_interest_rate(uint128_t interest_amount, uint128_t total_amount, const uint128_t term_interval_sec);
       global_singleton     _global;
       global_t             _gstate;
       dbc                  _db;
