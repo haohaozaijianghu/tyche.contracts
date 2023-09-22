@@ -409,18 +409,18 @@ void tyche_earn::onredeem( const name& from, const uint64_t& team_code, const as
       auto reward_symbol         = reward_symbols.find( pool_airdrop_reward.total_rewards.symbol.code().raw());
       CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found: " + pool_airdrop_reward.total_rewards.symbol.code().to_string() )
       CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "save plan not on self: "+ pool_airdrop_reward.total_rewards.symbol.code().to_string() )
-      earner_reward_st earner_airdrop_reward = {0, asset(0, pool_airdrop_reward.total_rewards.symbol), asset(0, pool_airdrop_reward.total_rewards.symbol)};
+      earner_reward_st earner_airdrop_reward = {0, asset(0, pool_airdrop_reward.total_rewards.symbol), asset(0, pool_airdrop_reward.total_rewards.symbol), asset(0, pool_airdrop_reward.total_rewards.symbol)};
       if( acct->airdrop_rewards.count(code) ){
          earner_airdrop_reward  = acct->airdrop_rewards.at(code);
       }
       auto total_rewards               = _update_reward_info(pool_airdrop_reward, earner_airdrop_reward, acct->avl_principal, true);
       pool_airdrop_rewards[code]       = pool_airdrop_reward;
       earner_airdrop_rewards[code]     = earner_airdrop_reward;
-      //内部调用发放利息
-      //发放利息
+      // 内部调用发放利息
+      // 发放利息
       if(total_rewards.amount > 0 ) {
          tyche_reward::claimreward_action cliam_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
-         cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "interest");
+         cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "reward");
       }
    }
 
@@ -521,6 +521,7 @@ asset tyche_earn::_update_reward_info( earn_pool_reward_st& pool_reward, earner_
 
    auto new_rewards        = calc_sharer_rewards(earner_avl_principal, reward_per_share_delta, pool_reward.total_rewards.symbol);
    auto total_rewards      = new_rewards + earner_reward.unclaimed_rewards;
+   // CHECKC(false, err::INCORRECT_AMOUNT, "new_rewards must be greater than zero:" + new_rewards.to_string())
 
    pool_reward.unalloted_rewards          -= new_rewards;
    pool_reward.unclaimed_rewards          -= earner_reward.unclaimed_rewards;
@@ -532,6 +533,9 @@ asset tyche_earn::_update_reward_info( earn_pool_reward_st& pool_reward, earner_
    } else {
       earner_reward.claimed_rewards       += total_rewards;
    }
+   // CHECKC(false, err::INCORRECT_AMOUNT, "new_rewards must be greater than zero3:" + new_rewards.to_string() + "total_rewards:" + total_rewards.to_string() + ",total_claimed_rewards: " 
+   //          + earner_reward.total_claimed_rewards.to_string() )
+
    earner_reward.total_claimed_rewards    += total_rewards;
    earner_reward.last_reward_per_share    = pool_reward.reward_per_share;
    return total_rewards;
