@@ -41,7 +41,7 @@ NTBL("global") global_t {
     bool                enabled;
  
     EOSLIB_SERIALIZE( global_t, (refueler_account)(tyche_earn_contract)
-                                (total_interest_quant)(allocated_interest_quant)
+                                (total_interest_quant)(allocated_interest_quant)(redeemed_interest_quant)
                                 (instert_allocated_started_at)(annual_interest_rate)
                                 (enabled) )
 };

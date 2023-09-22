@@ -162,7 +162,6 @@ void tyche_earn::rewardrefuel_to_one( const name& token_bank, const asset& total
    auto pool_itr        = pools.find( pool_conf_code );
    CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "save plan not found" )
    CHECKC( pool_itr->on_shelf, err::RECORD_NOT_FOUND, "save plan not on_shelf" )
-   CHECKC( total_rewards.symbol != MUSDT, err::PARAM_ERROR, "reward symbol must be not MUSDT" )
 
    auto new_reward_id                           = _global_state->new_reward_id();
    if( pool_itr->airdrop_rewards.count(total_rewards.symbol.code().raw()) == 0 ) {
