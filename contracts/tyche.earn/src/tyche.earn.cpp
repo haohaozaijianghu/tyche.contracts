@@ -109,7 +109,7 @@ void tyche_earn::refuelreward( const name& token_bank, const asset& total_reward
    if(pool_conf_code == 0)
       refuelreward_to_all(token_bank, total_rewards, seconds);
    else
-      refuelreward_to_one(token_bank, total_rewards, seconds, pool_conf_code);
+      refuelreward_to_pool(token_bank, total_rewards, seconds, pool_conf_code);
 
 }
 
@@ -155,7 +155,7 @@ void tyche_earn::refuelintrst( const name& token_bank, const asset& total_reward
    
 }
 
-void tyche_earn::refuelreward_to_one( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code ){
+void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code ){
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
    auto reward_symbol      = reward_symbols.find( total_rewards.symbol.code().raw() );
    CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "reward symbol not found:" + total_rewards.to_string()  )

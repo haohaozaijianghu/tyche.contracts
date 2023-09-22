@@ -107,7 +107,7 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
 
       void refuelreward_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds);
          
-      void refuelreward_to_one( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code );
+      void refuelreward_to_pool( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code );
 
       uint128_t calc_annual_interest_rate(uint128_t interest_amount, uint128_t total_amount, const uint128_t term_interval_sec);
       global_singleton     _global;
