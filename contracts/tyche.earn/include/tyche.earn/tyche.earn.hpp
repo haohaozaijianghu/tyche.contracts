@@ -69,9 +69,9 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
    [[eosio::on_notify("*::transfer")]]
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
    
-   //usdt.reward
-   ACTION rewardrefuel( const name& token_bank, const asset& total_rewards, const uint64_t& seconds, const uint64_t& pool_conf_code );
-   ACTION intrrefuel( const name& token_bank, const asset& total_rewards, const uint64_t& seconds );
+   //inline action call by tyche.reward
+   ACTION refuelreward( const name& token_bank, const asset& total_rewards, const uint64_t& seconds, const uint64_t& pool_conf_code );
+   ACTION refuelintrst( const name& token_bank, const asset& total_rewards, const uint64_t& seconds );
 
    //USER
    ACTION claimreward(const name& from, const uint64_t& team_code, const symbol& sym );
@@ -79,11 +79,11 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
    //admin
    ACTION addrewardsym(const extended_symbol& sym);
 
-   ACTION addsaveconf(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier);
+   ACTION createpool(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier);
    
    ACTION init(const name& admin, const name& reward_contract, const name& lp_refueler, const bool& enabled);
    
-   ACTION symonself(const extended_symbol& sym, const bool& on_shelf);
+   ACTION onshelfsym(const extended_symbol& sym, const bool& on_shelf);
 
    ACTION setaplconf(const uint64_t& lease_id, const asset& unit_reward);
 
@@ -105,9 +105,9 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
       //得到年化利率
       uint64_t calc_annual_interest_rate(const asset& interest, const asset& total_quant, const uint64_t& term_interval_sec);
 
-      void rewardrefuel_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds);
+      void refuelreward_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds);
          
-      void rewardrefuel_to_one( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code );
+      void refuelreward_to_one( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code );
 
       uint128_t calc_annual_interest_rate(uint128_t interest_amount, uint128_t total_amount, const uint128_t term_interval_sec);
       global_singleton     _global;

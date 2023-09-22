@@ -56,7 +56,7 @@ void tyche_reward::ontransfer(const name& from, const name& to, const asset& qua
 
       _save_reward_info(quant, token_bank, pool_conf_code);
 
-      tyche_earn::onrewardrefuel_action reward_refuel_act(_gstate.tyche_earn_contract, { {get_self(), "active"_n} });
+      tyche_earn::onrefuelreward_action reward_refuel_act(_gstate.tyche_earn_contract, { {get_self(), "active"_n} });
       reward_refuel_act.send(token_bank, quant, DAY_SECONDS, pool_conf_code);
    }
 }
@@ -99,7 +99,7 @@ void tyche_reward::splitintr(){
    CHECKC(total_interest.amount > 10, err::INCORRECT_AMOUNT,  "interest amount too small: " + total_interest.to_string() )
    _gstate.allocated_interest_quant       += total_interest;
    _gstate.instert_allocated_started_at   = current_time_point();
-   tyche_earn::onintrrefuel_action interest_refuel_act(_gstate.tyche_earn_contract, { {get_self(), "active"_n} });
+   tyche_earn::onrefuelintrst_action interest_refuel_act(_gstate.tyche_earn_contract, { {get_self(), "active"_n} });
    interest_refuel_act.send(MUSDT_BANK, total_interest, seconds);
 }
 

@@ -104,16 +104,16 @@ void tyche_earn::ontransfer(const name& from, const name& to, const asset& quant
 }
 
 //管理员打入奖励
-void tyche_earn::rewardrefuel( const name& token_bank, const asset& total_rewards, const uint64_t& seconds, const uint64_t& pool_conf_code){
+void tyche_earn::refuelreward( const name& token_bank, const asset& total_rewards, const uint64_t& seconds, const uint64_t& pool_conf_code){
    require_auth(_gstate.reward_contract);
    if(pool_conf_code == 0)
-      rewardrefuel_to_all(token_bank, total_rewards, seconds);
+      refuelreward_to_all(token_bank, total_rewards, seconds);
    else
-      rewardrefuel_to_one(token_bank, total_rewards, seconds, pool_conf_code);
+      refuelreward_to_one(token_bank, total_rewards, seconds, pool_conf_code);
 
 }
 
-void tyche_earn::intrrefuel( const name& token_bank, const asset& total_rewards, const uint64_t& seconds){ 
+void tyche_earn::refuelintrst( const name& token_bank, const asset& total_rewards, const uint64_t& seconds){ 
    CHECKC( token_bank == MUSDT_BANK, err::RECORD_NOT_FOUND, "bank not equal" )
    auto now             = time_point_sec(current_time_point());
    auto pools           = earn_pool_t::tbl_t(_self, _self.value);
@@ -155,7 +155,7 @@ void tyche_earn::intrrefuel( const name& token_bank, const asset& total_rewards,
    
 }
 
-void tyche_earn::rewardrefuel_to_one( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code ){
+void tyche_earn::refuelreward_to_one( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code ){
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
    auto reward_symbol      = reward_symbols.find( total_rewards.symbol.code().raw() );
    CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "reward symbol not found:" + total_rewards.to_string()  )
@@ -208,7 +208,7 @@ void tyche_earn::rewardrefuel_to_one( const name& token_bank, const asset& total
    
 }
 
-void tyche_earn::rewardrefuel_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds){
+void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds){
    
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
    auto reward_symbol      = reward_symbols.find( total_rewards.symbol.code().raw() );
@@ -554,7 +554,7 @@ earner_reward_map tyche_earn::_get_new_shared_earner_reward_map(const earn_pool_
    return airdrop_rewards;
 }
 
-void tyche_earn::addsaveconf(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier) {
+void tyche_earn::createpool(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier) {
    require_auth(_self);
    auto pools           = earn_pool_t::tbl_t(_self, _self.value);
    auto pool_itr            = pools.find( code );
@@ -575,7 +575,7 @@ void tyche_earn::addsaveconf(const uint64_t& code, const uint64_t& term_interval
    }
 }
 
-void tyche_earn::symonself(const extended_symbol& sym, const bool& on_shelf) {
+void tyche_earn::onshelfsym(const extended_symbol& sym, const bool& on_shelf) {
    require_auth(_self);
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
    auto reward_symbol      = reward_symbols.find( sym.get_symbol().code().raw() );
