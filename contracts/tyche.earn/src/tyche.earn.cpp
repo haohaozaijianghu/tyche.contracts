@@ -66,21 +66,25 @@ void tyche_earn::init(const name& admin, const name& reward_contract, const name
  * @param to
  * @param quantity
  * @param memo: two formats:
- *       1) refuel
- *       2) deposit:1d | 1m | 1q | 1y
+ *       1) redeem:$code - upon transferring in TRUSD to withdraw
+ *       2) deposit:$code  - codes: 1,30,90,180,360
  */
 void tyche_earn::ontransfer(const name& from, const name& to, const asset& quant, const string& memo) {
    CHECKC( from != to, err::ACCOUNT_INVALID, "cannot transfer to self" );
 
    if (from == get_self() || to != get_self()) return;
    auto token_bank = get_first_receiver();
-   if(quant.symbol == _gstate.lp_token.get_symbol()) { //提取奖励
-      auto term_code = 0;
-      CHECKC( _gstate.lp_token.get_contract() == token_bank, err::CONTRACT_MISMATCH, "interest token contract mismatches" )
+
+   if( quant.symbol == _gstate.lp_token.get_symbol() ) { //提取奖励
+      CHECKC( _gstate.lp_token.get_contract() == token_bank, err::CONTRACT_MISMATCH, "LP token contract mismatches" )
       if(from == _gstate.lp_refueler) //充入TRUSD到合约
          return;
+
+      vector<string_view> params = split(memo, ":");
+      CHECKC( params.size() == 2 && params[0] == "redeem", err::MEMO_FORMAT_ERROR, "redeem memo format error" )
+
       //用户提取奖励和本金
-      term_code = (uint64_t) stoi(memo);
+      auto term_code = (uint64_t) stoi(string(params[1]));
       onredeem(from, term_code, quant );
       return;
    }
