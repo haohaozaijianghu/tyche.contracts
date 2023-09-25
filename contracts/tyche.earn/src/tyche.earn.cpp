@@ -46,7 +46,7 @@ inline static int128_t calc_reward_per_share_delta( const asset& rewards, const 
 inline static asset calc_sharer_rewards(const asset& user_shares, const int128_t& reward_per_share_delta, const symbol& rewards_symbol) {
    ASSERT( user_shares.amount >= 0 && reward_per_share_delta >= 0 );
    int128_t rewards = user_shares.amount * reward_per_share_delta / HIGH_PRECISION;
-   rewards = rewards * get_precision(rewards_symbol)/get_precision(user_shares.symbol);
+   // rewards = rewards * get_precision(rewards_symbol)/get_precision(user_shares.symbol);
    CHECK( rewards >= 0 && rewards <= std::numeric_limits<int64_t>::max(), "calculated rewards overflow" );
    return asset( (int64_t)rewards, rewards_symbol );
 }
@@ -547,7 +547,6 @@ asset tyche_earn::_update_reward_info( earn_pool_reward_st& pool_reward, earner_
    earner_reward.last_reward_per_share    = pool_reward.reward_per_share;
    return total_rewards;
 }
-
 
 earner_reward_map tyche_earn::_get_new_shared_earner_reward_map(const earn_pool_reward_map& rewards) {
    earner_reward_map airdrop_rewards;

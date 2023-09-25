@@ -1,6 +1,6 @@
 
-reward=tyche.r111
-save=tyche.s111
+reward=tyche.r122
+save=tyche.s122
 admin=admin2
 
 要建一个锁仓
@@ -25,9 +25,9 @@ tcli push action $save addrewardsym '{"sym":{ "sym":"6,AMMX", "contract":"mdao.t
 
 
 tcli push action $save onshelfsym '{"sym":{ "sym":"6,MUSDC", "contract":"amax.mtoken" }, "on_shelf": true}' -p  $save
-tcli push action $save symonself '{"sym":{ "sym":"6,MUSDT", "contract":"amax.mtoken" }, "on_shelf": true}' -p  $save
-tcli push action $save symonself '{"sym":{ "sym":"6,BTCC", "contract":"mdao.token" }, "on_shelf": true}' -p  $save
-tcli push action $save symonself '{"sym":{ "sym":"6,AMMX", "contract":"mdao.token" }, "on_shelf": true}' -p  $save
+tcli push action $save onshelfsym '{"sym":{ "sym":"6,MUSDT", "contract":"amax.mtoken" }, "on_shelf": true}' -p  $save
+tcli push action $save onshelfsym '{"sym":{ "sym":"6,BTCC", "contract":"mdao.token" }, "on_shelf": true}' -p  $save
+tcli push action $save onshelfsym '{"sym":{ "sym":"6,AMMX", "contract":"mdao.token" }, "on_shelf": true}' -p  $save
 //存入NUSDT
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$save'", "quantity": "1000.000000 TRUSD", "memo": "deposit"}' -p joss
 
@@ -42,7 +42,7 @@ tcli push action $save createpool '[4, 180, 4]' -p $save
 tcli push action $save createpool '[5, 360, 5]' -p $save
 
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$save'", "quantity": "100.000000 MUSDT", "memo": "deposit:2"}' -p joss
-tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$reward'", "quantity": "1000.000000 MUSDT", "memo": "deposit"}' -p joss
+tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$reward'", "quantity": "1000.000000 MUSDT", "memo": "interest"}' -p joss
 
 
 
@@ -53,7 +53,7 @@ tcli push action amax.mtoken transfer '{"from": "joss", "to": "josstest", "quant
 tcli push action $reward onpoolstart '{}' -p $reward
 tcli push action $reward splitintr '{}' -p joss
 
-tcli push action $reward setrate '[ 5000 ]' -p joss
+tcli push action $reward setrate '[ 5000 ]' -p $reward
 
 
 
