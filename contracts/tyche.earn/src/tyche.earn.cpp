@@ -141,7 +141,7 @@ void tyche_earn::refuelintrst( const name& token_bank, const asset& total_reward
             last_reward.reward_id                     = new_reward_id;
             last_reward.total_rewards                 += rewards;
             last_reward.last_rewards                  = rewards;
-            last_reward.unalloted_rewards             = last_reward.unalloted_rewards + rewards;
+            last_reward.unalloted_rewards             += rewards;
             last_reward.last_reward_per_share         = last_reward.reward_per_share;
             last_reward.reward_per_share              = last_reward.reward_per_share + calc_reward_per_share_delta(rewards, pool_itr->avl_principal);
             last_reward.annual_interest_rate          = calc_annual_interest_rate(rewards, pool_itr->avl_principal, seconds);
@@ -192,7 +192,7 @@ void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& tota
          reward.reward_id                       = new_reward_id;
          reward.total_rewards                   += total_rewards;
          reward.last_rewards                    = total_rewards;
-         reward.unalloted_rewards               = reward.unalloted_rewards + total_rewards;
+         reward.unalloted_rewards               += total_rewards;
          reward.last_reward_per_share           = reward.reward_per_share ;
          reward.reward_per_share                = reward.reward_per_share + calc_reward_per_share_delta(total_rewards, pool_itr->avl_principal);
          reward.annual_interest_rate            = calc_annual_interest_rate(total_rewards, pool_itr->avl_principal, seconds);
@@ -260,7 +260,7 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
             reward.reward_id                    = new_reward_id;
             reward.total_rewards                += rewards;
             reward.last_rewards                 = rewards;
-            reward.unalloted_rewards            = reward.unalloted_rewards + rewards;
+            reward.unalloted_rewards            += rewards;
             reward.last_reward_per_share        = reward.reward_per_share;
             reward.reward_per_share             = reward.reward_per_share + calc_reward_per_share_delta(rewards, pool_itr->avl_principal);
             reward.annual_interest_rate         = calc_annual_interest_rate(rewards, pool_itr->avl_principal, seconds);
@@ -336,7 +336,7 @@ void tyche_earn::onuserdeposit( const name& from, const uint64_t& team_code, con
             earner_airdrop_reward.unclaimed_rewards         = asset(0, pool_airdrop_reward.total_rewards.symbol);
             earner_airdrop_reward.claimed_rewards           = asset(0, pool_airdrop_reward.total_rewards.symbol);
             earner_airdrop_reward.total_claimed_rewards     = asset(0, pool_airdrop_reward.total_rewards.symbol);
-            earner_airdrop_reward.last_reward_per_share     = 0;
+            earner_airdrop_reward.last_reward_per_share     = pool_airdrop_reward.reward_per_share;
          }
 
          int128_t reward_per_share_delta = pool_airdrop_reward.reward_per_share - earner_airdrop_reward.last_reward_per_share;

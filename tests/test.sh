@@ -1,6 +1,6 @@
 
-reward=tyche.r123
-save=tyche.s123
+reward=tyche.r131
+save=tyche.s131
 admin=admin2
 
 要建一个锁仓
@@ -33,9 +33,10 @@ tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$save'", "quanti
 
 
 tcli push action amax.mtoken transfer '["ad", "joss", "3000.000000 TYCHE", "2"]' -p ad
+tcli push action amax.mtoken transfer '["joss", "'$save'", "100.000000 TYCHE", ""]' -p joss
 
 
-tcli push action $save createpool '[1, 10, 1]' -p $save
+tcli push action $save createpool '[1, 1, 1]' -p $save
 tcli push action $save createpool '[2, 30, 2]' -p $save
 tcli push action $save createpool '[3, 60, 3]' -p $save
 tcli push action $save createpool '[4, 180, 4]' -p $save
@@ -50,7 +51,6 @@ tcli get currency balance amax.mtoken $save
 
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "josstest", "quantity": "1000.000000 MUSDT", "memo": "deposit:2"}' -p joss
 
-tcli push action $reward onpoolstart '{}' -p $reward
 tcli push action $reward splitintr '{}' -p joss
 
 tcli push action $reward setrate '[ 5000 ]' -p $reward
@@ -69,7 +69,6 @@ tcli push action amax.mtoken transfer '{"from": "josstest", "to": "'$save'", "qu
 
 tcli push action amax.mtoken transfer '{"from": "ad", "to": "joss", "quantity": "10000.000000 MUSDC", "memo": "deposit:1"}' -p ad
 tcli push action mdao.token transfer '{"from": "ad", "to": "joss", "quantity": "10000.000000 BTCC", "memo": "deposit:1"}' -p ad
-tcli push action mdao.token transfer '{"from": "ad", "to": "joss", "quantity": "10000.000000 HSTZ", "memo": "deposit:1"}' -p ad
 tcli push action mdao.token transfer '{"from": "ad", "to": "joss", "quantity": "10000.000000 AMMX", "memo": "deposit:1"}' -p ad
 
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$reward'", "quantity": "100.000000 MUSDC", "memo": "reward:0"}' -p joss
@@ -79,3 +78,9 @@ tcli push action mdao.token transfer '{"from": "joss", "to": "'$reward'", "quant
 
 
    tcli push action $save claimreward '[ "joss", 2, "6,MUSDC" ]' -p joss
+
+
+
+   tcli push action $reward splitintr '{}' -p joss
+   tcli get table $save $save earnpools
+    tcli get table $save 2 earners
