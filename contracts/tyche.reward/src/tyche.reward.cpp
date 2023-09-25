@@ -72,7 +72,7 @@ void tyche_reward::claimreward( const name& to, const name& bank, const asset& t
 //提取利息
 void tyche_reward::claimintr( const name& to, const name& bank, const asset& total_interest, const string& memo){
    require_auth(_gstate.tyche_earn_contract);
-   _gstate.redeemed_interest_quant -= total_interest;
+   _gstate.redeemed_interest_quant += total_interest;
    TRANSFER( bank, to, total_interest, memo)
 }
 
