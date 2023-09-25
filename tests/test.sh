@@ -19,10 +19,15 @@ tcli push action $reward init '["joss","'$save'", true]' -p $reward
 tcli push action $save addrewardsym '{"sym":{ "sym":"6,TRUSD", "contract":"amax.mtoken" }}' -p $save
 tcli push action $save addrewardsym '{"sym":{ "sym":"6,MUSDC", "contract":"amax.mtoken" }}' -p $save
 tcli push action $save addrewardsym '{"sym":{ "sym":"6,MUSDT", "contract":"amax.mtoken" }}' -p $save
+tcli push action $save addrewardsym '{"sym":{ "sym":"6,BTCC", "contract":"mdao.token" }}' -p  $save
+tcli push action $save addrewardsym '{"sym":{ "sym":"6,HSTZ", "contract":"mdao.token" }}' -p  $save
+tcli push action $save addrewardsym '{"sym":{ "sym":"6,AMMX", "contract":"mdao.token" }}' -p  $save
+
 
 tcli push action $save onshelfsym '{"sym":{ "sym":"6,MUSDC", "contract":"amax.mtoken" }, "on_shelf": true}' -p  $save
-tcli push action $save onshelfsym '{"sym":{ "sym":"6,MUSDT", "contract":"amax.mtoken" }, "on_shelf": true}' -p  $save
-
+tcli push action $save symonself '{"sym":{ "sym":"6,MUSDT", "contract":"amax.mtoken" }, "on_shelf": true}' -p  $save
+tcli push action $save symonself '{"sym":{ "sym":"6,BTCC", "contract":"mdao.token" }, "on_shelf": true}' -p  $save
+tcli push action $save symonself '{"sym":{ "sym":"6,AMMX", "contract":"mdao.token" }, "on_shelf": true}' -p  $save
 //存入NUSDT
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$save'", "quantity": "1000.000000 TRUSD", "memo": "deposit"}' -p joss
 
@@ -63,8 +68,13 @@ tcli push action amax.mtoken transfer '{"from": "josstest", "to": "'$save'", "qu
 //打入利息
 
 tcli push action amax.mtoken transfer '{"from": "ad", "to": "joss", "quantity": "10000.000000 MUSDC", "memo": "deposit:1"}' -p ad
+tcli push action mdao.token transfer '{"from": "ad", "to": "joss", "quantity": "10000.000000 BTCC", "memo": "deposit:1"}' -p ad
+tcli push action mdao.token transfer '{"from": "ad", "to": "joss", "quantity": "10000.000000 HSTZ", "memo": "deposit:1"}' -p ad
+tcli push action mdao.token transfer '{"from": "ad", "to": "joss", "quantity": "10000.000000 AMMX", "memo": "deposit:1"}' -p ad
 
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$reward'", "quantity": "100.000000 MUSDC", "memo": "reward:0"}' -p joss
+tcli push action mdao.token transfer '{"from": "joss", "to": "'$reward'", "quantity": "100.000000 BTCC", "memo": "reward:0"}' -p joss
+tcli push action mdao.token transfer '{"from": "joss", "to": "'$reward'", "quantity": "100.000000 AMMX", "memo": "reward:0"}' -p joss
 
 
 

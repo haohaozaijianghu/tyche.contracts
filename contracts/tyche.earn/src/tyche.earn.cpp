@@ -559,8 +559,8 @@ earner_reward_map tyche_earn::_get_new_shared_earner_reward_map(const earn_pool_
 
 void tyche_earn::createpool(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier) {
    require_auth(_self);
-   auto pools           = earn_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr            = pools.find( code );
+   auto pools              = earn_pool_t::tbl_t(_self, _self.value);
+   auto pool_itr           = pools.find( code );
    if( pool_itr == pools.end() ) {
       pools.emplace( _self, [&]( auto& c ) {
          c.code                  = code;
