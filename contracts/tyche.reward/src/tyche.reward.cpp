@@ -19,9 +19,10 @@ using namespace wasm::safemath;
 
 void tyche_reward::init(const name& refueler_account, const name& tyche_earn_contract, const bool& enabled) {
    require_auth( _self );
-   _gstate.enabled               = enabled;
-   _gstate.refueler_account      = refueler_account;
-   _gstate.tyche_earn_contract    = tyche_earn_contract;
+   _gstate.enabled                        = enabled;
+   _gstate.refueler_account               = refueler_account;
+   _gstate.tyche_earn_contract            = tyche_earn_contract;
+   _gstate.instert_allocated_started_at   = current_time_point();
 }
 
 /**
