@@ -437,6 +437,9 @@ void tyche_earn::onredeem( const name& from, const uint64_t& team_code, const as
       if(total_rewards.amount > 0) {
          tyche_reward::claimintr_action cliam_interest_act(_gstate.reward_contract, { {get_self(), "active"_n} });
          cliam_interest_act.send(from, MUSDT_BANK, total_rewards, "interest");
+         if(team_code == _gstate.tyche_reward_pool_code) {
+            _apl_reward(from, total_rewards);
+         }
       }
    }
 
