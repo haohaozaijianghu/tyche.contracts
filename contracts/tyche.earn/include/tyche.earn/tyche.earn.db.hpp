@@ -21,9 +21,9 @@ using namespace std;
 using namespace eosio;
 
 
-static constexpr uint16_t  PCT_BOOST   = 10000;
-static constexpr uint64_t  DAY_SECONDS = 24 * 60 * 60;
-static constexpr uint64_t  YEAR_DAYS   = 365;
+static constexpr uint16_t  PCT_BOOST         = 10000;
+static constexpr uint64_t  DAY_SECONDS       = 24 * 60 * 60;
+static constexpr uint64_t  YEAR_DAYS         = 365;
 static constexpr int128_t  HIGH_PRECISION    = 1'000'000'000'000'000'000; // 10^18
 
 static constexpr name       MUSDT_BANK       = "amax.mtoken"_n;

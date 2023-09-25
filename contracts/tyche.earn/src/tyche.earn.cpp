@@ -385,6 +385,7 @@ void tyche_earn::onuserdeposit( const name& from, const uint64_t& team_code, con
    if(team_code == _gstate.tyche_reward_pool_code) {
       //打出TYCHE
       auto tyche_amount = quant.amount * _gstate.tyche_farm_ratio / PCT_BOOST;
+      // CHECKC(false, err::ACCOUNT_INVALID, "test errror:" + asset(tyche_amount, TYCHE).to_string())
       TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "tyche farm reward" )
    }
 }
@@ -614,7 +615,7 @@ earner_reward_st tyche_earn::_get_new_shared_earner_reward(const earn_pool_rewar
 void tyche_earn::_apl_reward(const name& from, const asset& interest) {
    auto apl_amount = interest.amount/get_precision(interest) * get_precision(APLINK_SYMBOL);
    asset apls = asset(apl_amount, APLINK_SYMBOL);
-   ALLOT_APPLE( _gstate.apl_farm.contract, _gstate.apl_farm.lease_id, from, apls, "truedex creator reward" )
+   ALLOT_APPLE( _gstate.apl_farm.contract, _gstate.apl_farm.lease_id, from, apls, "tyche earn reward" )
 }
 
 void tyche_earn::setaplconf( const uint64_t& lease_id, const asset& unit_reward ){

@@ -1,6 +1,6 @@
 
-reward=tyche.r122
-save=tyche.s122
+reward=tyche.r123
+save=tyche.s123
 admin=admin2
 
 要建一个锁仓
