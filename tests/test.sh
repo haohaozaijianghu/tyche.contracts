@@ -1,6 +1,6 @@
 
-reward=tyche.r131
-save=tyche.s131
+reward=tyche.r123
+save=tyche.s123
 admin=admin2
 
 要建一个锁仓
@@ -78,7 +78,7 @@ tcli push action mdao.token transfer '{"from": "joss", "to": "'$reward'", "quant
 
 
    tcli push action $save claimreward '[ "joss", 2, "6,MUSDC" ]' -p joss
-
+ tcli push action $save claimreward '[ "joss", 2, "6,AMMX" ]' -p joss
 
 
    tcli push action $reward splitintr '{}' -p joss
