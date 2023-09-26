@@ -117,7 +117,7 @@ TBL earn_pool_t {
 struct earner_reward_st {
     int128_t            last_reward_per_share       = 0;
     asset               unclaimed_rewards;
-    asset               claimed_rewards;
+    asset               claimed_rewards;            //每个池子，每一个期间领取的奖励
     asset               total_claimed_rewards;          
 };
 

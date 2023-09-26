@@ -340,8 +340,9 @@ void tyche_earn::onuserdeposit( const name& from, const uint64_t& team_code, con
          }
 
          int128_t reward_per_share_delta = pool_airdrop_reward.reward_per_share - earner_airdrop_reward.last_reward_per_share;
-         if (reward_per_share_delta > 0 && older_deposit_quant.amount > 0) {
+         if ( reward_per_share_delta > 0 ) {
             new_rewards = calc_sharer_rewards(older_deposit_quant, reward_per_share_delta, pool_airdrop_reward.total_rewards.symbol);
+            // CHECKC(false, err::ACCOUNT_INVALID, "rewards error: " + new_rewards.to_string())
             pool_airdrop_reward.unalloted_rewards          -= new_rewards;
             pool_airdrop_reward.unclaimed_rewards          += new_rewards;
             earner_airdrop_reward.last_reward_per_share    = pool_airdrop_reward.reward_per_share;
