@@ -23,7 +23,7 @@ using namespace eosio;
 #define HASH256(str) sha256(const_cast<char*>(str.c_str()), str.size()) 
 
 struct earn_pool_reward_st {                             //MBTC,HSTZ,MUSDT
-    uint64_t        reward_id;
+    uint64_t        reward_id;                          //increase upon every reward distribution                                 
     asset           total_rewards;                      //总奖励 = unalloted_rewards + unclaimed_rewards + claimed_rewards
     asset           last_rewards;                       //上一次总奖励金额
     asset           unalloted_rewards;                  //未分配的奖励(admin)
@@ -39,13 +39,15 @@ using earn_pool_reward_map = std::map<uint64_t/*reward symbol code*/, earn_pool_
 
 //Scope: _self
 struct [[eosio::table, eosio::contract("tyche.earn")]] earn_pool_t {
-    uint64_t                code;                                           //1,2,3,4,5
-    asset                   cum_principal               = asset(0, symbol(symbol_code("TRUSD"), 6));      //历史总存款金额
-    asset                   avl_principal         = asset(0, symbol(symbol_code("TRUSD"), 6));      //剩余存款金额
-    earn_pool_reward_map    rewards;
-    earn_pool_reward_st     interest_reward;                                //利息信息
-    uint64_t                term_interval_sec       = 0;                    //多少秒
+    uint64_t                code;                                           //PK: 1,2,3,4,5
+    uint64_t                term_interval_sec       = 1;          //入池锁仓时长秒: x 1, 30, 90, 180, 360 
     uint64_t                share_multiplier        = 1;
+
+    asset                   cum_principal           = asset(0, symbol(symbol_code("MUSDT"), 6));      //历史总存款金额（本金）
+    asset                   avl_principal           = asset(0, symbol(symbol_code("MUSDT"), 6));      //剩余存款金额（本金）
+    earn_pool_reward_st     interest_reward;                                //利息信息, E.g. 3% APY, triggered
+    earn_pool_reward_map    airdrop_rewards;                                //manually airdropped rewards, including MUSDT etc types
+    
     bool                    on_shelf                = true;
     time_point_sec          created_at;
 
@@ -55,9 +57,8 @@ struct [[eosio::table, eosio::contract("tyche.earn")]] earn_pool_t {
 
     typedef multi_index<"earnpools"_n, earn_pool_t> tbl_t;
 
-    EOSLIB_SERIALIZE( earn_pool_t, (code)(cum_principal)(avl_principal)
-                                    (rewards)(interest_reward)
-                                    (term_interval_sec)(share_multiplier)
+    EOSLIB_SERIALIZE( earn_pool_t,  (code)(term_interval_sec)(share_multiplier)
+                                    (cum_principal)(avl_principal)(interest_reward)(airdrop_rewards)
                                     (on_shelf)(created_at) )
 };
 

@@ -1,6 +1,6 @@
 
-reward=tyche.r123
-save=tyche.s123
+reward=tyche.r133
+save=tyche.s133
 admin=admin2
 
 要建一个锁仓
@@ -29,7 +29,7 @@ tcli push action $save onshelfsym '{"sym":{ "sym":"6,MUSDT", "contract":"amax.mt
 tcli push action $save onshelfsym '{"sym":{ "sym":"6,BTCC", "contract":"mdao.token" }, "on_shelf": true}' -p  $save
 tcli push action $save onshelfsym '{"sym":{ "sym":"6,AMMX", "contract":"mdao.token" }, "on_shelf": true}' -p  $save
 //存入NUSDT
-tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$save'", "quantity": "1000.000000 TRUSD", "memo": "deposit"}' -p joss
+tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$save'", "quantity": "4000.000000 TRUSD", "memo": "deposit"}' -p joss
 
 
 tcli push action amax.mtoken transfer '["ad", "joss", "3000.000000 TYCHE", "2"]' -p ad
@@ -38,7 +38,7 @@ tcli push action amax.mtoken transfer '["joss", "'$save'", "100.000000 TYCHE", "
 
 tcli push action $save createpool '[1, 1, 1]' -p $save
 tcli push action $save createpool '[2, 30, 2]' -p $save
-tcli push action $save createpool '[3, 60, 3]' -p $save
+tcli push action $save createpool '[3, 90, 3]' -p $save
 tcli push action $save createpool '[4, 180, 4]' -p $save
 tcli push action $save createpool '[5, 360, 5]' -p $save
 
@@ -50,6 +50,7 @@ tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$reward'", "quan
 tcli get currency balance amax.mtoken $save
 
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "josstest", "quantity": "1000.000000 MUSDT", "memo": "deposit:2"}' -p joss
+
 
 tcli push action $reward splitintr '{}' -p joss
 
