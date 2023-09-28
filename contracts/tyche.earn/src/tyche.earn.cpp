@@ -217,17 +217,22 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
    CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "reward_symbol not on_shelf" )
 
    auto now             = time_point_sec(current_time_point());
-   auto total_share     = 0;
+   uint64_t total_share = 0;
    auto pools           = earn_pool_t::tbl_t(_self, _self.value);
    auto pool_itr        = pools.begin();
    CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "save plan not found" )
    while( pool_itr != pools.end() ) {
-      if( pool_itr->on_shelf ) 
-         total_share += pool_itr->share_multiplier * pool_itr->avl_principal.amount;
+      if( pool_itr->on_shelf ) {
+          total_share += pool_itr->share_multiplier * pool_itr->avl_principal.amount;
+         // CHECKC( total_share > 0, err::INCORRECT_AMOUNT, "total share is inpositive: " + to_string(total_share) + ", avl_principal:" + pool_itr->avl_principal.to_string() + ", "  
+         // + ", share_multiplier: " + to_string(pool_itr->share_multiplier) + ", " + "older_total_share: " + to_string(older_total_share) )
+          
+      }
+        
 
       pool_itr++;
    }
-   CHECKC( total_share > 0, err::INCORRECT_AMOUNT, "total share is zero" )
+   CHECKC( total_share > 0, err::INCORRECT_AMOUNT, "total share is inpositive: " + to_string(total_share) )
    
    pool_itr             = pools.begin();
    while( pool_itr      != pools.end() ){
@@ -358,6 +363,7 @@ void tyche_earn::onuserdeposit( const name& from, const uint64_t& team_code, con
       {
          int128_t reward_per_share_delta              = pool_interest_reward.reward_per_share - earner_interest_reward.last_reward_per_share;
          auto new_rewards                             = calc_sharer_rewards(older_deposit_quant, reward_per_share_delta, pool_interest_reward.total_rewards.symbol);
+         CHECKC(new_rewards.amount >= 0, err::INCORRECT_AMOUNT,  "new reward must be positive")
          pool_interest_reward.unalloted_rewards       -= new_rewards;
          pool_interest_reward.unclaimed_rewards       += new_rewards;
          earner_interest_reward.last_reward_per_share = pool_interest_reward.reward_per_share;
@@ -478,8 +484,7 @@ void tyche_earn::addrewardsym(const extended_symbol& sym) {
    });
 }
 
-void  tyche_earn::claimreward(const name& from, const uint64_t& team_code, const symbol& sym ){
-   require_auth(from);
+void  tyche_earn::_claimreward(const name& from, const uint64_t& team_code, const symbol& sym ){
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
    auto code               =  sym.code().raw();
    auto reward_symbol      = reward_symbols.find( code );
@@ -522,6 +527,82 @@ void  tyche_earn::claimreward(const name& from, const uint64_t& team_code, const
       tyche_reward::claimreward_action cliam_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
       cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "reward");
    }
+}
+
+void tyche_earn::claimrewards(const name& from){
+   require_auth(from);
+
+   auto pools        = earn_pool_t::tbl_t(_self, _self.value);
+   auto pool_itr     = pools.begin();
+   bool existed      = false;
+   auto i            = 0;
+   while( pool_itr != pools.end() ) {
+      if( !pool_itr->on_shelf ) { pool_itr++; continue; }
+      existed = _claim_pool_rewards(from, pool_itr->code) || existed;
+      pool_itr++;
+      i++;
+      break;
+   }
+   CHECKC(existed, err::RECORD_NOT_FOUND, "no rewards to claim")
+}
+
+bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& team_code ){
+   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
+   bool existed            = false;
+
+   auto now                = time_point_sec(current_time_point());
+   auto pools              = earn_pool_t::tbl_t(_self, _self.value);
+   auto pool_itr           = pools.find( team_code );
+   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "earn pool not found" )
+
+   auto accts  = earner_t::tbl_t(_self, team_code);
+   auto acct   = accts.find( from.value );
+   CHECKC( acct != accts.end(), err::RECORD_NOT_FOUND, "account not found" )
+
+   auto reward_symbol_ptr      = reward_symbols.begin();
+   auto earner_airdrop_rewards   = acct->airdrop_rewards;
+   auto pool_airdrop_rewards     = pool_itr->airdrop_rewards;
+   while(reward_symbol_ptr != reward_symbols.end()) {
+      if(!reward_symbol_ptr->on_shelf) {reward_symbol_ptr++; continue;}
+      auto code   = reward_symbol_ptr->sym.get_symbol().code().raw();
+      auto sym    = reward_symbol_ptr->sym.get_symbol();
+      if( pool_itr->airdrop_rewards.count( code ) == 0 ) {
+         reward_symbol_ptr++;
+         continue;
+      }
+      earner_reward_st earner_airdrop_reward = {0, asset(0, sym), asset(0,sym), asset(0, sym)};
+      if(acct->airdrop_rewards.count( code ) > 0) {
+         earner_airdrop_reward   = acct->airdrop_rewards.at(code);
+      }
+      auto pool_airdrop_reward     = pool_itr->airdrop_rewards.at(code);
+
+
+      auto total_rewards            = _update_reward_info(pool_airdrop_reward, earner_airdrop_reward, acct->avl_principal, false);
+      earner_airdrop_rewards[code]  = earner_airdrop_reward;
+      pool_airdrop_rewards[code]    = pool_airdrop_reward;
+      //内部调用发放利息
+      //发放利息
+      if(total_rewards.amount > 0) {
+         tyche_reward::claimreward_action cliam_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
+         cliam_reward_act.send(from, reward_symbol_ptr->sym.get_contract(), total_rewards, "reward");
+         existed = true;
+      }
+      reward_symbol_ptr++;
+   }
+   
+   pools.modify( pool_itr, _self, [&]( auto& c ) {
+      c.airdrop_rewards          = pool_airdrop_rewards;
+   });
+   accts.modify( acct, _self, [&]( auto& a ) {
+      a.airdrop_rewards          = earner_airdrop_rewards;
+   });
+   return existed;
+}
+
+
+void  tyche_earn::claimreward(const name& from, const uint64_t& team_code, const symbol& sym ){
+   require_auth(from);
+   _claimreward(from, team_code, sym);
 }
 
 //领取奖励,返回要领取的奖励
