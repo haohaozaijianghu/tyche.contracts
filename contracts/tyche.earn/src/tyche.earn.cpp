@@ -120,7 +120,7 @@ void tyche_earn::refuelintrst( const name& token_bank, const asset& total_reward
    auto pool_itr        = pools.begin();
    CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "save plan not found" )
 
-   auto total_share = 0;
+   uint64_t total_share = 0;
    while( pool_itr != pools.end()) {
       if(pool_itr->on_shelf) 
          total_share += pool_itr->share_multiplier * pool_itr->avl_principal.amount;
@@ -158,54 +158,45 @@ void tyche_earn::refuelintrst( const name& token_bank, const asset& total_reward
 void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code ){
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
    auto reward_symbol      = reward_symbols.find( total_rewards.symbol.code().raw() );
-   CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "reward symbol not found:" + total_rewards.to_string()  )
+   CHECKC( total_rewards.amount > 0,                        err::INCORRECT_AMOUNT, "total_rewards must be positive: "+ total_rewards.to_string() )
+   CHECKC( reward_symbol != reward_symbols.end(),           err::RECORD_NOT_FOUND, "reward symbol not found:" + total_rewards.to_string()  )
    CHECKC( token_bank == reward_symbol->sym.get_contract(), err::RECORD_NOT_FOUND, "bank not equal" )
-   CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "reward_symbol not on_shelf" )
-   auto now             = time_point_sec(current_time_point());
-   auto pools           = earn_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr        = pools.find( pool_conf_code );
+   CHECKC( reward_symbol->on_shelf,                         err::RECORD_NOT_FOUND, "reward_symbol not on_shelf" )
+   auto now                = time_point_sec(current_time_point());
+   auto pools              = earn_pool_t::tbl_t(_self, _self.value);
+   auto pool_itr           = pools.find( pool_conf_code );
    CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "save plan not found" )
    CHECKC( pool_itr->on_shelf, err::RECORD_NOT_FOUND, "save plan not on_shelf" )
 
    auto new_reward_id                           = _global_state->new_reward_id();
-   if( pool_itr->airdrop_rewards.count(total_rewards.symbol.code().raw()) == 0 ) {
-      pools.modify( pool_itr, _self, [&]( auto& c ) {
-         auto reward                            = earn_pool_reward_st();
-         reward.reward_id                       = new_reward_id;
-         reward.total_rewards                   = total_rewards;
-         reward.last_rewards                    = total_rewards;
-         reward.unalloted_rewards               = total_rewards;
-         reward.unclaimed_rewards               = asset(0, total_rewards.symbol);
-         reward.claimed_rewards                 = asset(0, total_rewards.symbol);
-         reward.last_reward_per_share           = 0; 
-         reward.reward_per_share                = calc_reward_per_share_delta(total_rewards, pool_itr->avl_principal);
-         reward.annual_interest_rate            = calc_annual_interest_rate(total_rewards, pool_itr->avl_principal, seconds);
-         reward.prev_reward_added_at            = reward.reward_added_at;
-         reward.reward_added_at                 = now;
-
-         c.airdrop_rewards[total_rewards.symbol.code().raw()] = reward;
-      });
-
-   } else if( total_rewards.amount > 0) {
-      pools.modify( pool_itr, _self, [&]( auto& c ) {
-         auto reward                            = pool_itr->airdrop_rewards.at(total_rewards.symbol.code().raw());
-         reward.reward_id                       = new_reward_id;
-         reward.total_rewards                   += total_rewards;
-         reward.last_rewards                    = total_rewards;
-         reward.unalloted_rewards               += total_rewards;
-         reward.last_reward_per_share           = reward.reward_per_share ;
-         reward.reward_per_share                = reward.reward_per_share + calc_reward_per_share_delta(total_rewards, pool_itr->avl_principal);
-         reward.annual_interest_rate            = calc_annual_interest_rate(total_rewards, pool_itr->avl_principal, seconds);
-         reward.prev_reward_added_at            = reward.reward_added_at;
-         reward.reward_added_at                 = now;
-
-         c.airdrop_rewards[total_rewards.symbol.code().raw()] = reward;
-      });
-
-   } else {
-      CHECKC(false, err::PARAM_ERROR, "total_rewards must be greater than zero")
-   }
-   
+   pools.modify( pool_itr, _self, [&]( auto& c ) {
+         earn_pool_reward_map::iterator reward_itr = c.airdrop_rewards.find(total_rewards.symbol.code().raw());
+         if(reward_itr ==  c.airdrop_rewards.end() ){
+            auto& reward                           = c.airdrop_rewards[total_rewards.symbol.code().raw()];
+            reward.reward_id                       = new_reward_id;
+            reward.total_rewards                   = total_rewards;
+            reward.last_rewards                    = total_rewards;
+            reward.unalloted_rewards               = total_rewards;
+            reward.unclaimed_rewards               = asset(0, total_rewards.symbol);
+            reward.claimed_rewards                 = asset(0, total_rewards.symbol);
+            reward.last_reward_per_share           = 0; 
+            reward.reward_per_share                = calc_reward_per_share_delta(total_rewards, pool_itr->avl_principal);
+            reward.annual_interest_rate            = calc_annual_interest_rate(total_rewards, pool_itr->avl_principal, seconds);
+            reward.prev_reward_added_at            = reward.reward_added_at;
+            reward.reward_added_at                 = now;
+         } else {
+            auto& reward                           = c.airdrop_rewards[total_rewards.symbol.code().raw()];
+            reward.reward_id                       = new_reward_id;
+            reward.total_rewards                   += total_rewards;
+            reward.last_rewards                    = total_rewards;
+            reward.unalloted_rewards               += total_rewards;
+            reward.last_reward_per_share           = reward.reward_per_share ;
+            reward.reward_per_share                = reward.reward_per_share + calc_reward_per_share_delta(total_rewards, pool_itr->avl_principal);
+            reward.annual_interest_rate            = calc_annual_interest_rate(total_rewards, pool_itr->avl_principal, seconds);
+            reward.prev_reward_added_at            = reward.reward_added_at;
+            reward.reward_added_at                 = now;
+         }
+   });
 }
 
 void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds){
@@ -226,10 +217,7 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
           total_share += pool_itr->share_multiplier * pool_itr->avl_principal.amount;
          // CHECKC( total_share > 0, err::INCORRECT_AMOUNT, "total share is inpositive: " + to_string(total_share) + ", avl_principal:" + pool_itr->avl_principal.to_string() + ", "  
          // + ", share_multiplier: " + to_string(pool_itr->share_multiplier) + ", " + "older_total_share: " + to_string(older_total_share) )
-          
       }
-        
-
       pool_itr++;
    }
    CHECKC( total_share > 0, err::INCORRECT_AMOUNT, "total share is inpositive: " + to_string(total_share) )
