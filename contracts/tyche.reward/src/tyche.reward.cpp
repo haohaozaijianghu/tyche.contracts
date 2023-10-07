@@ -115,6 +115,8 @@ void tyche_reward::_save_reward_info(const asset& quant, const name& token_bank,
    if(reward_itr == rewards.end()) {
       rewards.emplace(_self, [&](auto& row) {
          row.total_reward_quant = quant;
+         row.allocated_reward_quant = asset(0, quant.symbol);
+         row.redeemed_reward_quant = asset(0, quant.symbol);
          row.bank = token_bank;
          row.memo = "reward: " + to_string(pool_conf_code);
          row.last_reward_at = current_time_point();
@@ -135,12 +137,22 @@ void tyche_reward::_sub_reward(const asset& quant, const name& token_bank){
    auto reward_itr = rewards.find(quant.symbol.code().raw());
    CHECKC(reward_itr != rewards.end(), err::RECORD_NOT_FOUND, "reward not found")
    CHECKC(reward_itr->bank == token_bank, err::CONTRACT_MISMATCH, "bank mismatch")
-   CHECKC(reward_itr->total_reward_quant >= quant, err::INCORRECT_AMOUNT, "reward not enough:" + reward_itr->total_reward_quant.to_string()
+   CHECKC(reward_itr->total_reward_quant >= quant, err::INCORRECT_AMOUNT, "reward not enough:"
+    + reward_itr->total_reward_quant.to_string()
             + ", quant: " + quant.to_string())
    rewards.modify(reward_itr, _self, [&](auto& row) {
       row.total_reward_quant -= quant;
       row.updated_at = current_time_point();
    });
 }  
+
+// void tyche_reward::initrwd(const asset& quant){
+//    auto rewards = reward_t::tbl_t(_self, _self.value);
+//    auto reward_itr = rewards.find(quant.symbol.code().raw());
+//    rewards.modify(reward_itr, _self, [&](auto& row) {
+//       row.allocated_reward_quant = asset(0, quant.symbol);
+//       row.redeemed_reward_quant = asset(0, quant.symbol);
+//    });
+// }
 
 } //namespace tychefi

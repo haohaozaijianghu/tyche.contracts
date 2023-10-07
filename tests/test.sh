@@ -1,6 +1,6 @@
 
-reward=tyche.r134
-earn=tyche.s134
+reward=tyche.r211
+earn=tyche.s211
 admin=admin2
 
 #joss 的私钥 5J3SJ9LrrLaiWUDEHpTnJGVyY6B4P8eq7s6LDzNVgz9MURb2fhx
@@ -28,18 +28,18 @@ tcli push action $earn onshelfsym '{"sym":{ "sym":"6,MUSDT", "contract":"amax.mt
 tcli push action $earn onshelfsym '{"sym":{ "sym":"6,BTCC", "contract":"mdao.token" }, "on_shelf": true}' -p  $earn
 tcli push action $earn onshelfsym '{"sym":{ "sym":"6,AMMX", "contract":"mdao.token" }, "on_shelf": true}' -p  $earn
 //存入NUSDT
-tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$earn'", "quantity": "4000.000000 TRUSD", "memo": "deposit"}' -p joss
+tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$earn'", "quantity": "40000.000000 TRUSD", "memo": "deposit"}' -p joss
 
 
 tcli push action amax.mtoken transfer '["ad", "joss", "3000.000000 TYCHE", "2"]' -p ad
 tcli push action amax.mtoken transfer '["joss", "'$earn'", "100.000000 TYCHE", ""]' -p joss
 
 
-tcli push action $earn createpool '[1, 1, 1]' -p $earn
-tcli push action $earn createpool '[2, 30, 2]' -p $earn
-tcli push action $earn createpool '[3, 90, 3]' -p $earn
-tcli push action $earn createpool '[4, 180, 4]' -p $earn
-tcli push action $earn createpool '[5, 360, 5]' -p $earn
+tcli push action $earn createpool '[1, 1800, 1]' -p $earn
+tcli push action $earn createpool '[2, 54000, 2]' -p $earn
+tcli push action $earn createpool '[3, 162000, 3]' -p $earn
+tcli push action $earn createpool '[4, 324000, 4]' -p $earn
+tcli push action $earn createpool '[5, 648000, 5]' -p $earn
 
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$earn'", "quantity": "100.000000 MUSDT", "memo": "deposit:2"}' -p joss
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$reward'", "quantity": "1000.000000 MUSDT", "memo": "interest"}' -p joss
@@ -81,8 +81,16 @@ tcli push action mdao.token transfer '{"from": "joss", "to": "'$reward'", "quant
  tcli push action $earn claimreward '[ "joss", 2, "6,AMMX" ]' -p joss
 
 
-   tcli push action $reward splitintr '{}' -p joss
-   tcli get table $earn $earn earnpools
-    tcli get table $earn 2 earners
+tcli push action $reward splitintr '{}' -p joss
+tcli get table $earn $earn earnpools
+tcli get table $earn 2 earners
 
 tcli push action  $earn  claimrewards '["josstest"]' -p josstest
+
+
+
+
+tcli push action amax.mtoken transfer '{"from": "dex.user1", "to": "'$earn'", "quantity": "100.000000 TRUSD", "memo": "redeem:5"}' -p dex.user1
+
+
+tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$earn'", "quantity": "230.000000 TRUSD", "memo": "redeem:1"}' -p joss

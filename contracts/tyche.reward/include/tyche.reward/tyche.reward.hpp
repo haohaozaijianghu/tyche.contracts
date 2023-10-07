@@ -90,6 +90,8 @@ class [[eosio::contract("tyche.reward")]] tyche_reward : public contract {
    ACTION splitintr();
 
    ACTION setrate(uint64_t& rate);
+   // ACTION initrwd(const asset& quant);
+
 
 private:
    void _save_reward_info(const asset& quant, const name& token_bank, const uint64_t& pool_conf_code);

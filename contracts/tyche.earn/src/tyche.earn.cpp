@@ -77,8 +77,8 @@ void tyche_earn::ontransfer(const name& from, const name& to, const asset& quant
 
    if( quant.symbol == _gstate.lp_token.get_symbol() ) { //提取奖励
       CHECKC( _gstate.lp_token.get_contract() == token_bank, err::CONTRACT_MISMATCH, "LP token contract mismatches" )
-      if(from == _gstate.lp_refueler) //充入TRUSD到合约
-         return;
+      // if(from == _gstate.lp_refueler) //充入TRUSD到合约
+      //    return;
 
       vector<string_view> params = split(memo, ":");
       CHECKC( params.size() == 2 && params[0] == "redeem", err::MEMO_FORMAT_ERROR, "redeem memo format error" )
@@ -240,7 +240,7 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
             reward.unclaimed_rewards          = asset(0, total_rewards.symbol);
             reward.claimed_rewards            = asset(0, total_rewards.symbol);
             reward.last_reward_per_share      = 0; 
-            reward.reward_per_share           = calc_reward_per_share_delta(total_rewards, pool_itr->avl_principal);
+            reward.reward_per_share           = calc_reward_per_share_delta(rewards, pool_itr->avl_principal);
             reward.annual_interest_rate       = calc_annual_interest_rate(rewards, pool_itr->avl_principal, seconds);
             reward.reward_added_at            = now;
             
@@ -366,6 +366,9 @@ void tyche_earn::onuserdeposit( const name& from, const uint64_t& team_code, con
       });
 
       accts.modify( acct, _self,  [&]( auto& c ) {
+         if( c.avl_principal.amount == 0 ) {
+            c.created_at               = now;
+         }
          c.cum_principal               += quant;
          c.avl_principal               += quant;
          c.airdrop_rewards             = earner_airdrop_rewards;
@@ -452,11 +455,11 @@ void tyche_earn::onredeem( const name& from, const uint64_t& team_code, const as
    });
 
    //打出本金MUSDT
-   TRANSFER( MUSDT_BANK, from, asset(quant.amount, MUSDT), "redeem" )
+   TRANSFER( MUSDT_BANK, from, asset(quant.amount, MUSDT), "redeem:" + to_string(team_code) )
    if(team_code == _gstate.tyche_reward_pool_code) {
       //打出TYCHE
       auto tyche_amount = quant.amount * _gstate.tyche_farm_lock_ratio / PCT_BOOST;
-      TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "tyche farm reward" )
+      TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "redeem:" + to_string(team_code) )
    }
 }
 
