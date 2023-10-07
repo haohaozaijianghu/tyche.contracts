@@ -77,8 +77,8 @@ void tyche_earn::ontransfer(const name& from, const name& to, const asset& quant
 
    if( quant.symbol == _gstate.lp_token.get_symbol() ) { //提取奖励
       CHECKC( _gstate.lp_token.get_contract() == token_bank, err::CONTRACT_MISMATCH, "LP token contract mismatches" )
-      // if(from == _gstate.lp_refueler) //充入TRUSD到合约
-      //    return;
+      if(from == _gstate.lp_refueler) //充入TRUSD到合约
+         return;
 
       vector<string_view> params = split(memo, ":");
       CHECKC( params.size() == 2 && params[0] == "redeem", err::MEMO_FORMAT_ERROR, "redeem memo format error" )

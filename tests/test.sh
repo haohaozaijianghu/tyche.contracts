@@ -1,6 +1,6 @@
 
-reward=tyche.r211
-earn=tyche.s211
+reward=tyche.r212
+earn=tyche.s212
 admin=admin2
 
 #joss 的私钥 5J3SJ9LrrLaiWUDEHpTnJGVyY6B4P8eq7s6LDzNVgz9MURb2fhx
@@ -94,3 +94,6 @@ tcli push action amax.mtoken transfer '{"from": "dex.user1", "to": "'$earn'", "q
 
 
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$earn'", "quantity": "230.000000 TRUSD", "memo": "redeem:1"}' -p joss
+
+
+tcli push action $reward initrwd '[ "230.000000 BTCC" ]' -p $reward
