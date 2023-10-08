@@ -526,13 +526,10 @@ void tyche_earn::claimrewards(const name& from){
    auto pools        = earn_pool_t::tbl_t(_self, _self.value);
    auto pool_itr     = pools.begin();
    bool existed      = false;
-   auto i            = 0;
    while( pool_itr != pools.end() ) {
       if( !pool_itr->on_shelf ) { pool_itr++; continue; }
       existed = _claim_pool_rewards(from, pool_itr->code) || existed;
       pool_itr++;
-      i++;
-      break;
    }
    CHECKC(existed, err::RECORD_NOT_FOUND, "no rewards to claim")
 }
