@@ -399,6 +399,7 @@ void tyche_earn::onredeem( const name& from, const uint64_t& team_code, const as
    CHECKC( acct != accts.end(), err::RECORD_NOT_FOUND, "account not found" )
 
    auto now          = current_time_point();
+   CHECKC(acct->avl_principal.amount !=0, err::PLAN_INEFFECTIVE, "alreay redeemed" )
    CHECKC(acct->avl_principal.amount == quant.amount, err::INCORRECT_AMOUNT, "insufficient deposit amount" )
    CHECKC(acct->term_ended_at <= now, err::TIME_PREMATURE, "plase wait, not finished" )
    
