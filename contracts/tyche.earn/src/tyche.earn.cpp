@@ -378,7 +378,7 @@ void tyche_earn::onuserdeposit( const name& from, const uint64_t& team_code, con
       });
    }
    //transfer nusdt to user
-   TRANSFER( _gstate.lp_token.get_contract(), from, asset(quant.amount, _gstate.lp_token.get_symbol()), "depsit credential" )
+   TRANSFER( _gstate.lp_token.get_contract(), from, asset(quant.amount, _gstate.lp_token.get_symbol()), "deposit credential" )
    //TODO只有天池5号才有奖励
    if(team_code == _gstate.tyche_reward_pool_code) {
       //打出TYCHE
