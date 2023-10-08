@@ -545,7 +545,8 @@ bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& team_code
 
    auto accts  = earner_t::tbl_t(_self, team_code);
    auto acct   = accts.find( from.value );
-   CHECKC( acct != accts.end(), err::RECORD_NOT_FOUND, "account not found" )
+   if(acct == accts.end())
+      return false;
 
    auto reward_symbol_ptr      = reward_symbols.begin();
    auto earner_airdrop_rewards   = acct->airdrop_rewards;
