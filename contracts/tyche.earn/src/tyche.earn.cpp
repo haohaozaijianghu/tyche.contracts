@@ -93,7 +93,7 @@ void tyche_earn::ontransfer(const name& from, const name& to, const asset& quant
    //用户充入本金
    if(params.size() == 2 && params[0] == "deposit" && quant.symbol == _gstate.principal_token.get_symbol()) {
       auto term_code = (uint64_t) stoi(string(params[1]));
-      onuserdeposit(from, term_code, quant);
+      ondeposit(from, term_code, quant);
       return;
    }
    //TYCHE奖励充入
@@ -281,7 +281,7 @@ uint128_t tyche_earn::calc_annual_interest_rate(uint128_t interest_amount, uint1
 }
 
 
-void tyche_earn::onuserdeposit( const name& from, const uint64_t& team_code, const asset& quant ){
+void tyche_earn::ondeposit( const name& from, const uint64_t& team_code, const asset& quant ){
    CHECKC( quant.symbol == _gstate.principal_token.get_symbol(), err::SYMBOL_MISMATCH, "symbol mismatch" )
    CHECKC( _gstate.min_deposit_amount <= quant, err::INCORRECT_AMOUNT, "deposit amount too small" )
    auto now = time_point_sec(current_time_point());

@@ -104,7 +104,7 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
       //更新奖励信息
       asset _update_reward_info( earn_pool_reward_st& reward_conf, earner_reward_st& earner_reward, const asset& earner_avl_principal, const bool& term_end_flag);
 
-      void onuserdeposit( const name& from, const uint64_t& team_code, const asset& quant );
+      void ondeposit( const name& from, const uint64_t& team_code, const asset& quant );
       //得到年化利率
       uint64_t calc_annual_interest_rate(const asset& interest, const asset& total_quant, const uint64_t& term_interval_sec);
 
