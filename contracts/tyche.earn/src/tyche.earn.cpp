@@ -162,7 +162,6 @@ void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& tota
    CHECKC( reward_symbol != reward_symbols.end(),           err::RECORD_NOT_FOUND, "reward symbol not found:" + total_rewards.to_string()  )
    CHECKC( token_bank == reward_symbol->sym.get_contract(), err::RECORD_NOT_FOUND, "bank not equal" )
    CHECKC( reward_symbol->on_shelf,                         err::RECORD_NOT_FOUND, "reward_symbol not on_shelf" )
-   auto now                = time_point_sec(current_time_point());
    auto pools              = earn_pool_t::tbl_t(_self, _self.value);
    auto pool_itr           = pools.find( pool_conf_code );
    CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "save plan not found" )
@@ -172,7 +171,7 @@ void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& tota
          auto& reward                              = c.airdrop_rewards[ total_rewards.symbol.code().raw() ];
          reward.reward_id                          = _global_state->new_reward_id();
          reward.prev_reward_added_at               = reward.reward_added_at;
-         reward.reward_added_at                    = now;
+         reward.reward_added_at                    = current_time_point();
 
          earn_pool_reward_map::iterator reward_itr = c.airdrop_rewards.find(total_rewards.symbol.code().raw());
          if(reward_itr ==  c.airdrop_rewards.end() ){
@@ -193,8 +192,6 @@ void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& tota
             reward.reward_per_share                = reward.reward_per_share + calc_reward_per_share_delta(total_rewards, pool_itr->avl_principal);
             reward.annual_interest_rate            = calc_annual_interest_rate(total_rewards, pool_itr->avl_principal, seconds);
          }
-
-         
    });
 }
 
