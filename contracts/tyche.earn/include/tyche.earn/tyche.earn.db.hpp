@@ -58,14 +58,14 @@ NTBL("global") global_t {
 
     extended_symbol     principal_token         = extended_symbol(MUSDT,  MUSDT_BANK);      //代币MUSDT,用户存入的本金
     extended_symbol     lp_token                = extended_symbol(TRUSD,  TRUSD_BANK);      //代币TRUSD
-    asset               min_deposit_amount      = asset(10'000000, MUSDT);                  //10 MU TODO: add check
+    asset               min_deposit_amount      = asset(10'000000, MUSDT);                  //10 MU 
  
     uint64_t            tyche_farm_ratio        = 10;                                       //每100MUSDT 奖励0.1TYCHE
     uint64_t            tyche_farm_lock_ratio   = 90;                                       //每100MUSDT 锁仓0.9TYCHE
     uint64_t            tyche_reward_pool_code  = 5;
 
     aplink_farm         apl_farm;
-    bool                enabled                 = true; //TODO: add action-wise check
+    bool                enabled                 = true; 
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(reward_contract)
                                 (principal_token)(lp_token)(min_deposit_amount)
@@ -83,11 +83,11 @@ struct earn_pool_reward_st {
     asset           unclaimed_rewards;                  //已分配未领取奖励(customer)
     asset           claimed_rewards;                    //已领取奖励
     int128_t        reward_per_share            = 0;    //每票已分配奖励
-    int128_t        last_reward_per_share       = 0;    //奖励发放delta TODO
+    int128_t        last_reward_per_share       = 0;    //奖励发放delta
     time_point_sec  reward_added_at;                    //最近奖励发放时间(admin)
     time_point_sec  prev_reward_added_at;               //前一次奖励发放时间间隔
 };
-using earn_pool_reward_map = std::map<uint64_t/*reward symbol code*/, earn_pool_reward_st>;
+using earn_pool_reward_map = std::map<eosio::symbol, earn_pool_reward_st>;
 
 //Scope: _self
 TBL earn_pool_t {
@@ -121,7 +121,7 @@ struct earner_reward_st {
     asset               total_claimed_rewards;          
 };
 
-using earner_reward_map = std::map<uint64_t/*symbol code*/, earner_reward_st>;
+using earner_reward_map = std::map<eosio::symbol/*symbol code*/, earner_reward_st>;
 
 //Scope: code
 //Note: record will be deleted upon withdrawal/redemption

@@ -74,7 +74,7 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
    ACTION refuelintrst( const name& token_bank, const asset& total_rewards, const uint64_t& seconds );
 
    //USER
-   ACTION claimreward(const name& from, const uint64_t& team_code, const symbol& sym );
+   ACTION claimreward(const name& from, const uint64_t& term_code, const symbol& sym );
    ACTION claimrewards( const name& from );
    
    //admin
@@ -91,10 +91,10 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
 
    private:
       void _apl_reward(const name& from, const asset& interest);
-      void _claimreward(const name& from, const uint64_t& team_code, const symbol& sym );  
-      bool _claim_pool_rewards(const name& from, const uint64_t& team_code );
+      void _claimreward(const name& from, const uint64_t& term_code, const symbol& sym );  
+      bool _claim_pool_rewards(const name& from, const uint64_t& term_code );
 
-      void onredeem( const name& from, const uint64_t& team_code, const asset& quant );
+      void onredeem( const name& from, const uint64_t& term_code, const asset& quant );
 
       //初始化全局利息的配置
       earn_pool_reward_st _init_interest_conf();
@@ -104,7 +104,7 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
       //更新奖励信息
       asset _update_reward_info( earn_pool_reward_st& reward_conf, earner_reward_st& earner_reward, const asset& earner_avl_principal, const bool& term_end_flag);
 
-      void ondeposit( const name& from, const uint64_t& team_code, const asset& quant );
+      void ondeposit( const name& from, const uint64_t& term_code, const asset& quant );
 
       void refuelreward_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds);
          

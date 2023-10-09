@@ -70,6 +70,7 @@ void tyche_earn::init(const name& admin, const name& reward_contract, const name
  *       2) deposit:$code  - codes: 1,30,90,180,360
  */
 void tyche_earn::ontransfer(const name& from, const name& to, const asset& quant, const string& memo) {
+   CHECKC(_gstate.enabled, err::PAUSED, "not effective yet");
    CHECKC( from != to, err::ACCOUNT_INVALID, "cannot transfer to self" );
 
    if (from == get_self() || to != get_self()) return;
@@ -167,12 +168,12 @@ void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& tota
    CHECKC( pool_itr->on_shelf, err::RECORD_NOT_FOUND, "save plan not on_shelf" )
 
    pools.modify( pool_itr, _self, [&]( auto& c ) {
-         auto& reward                              = c.airdrop_rewards[ total_rewards.symbol.code().raw() ];
+         auto& reward                              = c.airdrop_rewards[ total_rewards.symbol ];
          reward.reward_id                          = _global_state->new_reward_id();
          reward.prev_reward_added_at               = reward.reward_added_at;
          reward.reward_added_at                    = current_time_point();
 
-         earn_pool_reward_map::iterator reward_itr = c.airdrop_rewards.find(total_rewards.symbol.code().raw());
+         earn_pool_reward_map::iterator reward_itr = c.airdrop_rewards.find(total_rewards.symbol);
          if(reward_itr ==  c.airdrop_rewards.end() ){
             reward.total_rewards                   = total_rewards;
             reward.last_rewards                    = total_rewards;
@@ -223,7 +224,7 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
       auto rewards      = asset(total_rewards.amount * rate / PCT_BOOST, total_rewards.symbol);
       
       auto new_reward_id                      = _global_state->new_reward_id();
-      if(pool_itr->airdrop_rewards.count(total_rewards.symbol.code().raw()) == 0) {
+      if(pool_itr->airdrop_rewards.count(total_rewards.symbol) == 0) {
          pools.modify( pool_itr, _self, [&]( auto& c ) {
             auto reward = earn_pool_reward_st();
             reward.reward_id                  = new_reward_id;
@@ -236,12 +237,12 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
             reward.reward_per_share           = calc_reward_per_share_delta(rewards, pool_itr->avl_principal);
             reward.reward_added_at            = now;
             
-            c.airdrop_rewards[total_rewards.symbol.code().raw()] = reward;
+            c.airdrop_rewards[total_rewards.symbol] = reward;
          });
          
       } else if( rewards.amount > 0) {
          pools.modify( pool_itr, _self, [&]( auto& c ) {
-            auto reward                         = pool_itr->airdrop_rewards.at(rewards.symbol.code().raw());
+            auto reward                         = pool_itr->airdrop_rewards.at(rewards.symbol);
             reward.reward_id                    = new_reward_id;
             reward.total_rewards                += rewards;
             reward.last_rewards                 = rewards;
@@ -251,7 +252,7 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
             reward.prev_reward_added_at         = reward.reward_added_at;
             reward.reward_added_at              = now;
 
-            c.airdrop_rewards[total_rewards.symbol.code().raw()] = reward;
+            c.airdrop_rewards[total_rewards.symbol] = reward;
          });
       }
       
@@ -259,17 +260,17 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
    }
 }
 
-void tyche_earn::ondeposit( const name& from, const uint64_t& team_code, const asset& quant ){
+void tyche_earn::ondeposit( const name& from, const uint64_t& term_code, const asset& quant ){
    CHECKC( quant.symbol == _gstate.principal_token.get_symbol(), err::SYMBOL_MISMATCH, "symbol mismatch" )
    CHECKC( _gstate.min_deposit_amount <= quant, err::INCORRECT_AMOUNT, "deposit amount too small" )
    auto now = time_point_sec(current_time_point());
    CHECKC( _gstate.enabled, err::PAUSED, "not effective yet" )
 
    auto pools              = earn_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr           = pools.find( team_code );
+   auto pool_itr           = pools.find( term_code );
    CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "earn pool not found" )
 
-   auto accts              = earner_t::tbl_t(_self, team_code);
+   auto accts              = earner_t::tbl_t(_self, term_code);
    auto acct               = accts.find( from.value );
    if( acct == accts.end() ) {
       pools.modify( pool_itr, _self, [&]( auto& c ) {
@@ -357,8 +358,8 @@ void tyche_earn::ondeposit( const name& from, const uint64_t& team_code, const a
    }
    //transfer nusdt to user
    TRANSFER( _gstate.lp_token.get_contract(), from, asset(quant.amount, _gstate.lp_token.get_symbol()), "deposit credential" )
-   //TODO只有天池5号才有奖励
-   if(team_code == _gstate.tyche_reward_pool_code) {
+   //只有天池5号才有奖励
+   if(term_code == _gstate.tyche_reward_pool_code) {
       //打出TYCHE
       auto tyche_amount = quant.amount * _gstate.tyche_farm_ratio / PCT_BOOST;
       // CHECKC(false, err::ACCOUNT_INVALID, "test errror:" + asset(tyche_amount, TYCHE).to_string())
@@ -367,12 +368,12 @@ void tyche_earn::ondeposit( const name& from, const uint64_t& team_code, const a
 }
 
 //用户提款只能按全额来提款
-void tyche_earn::onredeem( const name& from, const uint64_t& team_code, const asset& quant ){
+void tyche_earn::onredeem( const name& from, const uint64_t& term_code, const asset& quant ){
    auto pools        = earn_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr     = pools.find( team_code );
+   auto pool_itr     = pools.find( term_code );
    CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "earn pool not found" )
 
-   auto accts        = earner_t::tbl_t(_self, team_code);
+   auto accts        = earner_t::tbl_t(_self, term_code);
    auto acct         = accts.find( from.value );
    CHECKC( acct != accts.end(), err::RECORD_NOT_FOUND, "account not found" )
 
@@ -415,7 +416,7 @@ void tyche_earn::onredeem( const name& from, const uint64_t& team_code, const as
       if(total_rewards.amount > 0) {
          tyche_reward::claimintr_action cliam_interest_act(_gstate.reward_contract, { {get_self(), "active"_n} });
          cliam_interest_act.send(from, MUSDT_BANK, total_rewards, "interest");
-         if(team_code == _gstate.tyche_reward_pool_code) {
+         if(term_code == _gstate.tyche_reward_pool_code) {
             _apl_reward(from, total_rewards);
          }
       }
@@ -434,11 +435,11 @@ void tyche_earn::onredeem( const name& from, const uint64_t& team_code, const as
    });
 
    //打出本金MUSDT
-   TRANSFER( MUSDT_BANK, from, asset(quant.amount, MUSDT), "redeem:" + to_string(team_code) )
-   if(team_code == _gstate.tyche_reward_pool_code) {
+   TRANSFER( MUSDT_BANK, from, asset(quant.amount, MUSDT), "redeem:" + to_string(term_code) )
+   if(term_code == _gstate.tyche_reward_pool_code) {
       //打出TYCHE
       auto tyche_amount = quant.amount * _gstate.tyche_farm_lock_ratio / PCT_BOOST;
-      TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "redeem:" + to_string(team_code) )
+      TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "redeem:" + to_string(term_code) )
    }
 }
 
@@ -454,19 +455,19 @@ void tyche_earn::addrewardsym(const extended_symbol& sym) {
    });
 }
 
-void  tyche_earn::_claimreward(const name& from, const uint64_t& team_code, const symbol& sym ){
+void  tyche_earn::_claimreward(const name& from, const uint64_t& term_code, const symbol& sym ){
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
-   auto code               =  sym.code().raw();
-   auto reward_symbol      = reward_symbols.find( code );
+   auto code               =  sym;
+   auto reward_symbol      = reward_symbols.find( code.code().raw() );
    CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found" )
    CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "save plan not on shelf" )
    
    auto now                = time_point_sec(current_time_point());
    auto pools              = earn_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr           = pools.find( team_code );
+   auto pool_itr           = pools.find( term_code );
    CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "earn pool not found" )
 
-   auto accts  = earner_t::tbl_t(_self, team_code);
+   auto accts  = earner_t::tbl_t(_self, term_code);
    auto acct   = accts.find( from.value );
    CHECKC( acct != accts.end(), err::RECORD_NOT_FOUND, "account not found" )
 
@@ -516,16 +517,16 @@ void tyche_earn::claimrewards(const name& from){
    CHECKC(finalclaimed, err::RECORD_NOT_FOUND, "no reward to claim for " + from.to_string() )
 }
 
-bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& team_code ){
+bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& term_code ){
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
    bool existed            = false;
 
    auto now                = time_point_sec(current_time_point());
    auto pools              = earn_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr           = pools.find( team_code );
+   auto pool_itr           = pools.find( term_code );
    CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "earn pool not found" )
 
-   auto accts  = earner_t::tbl_t(_self, team_code);
+   auto accts  = earner_t::tbl_t(_self, term_code);
    auto acct   = accts.find( from.value );
    if(acct == accts.end())
       return false;
@@ -535,22 +536,21 @@ bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& team_code
    auto pool_airdrop_rewards     = pool_itr->airdrop_rewards;
    while(reward_symbol_ptr != reward_symbols.end()) {
       if(!reward_symbol_ptr->on_shelf) {reward_symbol_ptr++; continue;}
-      auto code   = reward_symbol_ptr->sym.get_symbol().code().raw();
       auto sym    = reward_symbol_ptr->sym.get_symbol();
-      if( pool_itr->airdrop_rewards.count( code ) == 0 ) {
+      if( pool_itr->airdrop_rewards.count( sym ) == 0 ) {
          reward_symbol_ptr++;
          continue;
       }
       earner_reward_st earner_airdrop_reward = {0, asset(0, sym), asset(0,sym), asset(0, sym)};
-      if(acct->airdrop_rewards.count( code ) > 0) {
-         earner_airdrop_reward   = acct->airdrop_rewards.at(code);
+      if(acct->airdrop_rewards.count( sym ) > 0) {
+         earner_airdrop_reward   = acct->airdrop_rewards.at(sym);
       }
-      auto pool_airdrop_reward     = pool_itr->airdrop_rewards.at(code);
+      auto pool_airdrop_reward     = pool_itr->airdrop_rewards.at(sym);
 
 
       auto total_rewards            = _update_reward_info(pool_airdrop_reward, earner_airdrop_reward, acct->avl_principal, false);
-      earner_airdrop_rewards[code]  = earner_airdrop_reward;
-      pool_airdrop_rewards[code]    = pool_airdrop_reward;
+      earner_airdrop_rewards[sym]  = earner_airdrop_reward;
+      pool_airdrop_rewards[sym]    = pool_airdrop_reward;
       //内部调用发放利息
       //发放利息
       if(total_rewards.amount > 0) {
@@ -571,9 +571,9 @@ bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& team_code
 }
 
 
-void  tyche_earn::claimreward(const name& from, const uint64_t& team_code, const symbol& sym ){
+void  tyche_earn::claimreward(const name& from, const uint64_t& term_code, const symbol& sym ){
    require_auth(from);
-   _claimreward(from, team_code, sym);
+   _claimreward(from, term_code, sym);
 }
 
 //领取奖励,返回要领取的奖励
