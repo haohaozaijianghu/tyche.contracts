@@ -513,7 +513,7 @@ void tyche_earn::claimrewards(const name& from){
 
       pool_itr++;
    }
-   CHECKC(finalclaimed, err::RECORD_NOT_FOUND, "no rewards to claim")
+   CHECKC(finalclaimed, err::RECORD_NOT_FOUND, "no reward to claim for " + from.to_string() )
 }
 
 bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& team_code ){
