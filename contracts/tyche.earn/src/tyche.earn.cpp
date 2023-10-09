@@ -379,7 +379,7 @@ void tyche_earn::onredeem( const name& from, const uint64_t& team_code, const as
    auto now          = current_time_point();
    CHECKC(acct->avl_principal.amount !=0, err::PLAN_INEFFECTIVE, "already redeemed" )
    CHECKC(acct->avl_principal.amount == quant.amount, err::INCORRECT_AMOUNT, "insufficient deposit amount" )
-   CHECKC(acct->term_ended_at <= now, err::TIME_PREMATURE, "plase wait, not finished" )
+   CHECKC(acct->term_ended_at <= now, err::TIME_PREMATURE, "premature to redeedm" )
    
    auto pool_airdrop_rewards      = pool_itr->airdrop_rewards;
    auto earner_airdrop_rewards    = acct->airdrop_rewards;
