@@ -664,8 +664,11 @@ earner_reward_st tyche_earn::_get_new_shared_earner_reward(const earn_pool_rewar
 
 void tyche_earn::_apl_reward(const name& from, const asset& interest) {
    auto apl_amount = interest.amount/get_precision(interest) * get_precision(APLINK_SYMBOL);
-   asset apls = asset(apl_amount, APLINK_SYMBOL);
-   ALLOT_APPLE( _gstate.apl_farm.contract, _gstate.apl_farm.lease_id, from, apls, "tyche earn reward" )
+   if(apl_amount > 0){
+      asset apls = asset(apl_amount, APLINK_SYMBOL);
+      ALLOT_APPLE( _gstate.apl_farm.contract, _gstate.apl_farm.lease_id, from, apls, "tyche earn reward" )
+   }
+
 }
 
 void tyche_earn::setaplconf( const uint64_t& lease_id, const asset& unit_reward ){
