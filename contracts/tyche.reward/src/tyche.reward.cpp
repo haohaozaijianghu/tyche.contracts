@@ -22,7 +22,7 @@ void tyche_reward::init(const name& refueler_account, const name& tyche_earn_con
    _gstate.enabled                        = enabled;
    _gstate.refueler_account               = refueler_account;
    _gstate.tyche_earn_contract            = tyche_earn_contract;
-   _gstate.instert_allocated_started_at   = current_time_point();
+   _gstate.interest_splitted_at   = current_time_point();
 }
 
 /**
@@ -48,6 +48,7 @@ void tyche_reward::ontransfer(const name& from, const name& to, const asset& qua
       CHECKC(token_bank == MUSDT_BANK, err::CONTRACT_MISMATCH, "bank must amax.mtoken ")
       //用户存入本金
       _gstate.total_interest_quant += quant;
+
    } else {
       vector<string_view> memo_params = split(memo, ":"); 
       CHECKC(memo_params.size() == 2, err::PARAM_INVALID, "memo invalid")
@@ -78,12 +79,12 @@ void tyche_reward::claimintr( const name& to, const name& bank, const asset& tot
 
 void tyche_reward::onpoolstart(){
    require_auth(_self);
-   _gstate.instert_allocated_started_at = current_time_point();
+   _gstate.interest_splitted_at = current_time_point();
 }
 
 //触发利息,每天触发一次
 void tyche_reward::splitintr(){
-   auto elapsed =  (time_point_sec(current_time_point()) - _gstate.instert_allocated_started_at);
+   auto elapsed =  (time_point_sec(current_time_point()) - _gstate.interest_splitted_at);
    auto elapsed_seconds = elapsed.count() / 1000000;
    CHECKC( elapsed_seconds > 0, err::TIME_PREMATURE, "time premature" )
    //获取本金总数
@@ -98,7 +99,7 @@ void tyche_reward::splitintr(){
    auto total_interest = total_quant * _gstate.annual_interest_rate / YEAR_SECONDS * elapsed_seconds / PCT_BOOST;
    CHECKC(total_interest.amount > 10, err::INCORRECT_AMOUNT,  "interest amount too small: " + total_interest.to_string() )
    _gstate.allocated_interest_quant       += total_interest;
-   _gstate.instert_allocated_started_at   = current_time_point();
+   _gstate.interest_splitted_at   = current_time_point();
    tyche_earn::onrefuelintrst_action interest_refuel_act(_gstate.tyche_earn_contract, { {get_self(), "active"_n} });
    interest_refuel_act.send(MUSDT_BANK, total_interest, elapsed_seconds);
 }
@@ -119,7 +120,7 @@ void tyche_reward::_save_reward_info(const asset& quant, const name& token_bank,
          row.redeemed_reward_quant = asset(0, quant.symbol);
          row.bank = token_bank;
          row.memo = "reward: " + to_string(pool_conf_code);
-         row.last_reward_at = current_time_point();
+         row.rewarded_at = current_time_point();
          row.updated_at = current_time_point();
       });
    } else {
