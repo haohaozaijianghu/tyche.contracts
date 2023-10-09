@@ -23,6 +23,7 @@ using namespace eosio;
 
 static constexpr uint16_t  PCT_BOOST         = 10000;
 static constexpr uint64_t  DAY_SECONDS       = 24 * 60 * 60;
+static constexpr uint64_t  YEAR_SECONDS      = 24 * 60 * 60 * 365;
 static constexpr uint64_t  YEAR_DAYS         = 365;
 static constexpr int128_t  HIGH_PRECISION    = 1'000'000'000'000'000'000; // 10^18
 
@@ -83,7 +84,6 @@ struct earn_pool_reward_st {
     asset           claimed_rewards;                    //已领取奖励
     int128_t        reward_per_share            = 0;    //每票已分配奖励
     int128_t        last_reward_per_share       = 0;    //奖励发放delta TODO
-    uint64_t        annual_interest_rate        = 0;     //上一次年化利率
     time_point_sec  reward_added_at;                    //最近奖励发放时间(admin)
     time_point_sec  prev_reward_added_at;               //前一次奖励发放时间间隔
 };

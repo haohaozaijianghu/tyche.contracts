@@ -144,7 +144,6 @@ void tyche_earn::refuelintrst( const name& token_bank, const asset& total_reward
             last_reward.unalloted_rewards             += rewards;
             last_reward.last_reward_per_share         = last_reward.reward_per_share;
             last_reward.reward_per_share              = last_reward.reward_per_share + calc_reward_per_share_delta(rewards, pool_itr->avl_principal);
-            last_reward.annual_interest_rate          = calc_annual_interest_rate(rewards, pool_itr->avl_principal, seconds);
             last_reward.prev_reward_added_at          = last_reward.reward_added_at;
             last_reward.reward_added_at               = now;
             c.interest_reward                         = last_reward;
@@ -182,7 +181,6 @@ void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& tota
             reward.claimed_rewards                 = asset(0, total_rewards.symbol);
             reward.last_reward_per_share           = 0; 
             reward.reward_per_share                = calc_reward_per_share_delta(total_rewards, pool_itr->avl_principal);
-            reward.annual_interest_rate            = calc_annual_interest_rate(total_rewards, pool_itr->avl_principal, seconds);
             
          } else {
             reward.total_rewards                   += total_rewards;
@@ -190,7 +188,6 @@ void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& tota
             reward.unalloted_rewards               += total_rewards;
             reward.last_reward_per_share           = reward.reward_per_share ;
             reward.reward_per_share                = reward.reward_per_share + calc_reward_per_share_delta(total_rewards, pool_itr->avl_principal);
-            reward.annual_interest_rate            = calc_annual_interest_rate(total_rewards, pool_itr->avl_principal, seconds);
          }
    });
 }
@@ -237,7 +234,6 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
             reward.claimed_rewards            = asset(0, total_rewards.symbol);
             reward.last_reward_per_share      = 0; 
             reward.reward_per_share           = calc_reward_per_share_delta(rewards, pool_itr->avl_principal);
-            reward.annual_interest_rate       = calc_annual_interest_rate(rewards, pool_itr->avl_principal, seconds);
             reward.reward_added_at            = now;
             
             c.airdrop_rewards[total_rewards.symbol.code().raw()] = reward;
@@ -252,7 +248,6 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
             reward.unalloted_rewards            += rewards;
             reward.last_reward_per_share        = reward.reward_per_share;
             reward.reward_per_share             = reward.reward_per_share + calc_reward_per_share_delta(rewards, pool_itr->avl_principal);
-            reward.annual_interest_rate         = calc_annual_interest_rate(rewards, pool_itr->avl_principal, seconds);
             reward.prev_reward_added_at         = reward.reward_added_at;
             reward.reward_added_at              = now;
 
@@ -263,19 +258,6 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
       pool_itr++;
    }
 }
-
-uint64_t tyche_earn::calc_annual_interest_rate(const asset& interest,const asset& total_quant, const uint64_t& term_interval_sec) {
-   auto annual_interest_rate = 0;
-   if (interest.amount > 0 && term_interval_sec > 0) {
-      annual_interest_rate = calc_annual_interest_rate(interest.amount, total_quant.amount, term_interval_sec);
-   }
-   return annual_interest_rate;
-}
-
-uint128_t tyche_earn::calc_annual_interest_rate(uint128_t interest_amount, uint128_t total_amount, const uint128_t term_interval_sec) {
-   return  interest_amount * YEAR_DAYS * DAY_SECONDS * PCT_BOOST  / total_amount * PCT_BOOST  / term_interval_sec;
-}
-
 
 void tyche_earn::ondeposit( const name& from, const uint64_t& team_code, const asset& quant ){
    CHECKC( quant.symbol == _gstate.principal_token.get_symbol(), err::SYMBOL_MISMATCH, "symbol mismatch" )
@@ -665,7 +647,7 @@ earn_pool_reward_st tyche_earn::_init_interest_conf(){
                      asset(0, MUSDT), 
                      asset(0, MUSDT), 
                      0,
-                      0, 0, 
+                     0, 
                      time_point_sec(current_time_point()), 
                      time_point_sec(current_time_point())};
    return pool_reward;

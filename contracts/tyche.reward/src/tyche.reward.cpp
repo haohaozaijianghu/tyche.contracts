@@ -83,9 +83,9 @@ void tyche_reward::onpoolstart(){
 
 //触发利息,每天触发一次
 void tyche_reward::splitintr(){
-   auto interval =  (time_point_sec(current_time_point()) - _gstate.instert_allocated_started_at);
-   auto seconds = interval.count()/1000000;
-   CHECKC( seconds > 0, err::TIME_PREMATURE, "time premature" )
+   auto elapsed =  (time_point_sec(current_time_point()) - _gstate.instert_allocated_started_at);
+   auto elapsed_seconds = elapsed.count() / 1000000;
+   CHECKC( elapsed_seconds > 0, err::TIME_PREMATURE, "time premature" )
    //获取本金总数
    auto pools         = earn_pool_t::tbl_t(_gstate.tyche_earn_contract, _gstate.tyche_earn_contract.value);
    auto pool_itr      = pools.begin();
@@ -95,12 +95,12 @@ void tyche_reward::splitintr(){
       total_quant += pool_itr->avl_principal;
       pool_itr++;
    }
-   auto total_interest = total_quant * _gstate.annual_interest_rate / (YEAR_DAYS* DAY_SECONDS) * seconds /PCT_BOOST;
+   auto total_interest = total_quant * _gstate.annual_interest_rate / YEAR_SECONDS * elapsed_seconds / PCT_BOOST;
    CHECKC(total_interest.amount > 10, err::INCORRECT_AMOUNT,  "interest amount too small: " + total_interest.to_string() )
    _gstate.allocated_interest_quant       += total_interest;
    _gstate.instert_allocated_started_at   = current_time_point();
    tyche_earn::onrefuelintrst_action interest_refuel_act(_gstate.tyche_earn_contract, { {get_self(), "active"_n} });
-   interest_refuel_act.send(MUSDT_BANK, total_interest, seconds);
+   interest_refuel_act.send(MUSDT_BANK, total_interest, elapsed_seconds);
 }
 
 //设置年化利率

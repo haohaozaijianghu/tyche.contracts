@@ -105,14 +105,11 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
       asset _update_reward_info( earn_pool_reward_st& reward_conf, earner_reward_st& earner_reward, const asset& earner_avl_principal, const bool& term_end_flag);
 
       void ondeposit( const name& from, const uint64_t& team_code, const asset& quant );
-      //得到年化利率
-      uint64_t calc_annual_interest_rate(const asset& interest, const asset& total_quant, const uint64_t& term_interval_sec);
 
       void refuelreward_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds);
          
       void refuelreward_to_pool( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code );
 
-      uint128_t calc_annual_interest_rate(uint128_t interest_amount, uint128_t total_amount, const uint128_t term_interval_sec);
       global_singleton     _global;
       global_t             _gstate;
       dbc                  _db;

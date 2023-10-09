@@ -20,6 +20,8 @@ namespace tychefi {
 using namespace std;
 using namespace eosio;
 
+static constexpr uint64_t  YEAR_SECONDS      = 24 * 60 * 60 * 365;
+
 #define HASH256(str) sha256(const_cast<char*>(str.c_str()), str.size()) 
 
 struct earn_pool_reward_st {                             //MBTC,HSTZ,MUSDT
@@ -31,7 +33,6 @@ struct earn_pool_reward_st {                             //MBTC,HSTZ,MUSDT
     asset           claimed_rewards;                    //已领取奖励
     int128_t        reward_per_share            = 0;    //每票已分配奖励
     int128_t        last_reward_per_share       = 0;    //奖励发放delta TODO
-    uint64_t        annual_interest_rate        = 0;     //上一次年化利率
     time_point_sec  reward_added_at;                    //最近奖励发放时间(admin)
     time_point_sec  prev_reward_added_at;               //前一次奖励发放时间间隔
 };
