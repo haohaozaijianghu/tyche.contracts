@@ -216,7 +216,7 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
       }
       pool_itr++;
    }
-   CHECKC( total_share > 0, err::INCORRECT_AMOUNT, "total share is inpositive: " + to_string(total_share) )
+   CHECKC( total_share > 0, err::INCORRECT_AMOUNT, "total share is negative: " + to_string(total_share) )
    
    pool_itr             = pools.begin();
    while( pool_itr      != pools.end() ){
