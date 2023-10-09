@@ -390,7 +390,7 @@ void tyche_earn::onredeem( const name& from, const uint64_t& team_code, const as
       
       auto reward_symbol         = reward_symbols.find( pool_airdrop_reward.total_rewards.symbol.code().raw());
       CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found: " + pool_airdrop_reward.total_rewards.symbol.code().to_string() )
-      CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "save plan not on self: "+ pool_airdrop_reward.total_rewards.symbol.code().to_string() )
+      CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "save plan not on shelf: "+ pool_airdrop_reward.total_rewards.symbol.code().to_string() )
       earner_reward_st earner_airdrop_reward = {0, asset(0, pool_airdrop_reward.total_rewards.symbol), asset(0, pool_airdrop_reward.total_rewards.symbol), asset(0, pool_airdrop_reward.total_rewards.symbol)};
       if( acct->airdrop_rewards.count(code) ){
          earner_airdrop_reward  = acct->airdrop_rewards.at(code);
@@ -459,7 +459,7 @@ void  tyche_earn::_claimreward(const name& from, const uint64_t& team_code, cons
    auto code               =  sym.code().raw();
    auto reward_symbol      = reward_symbols.find( code );
    CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found" )
-   CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "save plan not on self" )
+   CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "save plan not on shelf" )
    
    auto now                = time_point_sec(current_time_point());
    auto pools              = earn_pool_t::tbl_t(_self, _self.value);
