@@ -54,8 +54,8 @@ inline static asset calc_sharer_rewards(const asset& user_shares, const int128_t
 void tyche_earn::init(const name& admin, const name& reward_contract, const name& lp_refueler, const bool& enabled) {
    require_auth( _self );
    _gstate.admin                    = admin;
-   _gstate.reward_contract   = reward_contract;
-   _gstate.lp_refueler           = lp_refueler;
+   _gstate.reward_contract          = reward_contract;
+   _gstate.lp_refueler              = lp_refueler;
    _gstate.enabled                  = enabled;
 }
 
@@ -451,7 +451,7 @@ void tyche_earn::addrewardsym(const extended_symbol& sym) {
    CHECKC( reward_symbol == reward_symbols.end(), err::RECORD_EXISTING, "save plan not found" )
    reward_symbols.emplace( _self, [&]( auto& s ) {
       s.sym                         = sym;
-      s.on_shelf                    = false;
+      s.on_shelf                    = true;
    });
 }
 

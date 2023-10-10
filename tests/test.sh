@@ -1,6 +1,5 @@
-
-reward=tyche.r212
-earn=tyche.s212
+reward=tyche.r214
+earn=tyche.s214
 admin=admin2
 
 #joss 的私钥 5J3SJ9LrrLaiWUDEHpTnJGVyY6B4P8eq7s6LDzNVgz9MURb2fhx
@@ -14,7 +13,7 @@ tset $reward tyche.reward
 tcli set account permission $reward active --add-code
 tcli set account permission $earn active --add-code
 
-tcli push action $earn init '["'$admin'","'$reward'","joss",10, true]' -p $earn
+tcli push action $earn init '["'$admin'","'$reward'","joss", true]' -p $earn
 tcli push action $reward init '["joss","'$earn'", true]' -p $reward
 
 tcli push action $earn addrewardsym '{"sym":{ "sym":"6,TRUSD", "contract":"amax.mtoken" }}' -p $earn
@@ -36,10 +35,10 @@ tcli push action amax.mtoken transfer '["joss", "'$earn'", "100.000000 TYCHE", "
 
 
 tcli push action $earn createpool '[1, 1800, 1]' -p $earn
-tcli push action $earn createpool '[2, 54000, 2]' -p $earn
-tcli push action $earn createpool '[3, 162000, 3]' -p $earn
-tcli push action $earn createpool '[4, 324000, 4]' -p $earn
-tcli push action $earn createpool '[5, 648000, 5]' -p $earn
+tcli push action $earn createpool '[2, 1860, 2]' -p $earn
+tcli push action $earn createpool '[3, 1920, 3]' -p $earn
+tcli push action $earn createpool '[4, 1980, 4]' -p $earn
+tcli push action $earn createpool '[5, 2040, 5]' -p $earn
 
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$earn'", "quantity": "100.000000 MUSDT", "memo": "deposit:2"}' -p joss
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$reward'", "quantity": "1000.000000 MUSDT", "memo": "interest"}' -p joss
