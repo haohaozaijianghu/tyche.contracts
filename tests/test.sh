@@ -1,5 +1,5 @@
-reward=tyche.r214
-earn=tyche.s214
+reward=tyche.r311
+earn=tyche.s311
 admin=admin2
 
 #joss 的私钥 5J3SJ9LrrLaiWUDEHpTnJGVyY6B4P8eq7s6LDzNVgz9MURb2fhx
@@ -27,11 +27,11 @@ tcli push action $earn onshelfsym '{"sym":{ "sym":"6,MUSDT", "contract":"amax.mt
 tcli push action $earn onshelfsym '{"sym":{ "sym":"6,BTCC", "contract":"mdao.token" }, "on_shelf": true}' -p  $earn
 tcli push action $earn onshelfsym '{"sym":{ "sym":"6,AMMX", "contract":"mdao.token" }, "on_shelf": true}' -p  $earn
 //存入NUSDT
-tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$earn'", "quantity": "40000.000000 TRUSD", "memo": "deposit"}' -p joss
+tcli push action tyche.token transfer '{"from": "joss", "to": "'$earn'", "quantity": "40000.000000 TRUSD", "memo": "deposit"}' -p joss
 
 
-tcli push action amax.mtoken transfer '["ad", "joss", "3000.000000 TYCHE", "2"]' -p ad
-tcli push action amax.mtoken transfer '["joss", "'$earn'", "100.000000 TYCHE", ""]' -p joss
+# tcli push action tyche.token transfer '["ad", "joss", "3000.000000 TYCHE", "2"]' -p ad
+tcli push action tyche.token transfer '["joss", "'$earn'", "100.00000000 TYCHE", ""]' -p joss
 
 
 tcli push action $earn createpool '[1, 1800, 1]' -p $earn
@@ -64,7 +64,7 @@ tcli push action amax.mtoken transfer '{"from": "josstest", "to": "'$earn'", "qu
 tcli push action amax.mtoken transfer '{"from": "josstest", "to": "'$earn'", "quantity": "100.000000 MUSDT", "memo": "deposit:1"}' -p josstest
 
 //打回测试
-tcli push action amax.mtoken transfer '{"from": "josstest", "to": "'$earn'", "quantity": "100.000000 TRUSD", "memo": "1"}' -p josstest
+tcli push action tyche.token transfer '{"from": "josstest", "to": "'$earn'", "quantity": "100.000000 TRUSD", "memo": "1"}' -p josstest
 tcli push action amax.mtoken transfer '{"from": "josstest", "to": "'$earn'", "quantity": "100.000000 MUSDT", "memo": "deposit:2"}' -p josstest
 //打入利息
 

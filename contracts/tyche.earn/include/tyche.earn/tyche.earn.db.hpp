@@ -32,7 +32,7 @@ static constexpr symbol     MUSDT            = symbol(symbol_code("MUSDT"), 6);
 static constexpr name       TRUSD_BANK       = "tyche.token"_n;
 static constexpr symbol     TRUSD            = symbol(symbol_code("TRUSD"), 6);
 static constexpr name       TYCHE_BANK       = "tyche.token"_n;
-static constexpr symbol     TYCHE            = symbol(symbol_code("TYCHE"), 6);
+static constexpr symbol     TYCHE            = symbol(symbol_code("TYCHE"), 8);
 static constexpr name       APLINK_BANK      = "aplink.token"_n ;
 static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
 // static constexpr name       INTEREST         = "interest"_n ;
@@ -47,7 +47,7 @@ static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
 
 struct aplink_farm {
     name contract           = "aplink.farm"_n;
-    uint64_t lease_id       = 12;               
+    uint64_t lease_id       = 9;                    //TODO       
     asset unit_reward       = asset(1, symbol("APL", 4));
 };
 
