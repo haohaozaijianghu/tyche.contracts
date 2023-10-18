@@ -22,7 +22,7 @@ void tyche_reward::init(const name& refueler_account, const name& tyche_earn_con
    _gstate.enabled                        = enabled;
    _gstate.refueler_account               = refueler_account;
    _gstate.tyche_earn_contract            = tyche_earn_contract;
-   _gstate.interest_splitted_at   = current_time_point();
+   _gstate.interest_splitted_at           = current_time_point();
 }
 
 /**
