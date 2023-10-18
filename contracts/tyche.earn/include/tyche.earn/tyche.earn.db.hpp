@@ -29,9 +29,9 @@ static constexpr int128_t  HIGH_PRECISION    = 1'000'000'000'000'000'000; // 10^
 
 static constexpr name       MUSDT_BANK       = "amax.mtoken"_n;
 static constexpr symbol     MUSDT            = symbol(symbol_code("MUSDT"), 6);
-static constexpr name       TRUSD_BANK       = "amax.mtoken"_n;
+static constexpr name       TRUSD_BANK       = "tyche.token"_n;
 static constexpr symbol     TRUSD            = symbol(symbol_code("TRUSD"), 6);
-static constexpr name       TYCHE_BANK       = "amax.mtoken"_n;
+static constexpr name       TYCHE_BANK       = "tyche.token"_n;
 static constexpr symbol     TYCHE            = symbol(symbol_code("TYCHE"), 6);
 static constexpr name       APLINK_BANK      = "aplink.token"_n ;
 static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
@@ -47,7 +47,7 @@ static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
 
 struct aplink_farm {
     name contract           = "aplink.farm"_n;
-    uint64_t lease_id       = 9;                //TODO 创建
+    uint64_t lease_id       = 12;               
     asset unit_reward       = asset(1, symbol("APL", 4));
 };
 
