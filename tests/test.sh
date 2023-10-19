@@ -16,7 +16,7 @@ tcli set account permission $earn active --add-code
 tcli push action $earn init '["'$admin'","'$reward'","joss", true]' -p $earn
 tcli push action $reward init '["joss","'$earn'", true]' -p $reward
 
-tcli push action $earn addrewardsym '{"sym":{ "sym":"6,TRUSD", "contract":"amax.mtoken" }}' -p $earn
+tcli push action $earn addrewardsym '{"sym":{ "sym":"6,TRUSD", "contract":"tyche.token" }}' -p $earn
 tcli push action $earn addrewardsym '{"sym":{ "sym":"6,MUSDT", "contract":"amax.mtoken" }}' -p $earn
 tcli push action $earn addrewardsym '{"sym":{ "sym":"6,BTCC", "contract":"mdao.token" }}' -p  $earn
 tcli push action $earn addrewardsym '{"sym":{ "sym":"6,HSTZ", "contract":"mdao.token" }}' -p  $earn
