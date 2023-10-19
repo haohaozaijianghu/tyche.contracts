@@ -1,5 +1,5 @@
-reward=tyche.r311
-earn=tyche.s311
+reward=tyche.r312
+earn=tyche.s312
 admin=admin2
 
 #joss 的私钥 5J3SJ9LrrLaiWUDEHpTnJGVyY6B4P8eq7s6LDzNVgz9MURb2fhx
