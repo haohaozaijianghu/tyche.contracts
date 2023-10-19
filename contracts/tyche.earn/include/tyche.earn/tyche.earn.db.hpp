@@ -47,7 +47,7 @@ static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
 
 struct aplink_farm {
     name contract           = "aplink.farm"_n;
-    uint64_t lease_id       = 9;                    //TODO       
+    uint64_t lease_id       = 12;                        
     asset unit_reward       = asset(1, symbol("APL", 4));
 };
 
