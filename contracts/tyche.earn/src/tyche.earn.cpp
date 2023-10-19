@@ -454,6 +454,7 @@ void tyche_earn::addrewardsym(const extended_symbol& sym) {
       s.on_shelf                    = true;
    });
 }
+//
 
 void  tyche_earn::_claimreward(const name& from, const uint64_t& term_code, const symbol& sym ){
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
