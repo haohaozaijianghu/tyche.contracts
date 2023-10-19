@@ -90,7 +90,7 @@ void tyche_reward::splitintr(){
    //获取本金总数
    auto pools         = earn_pool_t::tbl_t(_gstate.tyche_earn_contract, _gstate.tyche_earn_contract.value);
    auto pool_itr      = pools.begin();
-   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "save plan not found" )
+   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "earn pool not found" )
    auto total_quant  = asset(0, _gstate.total_interest_quant.symbol);
    while( pool_itr != pools.end()) {
       total_quant += pool_itr->avl_principal;
