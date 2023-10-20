@@ -456,6 +456,13 @@ void tyche_earn::addrewardsym(const extended_symbol& sym) {
 }
 //
 
+void tyche_earn::setmindepamt(const asset& quant) {
+   require_auth(_self);
+   CHECKC(quant.symbol== _gstate.min_deposit_amount.symbol, err::MEMO_FORMAT_ERROR, "symbol error")
+   _gstate.min_deposit_amount      = quant;
+}
+
+
 void  tyche_earn::_claimreward(const name& from, const uint64_t& term_code, const symbol& sym ){
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
    auto code               =  sym;
