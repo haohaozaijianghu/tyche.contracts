@@ -96,3 +96,7 @@ tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$earn'", "quanti
 
 
 tcli push action $reward initrwd '[ "230.000000 BTCC" ]' -p $reward
+
+
+
+tcli push action $earn setpooltime '[1,]' -p $earn

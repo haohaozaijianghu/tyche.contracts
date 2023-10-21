@@ -5,6 +5,8 @@
 
 #include "safemath.hpp"
 #include <utils.hpp>
+// #include <eosiolib/time.hpp> 
+#include <eosio/time.hpp>
 
 static constexpr eosio::name active_permission{"active"_n};
 
@@ -629,6 +631,7 @@ void tyche_earn::createpool(const uint64_t& code, const uint64_t& term_interval_
          c.share_multiplier      = share_multiplier;
          c.interest_reward       = _init_interest_conf();
          c.on_shelf              = true;
+         c.created_at            = time_point_sec(current_time_point());
       });
    } else {
       pools.modify( pool_itr, _self, [&]( auto& c ) {
@@ -686,6 +689,24 @@ void tyche_earn::setaplconf( const uint64_t& lease_id, const asset& unit_reward 
    require_auth(_self);
    _gstate.apl_farm.lease_id     = lease_id;
    _gstate.apl_farm.unit_reward  = unit_reward;
+}
+
+// time_point_sec string_to_time_point_sec(const string& s) {
+//   time_point_sec tp;
+//   istringstream ss(s);
+//   ss >> tp;
+//   return tp;
+// }
+
+void tyche_earn::setpooltime(const uint64_t& code, const uint64_t& created_at )  {
+   auto pools              = earn_pool_t::tbl_t(_self, _self.value);
+   auto pool_itr           = pools.find( code );
+   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "earn pool not found" )
+
+   time_point_sec tp(created_at); 
+   pools.modify( pool_itr, _self, [&]( auto& c ) {
+      c.created_at = tp;
+   });
 }
 
 }
