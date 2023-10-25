@@ -41,7 +41,7 @@ void tyche_reward::ontransfer(const name& from, const name& to, const asset& qua
    if(from == _gstate.tyche_earn_contract) return;
    if(from == get_self() || to != get_self()) return;
    CHECKC( from != to, err::ACCOUNT_INVALID, "cannot transfer to self" );
-   CHECKC( from == _gstate.refueler_account, err::ACCOUNT_INVALID, "from must: "+ from.to_string() + ", refueler_account:" + _gstate.refueler_account.to_string())
+   // CHECKC( from == _gstate.refueler_account, err::ACCOUNT_INVALID, "from must: "+ from.to_string() + ", refueler_account:" + _gstate.refueler_account.to_string())
 
    auto token_bank = get_first_receiver();
    if(memo == "interest" && quant.symbol == _gstate.total_interest_quant.symbol) {
