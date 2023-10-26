@@ -35,10 +35,10 @@ tcli push action tyche.token transfer '["joss", "'$earn'", "100.00000000 TYCHE",
 
 
 tcli push action $earn createpool '[1, 1800, 1]' -p $earn
-tcli push action $earn createpool '[2, 1860, 2]' -p $earn
-tcli push action $earn createpool '[3, 1920, 3]' -p $earn
-tcli push action $earn createpool '[4, 1980, 4]' -p $earn
-tcli push action $earn createpool '[5, 2040, 5]' -p $earn
+tcli push action $earn createpool '[2, 1860, 5]' -p $earn
+tcli push action $earn createpool '[3, 1920, 7]' -p $earn
+tcli push action $earn createpool '[4, 1980, 10]' -p $earn
+tcli push action $earn createpool '[5, 2040, 20]' -p $earn
 
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$earn'", "quantity": "100.000000 MUSDT", "memo": "deposit:2"}' -p joss
 tcli push action amax.mtoken transfer '{"from": "joss", "to": "'$reward'", "quantity": "1000.000000 MUSDT", "memo": "interest"}' -p joss
