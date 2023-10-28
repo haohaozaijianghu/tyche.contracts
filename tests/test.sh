@@ -105,6 +105,8 @@ tcli push action $earn setpooltime '[1,]' -p $earn
 
 tcli push action $earn setaplconf '[9, "0.3000 APL"]' -p $earn
 
+tcli push action $earn allotapl '["josstest"]' -p $earn
+
 
 
 
