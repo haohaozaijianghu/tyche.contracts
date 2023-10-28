@@ -65,7 +65,7 @@ tcli push action amax.mtoken transfer '{"from": "josstest", "to": "'$earn'", "qu
 
 //打回测试
 tcli push action tyche.token transfer '{"from": "josstest", "to": "'$earn'", "quantity": "100.000000 TRUSD", "memo": "1"}' -p josstest
-tcli push action amax.mtoken transfer '{"from": "josstest", "to": "'$earn'", "quantity": "100.000000 MUSDT", "memo": "deposit:2"}' -p josstest
+tcli push action amax.mtoken transfer '{"from": "josstest", "to": "'$earn'", "quantity": "100.000000 MUSDT", "memo": "deposit:5"}' -p josstest
 //打入利息
 
 tcli push action mdao.token transfer '{"from": "ad", "to": "joss", "quantity": "10000.000000 BTCC", "memo": "deposit:1"}' -p ad
@@ -100,3 +100,9 @@ tcli push action $reward initrwd '[ "230.000000 BTCC" ]' -p $reward
 
 
 tcli push action $earn setpooltime '[1,]' -p $earn
+
+
+
+tcli push action $earn setaplconf '[9, "0.3000 APL"]' -p $earn
+
+

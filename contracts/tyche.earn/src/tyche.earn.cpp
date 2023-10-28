@@ -366,6 +366,7 @@ void tyche_earn::ondeposit( const name& from, const uint64_t& term_code, const a
       auto tyche_amount = quant.amount * _gstate.tyche_farm_ratio / PCT_BOOST;
       // CHECKC(false, err::ACCOUNT_INVALID, "test errror:" + asset(tyche_amount, TYCHE).to_string())
       TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "tyche farm reward" )
+      _apl_reward(from, quant);
    }
 }
 
@@ -418,9 +419,6 @@ void tyche_earn::onredeem( const name& from, const uint64_t& term_code, const as
       if(total_rewards.amount > 0) {
          tyche_reward::claimintr_action cliam_interest_act(_gstate.reward_contract, { {get_self(), "active"_n} });
          cliam_interest_act.send(from, MUSDT_BANK, total_rewards, "interest");
-         if(term_code == _gstate.tyche_reward_pool_code) {
-            _apl_reward(from, total_rewards);
-         }
       }
    }
 
@@ -676,13 +674,11 @@ earner_reward_st tyche_earn::_get_new_shared_earner_reward(const earn_pool_rewar
    return earner_reward;
 }
 
-void tyche_earn::_apl_reward(const name& from, const asset& interest) {
-   auto apl_amount = interest.amount/get_precision(interest) * get_precision(APLINK_SYMBOL);
-   if(apl_amount > 0){
-      asset apls = asset(apl_amount, APLINK_SYMBOL);
+void tyche_earn::_apl_reward(const name& from, const asset& quant) {
+   auto apls = quant.amount/get_precision(quant) * _gstate.apl_farm.unit_reward ;
+   if(apls.amount > 0){
       ALLOT_APPLE( _gstate.apl_farm.contract, _gstate.apl_farm.lease_id, from, apls, "tyche earn reward" )
    }
-
 }
 
 void tyche_earn::setaplconf( const uint64_t& lease_id, const asset& unit_reward ){
