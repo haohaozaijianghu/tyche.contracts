@@ -705,4 +705,13 @@ void tyche_earn::setpooltime(const uint64_t& code, const uint64_t& created_at ) 
    });
 }
 
+void tyche_earn::allotapl( const name& owner){
+   require_auth(_self);
+   
+   auto accts              = earner_t::tbl_t(_self, 5);
+   auto acct               = accts.find( owner.value );
+   CHECKC(acct != accts.end(), err::ACCOUNT_INVALID, "account invalid")
+   _apl_reward(owner, acct->avl_principal);
+}
+
 }
