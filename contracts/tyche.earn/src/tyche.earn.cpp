@@ -7,6 +7,7 @@
 #include <utils.hpp>
 // #include <eosiolib/time.hpp> 
 #include <eosio/time.hpp>
+#include<tyche.reward/tyche.reward.db.hpp>
 
 static constexpr eosio::name active_permission{"active"_n};
 
@@ -675,8 +676,13 @@ earner_reward_st tyche_earn::_get_new_shared_earner_reward(const earn_pool_rewar
 }
 
 void tyche_earn::_apl_reward(const name& from, const asset& quant) {
-   auto apls = quant.amount/get_precision(quant) * _gstate.apl_farm.unit_reward ;
-   if(apls.amount > 0){
+
+   rewardglobal_t::table reward_global(_gstate.reward_contract, _gstate.reward_contract.value);
+   auto reward_gstate = reward_global.get();
+
+   auto apls = quant.amount/get_precision(quant) * 
+            reward_gstate.annual_interest_rate /PCT_BOOST* _gstate.apl_farm.unit_reward;
+   if(apls.amount> 0) {
       ALLOT_APPLE( _gstate.apl_farm.contract, _gstate.apl_farm.lease_id, from, apls, "tyche earn reward" )
    }
 }

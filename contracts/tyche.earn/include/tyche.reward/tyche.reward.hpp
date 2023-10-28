@@ -23,5 +23,4 @@ class tyche_reward {
       using claimreward_action   = eosio::action_wrapper<"claimreward"_n,  &tyche_reward::claimreward>;
       using claimintr_action     = eosio::action_wrapper<"claimintr"_n,    &tyche_reward::claimintr>;
 };
-
 } //namespace tychefi
