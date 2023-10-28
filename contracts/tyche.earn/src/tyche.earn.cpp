@@ -680,10 +680,12 @@ void tyche_earn::_apl_reward(const name& from, const asset& quant) {
    rewardglobal_t::table reward_global(_gstate.reward_contract, _gstate.reward_contract.value);
    auto reward_gstate = reward_global.get();
 
-   auto apls = quant.amount/get_precision(quant) * 
-            reward_gstate.annual_interest_rate /PCT_BOOST* _gstate.apl_farm.unit_reward;
-   if(apls.amount> 0) {
-      ALLOT_APPLE( _gstate.apl_farm.contract, _gstate.apl_farm.lease_id, from, apls, "tyche earn reward" )
+   auto apls_amount = quant.amount/get_precision(quant) * 
+            reward_gstate.annual_interest_rate * _gstate.apl_farm.unit_reward.amount / PCT_BOOST;
+
+   if(apls_amount > 0) {
+
+      ALLOT_APPLE( _gstate.apl_farm.contract, _gstate.apl_farm.lease_id, from, asset(apls_amount, APLINK_SYMBOL), "tyche earn reward" )
    }
 }
 
