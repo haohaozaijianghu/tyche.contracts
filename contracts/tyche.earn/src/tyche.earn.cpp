@@ -364,7 +364,7 @@ void tyche_earn::ondeposit( const name& from, const uint64_t& term_code, const a
    //只有天池5号才有奖励
    if(term_code == _gstate.tyche_reward_pool_code) {
       //打出TYCHE
-      auto tyche_amount = quant.amount * _gstate.tyche_farm_ratio / PCT_BOOST;
+      auto tyche_amount = quant.amount * _gstate.tyche_farm_ratio / PCT_BOOST * (get_precision(TYCHE)/get_precision(quant.symbol));
       // CHECKC(false, err::ACCOUNT_INVALID, "test errror:" + asset(tyche_amount, TYCHE).to_string())
       TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "tyche farm reward" )
       _apl_reward(from, quant);
@@ -720,6 +720,7 @@ void tyche_earn::allotapl( const name& owner){
    auto acct               = accts.find( owner.value );
    CHECKC(acct != accts.end(), err::ACCOUNT_INVALID, "account invalid")
    _apl_reward(owner, acct->avl_principal);
+   
 }
 
 }
