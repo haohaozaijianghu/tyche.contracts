@@ -404,8 +404,8 @@ void tyche_earn::onredeem( const name& from, const uint64_t& term_code, const as
       // 内部调用发放利息
       // 发放利息
       if(total_rewards.amount > 0 ) {
-         tyche_reward::claimreward_action cliam_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
-         cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "reward:" + to_string(term_code));
+         tyche_reward::claimreward_action claim_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
+         claim_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "reward:" + to_string(term_code));
       }
    }
 
@@ -501,8 +501,8 @@ void  tyche_earn::_claimreward(const name& from, const uint64_t& term_code, cons
    //内部调用发放利息
    //发放利息
    if(total_rewards.amount > 0) {
-      tyche_reward::claimreward_action cliam_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
-      cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "reward:" + to_string(term_code));
+      tyche_reward::claimreward_action claim_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
+      claim_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "reward:" + to_string(term_code));
    }
 }
 
@@ -560,8 +560,8 @@ bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& term_code
       //内部调用发放利息
       //发放利息
       if(total_rewards.amount > 0) {
-         tyche_reward::claimreward_action cliam_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
-         cliam_reward_act.send(from, reward_symbol_ptr->sym.get_contract(), total_rewards, "reward:" + to_string(term_code));
+         tyche_reward::claimreward_action claim_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
+         claim_reward_act.send(from, reward_symbol_ptr->sym.get_contract(), total_rewards, "reward:" + to_string(term_code));
          existed = true;
       }
       reward_symbol_ptr++;
