@@ -360,13 +360,13 @@ void tyche_earn::ondeposit( const name& from, const uint64_t& term_code, const a
       });
    }
    //transfer nusdt to user
-   TRANSFER( _gstate.lp_token.get_contract(), from, asset(quant.amount, _gstate.lp_token.get_symbol()), "deposit credential" )
+   TRANSFER( _gstate.lp_token.get_contract(), from, asset(quant.amount, _gstate.lp_token.get_symbol()), "deposit credential:" + to_string(term_code)  )
    //只有天池5号才有奖励
    if(term_code == _gstate.tyche_reward_pool_code) {
       //打出TYCHE
       auto tyche_amount = quant.amount * _gstate.tyche_farm_ratio / PCT_BOOST * (get_precision(TYCHE)/get_precision(quant.symbol));
       // CHECKC(false, err::ACCOUNT_INVALID, "test errror:" + asset(tyche_amount, TYCHE).to_string())
-      TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "tyche farm reward" )
+      TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "tyche farm reward:" + to_string(term_code))
       _apl_reward(from, quant);
    }
 }
@@ -407,7 +407,7 @@ void tyche_earn::onredeem( const name& from, const uint64_t& term_code, const as
       // 发放利息
       if(total_rewards.amount > 0 ) {
          tyche_reward::claimreward_action cliam_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
-         cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "reward");
+         cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "reward:" + to_string(term_code));
       }
    }
 
@@ -419,7 +419,7 @@ void tyche_earn::onredeem( const name& from, const uint64_t& term_code, const as
       //发放利息
       if(total_rewards.amount > 0) {
          tyche_reward::claimintr_action cliam_interest_act(_gstate.reward_contract, { {get_self(), "active"_n} });
-         cliam_interest_act.send(from, MUSDT_BANK, total_rewards, "interest");
+         cliam_interest_act.send(from, MUSDT_BANK, total_rewards, "interest:" + to_string(term_code));
       }
    }
 
@@ -505,7 +505,7 @@ void  tyche_earn::_claimreward(const name& from, const uint64_t& term_code, cons
    //发放利息
    if(total_rewards.amount > 0) {
       tyche_reward::claimreward_action cliam_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
-      cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "reward");
+      cliam_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "reward:" + to_string(term_code));
    }
 }
 
@@ -564,7 +564,7 @@ bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& term_code
       //发放利息
       if(total_rewards.amount > 0) {
          tyche_reward::claimreward_action cliam_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
-         cliam_reward_act.send(from, reward_symbol_ptr->sym.get_contract(), total_rewards, "reward");
+         cliam_reward_act.send(from, reward_symbol_ptr->sym.get_contract(), total_rewards, "reward:" + to_string(term_code));
          existed = true;
       }
       reward_symbol_ptr++;
@@ -684,7 +684,6 @@ void tyche_earn::_apl_reward(const name& from, const asset& quant) {
             reward_gstate.annual_interest_rate * _gstate.apl_farm.unit_reward.amount / PCT_BOOST;
 
    if(apls_amount > 0) {
-
       ALLOT_APPLE( _gstate.apl_farm.contract, _gstate.apl_farm.lease_id, from, asset(apls_amount, APLINK_SYMBOL), "tyche earn reward" )
    }
 }

@@ -60,7 +60,7 @@ tcli get currency balance amax.mtoken josstest
 
 tcli get currency balance amax.mtoken tyche.s133
 //存入MUSDT
-tcli push action amax.mtoken transfer '{"from": "josstest", "to": "'$earn'", "quantity": "100.000000 MUSDT", "memo": "deposit:2"}' -p josstest
+tcli push action amax.mtoken transfer '{"from": "josstest", "to": "'$earn'", "quantity": "100.000000 MUSDT", "memo": "deposit:5"}' -p josstest
 tcli push action amax.mtoken transfer '{"from": "josstest", "to": "'$earn'", "quantity": "100.000000 MUSDT", "memo": "deposit:1"}' -p josstest
 
 //打回测试
@@ -103,7 +103,7 @@ tcli push action $earn setpooltime '[1,]' -p $earn
 
 
 
-tcli push action $earn setaplconf '[9, "0.3000 APL"]' -p $earn
+tcli push action $earn setaplconf '[9, "10.0000 APL"]' -p $earn
 
 tcli push action $earn allotapl '["josstest"]' -p $earn
 

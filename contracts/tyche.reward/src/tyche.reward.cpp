@@ -119,7 +119,7 @@ void tyche_reward::_save_reward_info(const asset& quant, const name& token_bank,
          row.allocated_reward_quant = asset(0, quant.symbol);
          row.redeemed_reward_quant = asset(0, quant.symbol);
          row.bank = token_bank;
-         row.memo = "reward: " + to_string(pool_conf_code);
+         row.memo = "reward:" + to_string(pool_conf_code);
          row.rewarded_at = current_time_point();
          row.updated_at = current_time_point();
       });
