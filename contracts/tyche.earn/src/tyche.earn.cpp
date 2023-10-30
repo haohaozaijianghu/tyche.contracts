@@ -118,6 +118,7 @@ void tyche_earn::refuelreward( const name& token_bank, const asset& total_reward
 }
 
 void tyche_earn::refuelintrst( const name& token_bank, const asset& total_rewards, const uint64_t& seconds){ 
+   require_auth(_gstate.reward_contract);
    CHECKC( token_bank == MUSDT_BANK, err::RECORD_NOT_FOUND, "bank not equal" )
    auto now             = time_point_sec(current_time_point());
    auto pools           = earn_pool_t::tbl_t(_self, _self.value);
@@ -699,16 +700,5 @@ void tyche_earn::setaplconf( const uint64_t& lease_id, const asset& unit_reward 
 //   ss >> tp;
 //   return tp;
 // }
-
-void tyche_earn::setpooltime(const uint64_t& code, const uint64_t& created_at )  {
-   auto pools              = earn_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr           = pools.find( code );
-   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "earn pool not found" )
-
-   time_point_sec tp(created_at); 
-   pools.modify( pool_itr, _self, [&]( auto& c ) {
-      c.created_at = tp;
-   });
-}
 
 }
