@@ -46,10 +46,10 @@ inline static int128_t calc_reward_per_share_delta( const asset& rewards, const 
    return new_reward_per_share_delta;
 }
 // 根据用户的votes和reward_per_share_delta来计算用户的rewards
-inline static asset calc_sharer_rewards(const asset& user_shares, const int128_t& reward_per_share_delta, const symbol& rewards_symbol) {
-   ASSERT( user_shares.amount >= 0 && reward_per_share_delta >= 0 );
-   int128_t rewards = user_shares.amount * reward_per_share_delta / HIGH_PRECISION;
-   // rewards = rewards * get_precision(rewards_symbol)/get_precision(user_shares.symbol);
+inline static asset calc_sharer_rewards(const asset& earner_shares, const int128_t& reward_per_share_delta, const symbol& rewards_symbol) {
+   ASSERT( earner_shares.amount >= 0 && reward_per_share_delta >= 0 );
+   int128_t rewards = earner_shares.amount * reward_per_share_delta / HIGH_PRECISION;
+   // rewards = rewards * get_precision(rewards_symbol)/get_precision(earner_shares.symbol);
    CHECK( rewards >= 0 && rewards <= std::numeric_limits<int64_t>::max(), "calculated rewards overflow" );
    return asset( (int64_t)rewards, rewards_symbol );
 }
@@ -114,7 +114,6 @@ void tyche_earn::refuelreward( const name& token_bank, const asset& total_reward
       refuelreward_to_all(token_bank, total_rewards, seconds);
    else
       refuelreward_to_pool(token_bank, total_rewards, seconds, pool_conf_code);
-
 }
 
 void tyche_earn::refuelintrst( const name& token_bank, const asset& total_rewards, const uint64_t& seconds){ 
@@ -137,6 +136,7 @@ void tyche_earn::refuelintrst( const name& token_bank, const asset& total_reward
       if( !pool_itr->on_shelf ) {pool_itr++; continue;}
 
       auto rate = pool_itr->avl_principal.amount * pool_itr->share_multiplier * PCT_BOOST / total_share;
+      CHECKC(rate <= PCT_BOOST, err::OVERSIZED, "rate must < PCT_BOOST" )
       auto rewards = asset(total_rewards.amount * rate / PCT_BOOST, total_rewards.symbol);
       auto new_reward_id = _global_state->new_reward_id();
       if( rewards.amount > 0) {
@@ -191,7 +191,7 @@ void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& tota
             reward.total_rewards                   += total_rewards;
             reward.last_rewards                    = total_rewards;
             reward.unalloted_rewards               += total_rewards;
-            reward.last_reward_per_share           = reward.reward_per_share ;
+            reward.last_reward_per_share           = reward.reward_per_share;
             reward.reward_per_share                = reward.reward_per_share + calc_reward_per_share_delta(total_rewards, pool_itr->avl_principal);
          }
    });
@@ -357,7 +357,7 @@ void tyche_earn::ondeposit( const name& from, const uint64_t& term_code, const a
          c.term_ended_at               = now + pool_itr->term_interval_sec;
       });
    }
-   //transfer nusdt to user
+   //transfer nusdt to earner
    TRANSFER( _gstate.lp_token.get_contract(), from, asset(quant.amount, _gstate.lp_token.get_symbol()), "deposit credential:" + to_string(term_code)  )
    //只有天池5号才有奖励
    if(term_code == _gstate.tyche_reward_pool_code) {
