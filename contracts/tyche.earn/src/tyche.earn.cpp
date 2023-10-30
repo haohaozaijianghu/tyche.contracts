@@ -213,8 +213,6 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
    while( pool_itr != pools.end() ) {
       if( pool_itr->on_shelf ) {
           total_share += pool_itr->share_multiplier * pool_itr->avl_principal.amount;
-         // CHECKC( total_share > 0, err::INCORRECT_AMOUNT, "total share is inpositive: " + to_string(total_share) + ", avl_principal:" + pool_itr->avl_principal.to_string() + ", "  
-         // + ", share_multiplier: " + to_string(pool_itr->share_multiplier) + ", " + "older_total_share: " + to_string(older_total_share) )
       }
       pool_itr++;
    }
@@ -259,7 +257,6 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
             c.airdrop_rewards[total_rewards.symbol] = reward;
          });
       }
-      
       pool_itr++;
    }
 }
