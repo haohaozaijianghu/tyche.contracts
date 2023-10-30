@@ -367,7 +367,7 @@ void tyche_earn::ondeposit( const name& from, const uint64_t& term_code, const a
       auto tyche_amount = quant.amount * _gstate.tyche_farm_ratio / PCT_BOOST * (get_precision(TYCHE)/get_precision(quant.symbol));
       // CHECKC(false, err::ACCOUNT_INVALID, "test errror:" + asset(tyche_amount, TYCHE).to_string())
       TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "tyche farm reward:" + to_string(term_code))
-      _apl_reward(from, quant);
+      _apl_reward(from, quant,term_code);
    }
 }
 
@@ -439,11 +439,10 @@ void tyche_earn::onredeem( const name& from, const uint64_t& term_code, const as
    TRANSFER( MUSDT_BANK, from, asset(quant.amount, MUSDT), "redeem:" + to_string(term_code) )
    if(term_code == _gstate.tyche_reward_pool_code) {
       //打出TYCHE
-      auto tyche_amount = quant.amount * _gstate.tyche_farm_lock_ratio / PCT_BOOST;
+      auto tyche_amount = quant.amount * _gstate.tyche_farm_lock_ratio / PCT_BOOST * (get_precision(TYCHE)/get_precision(acct->avl_principal));
       TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "redeem:" + to_string(term_code) )
    }
 }
-
 
 void tyche_earn::addrewardsym(const extended_symbol& sym) {
    require_auth(_self);
@@ -675,7 +674,7 @@ earner_reward_st tyche_earn::_get_new_shared_earner_reward(const earn_pool_rewar
    return earner_reward;
 }
 
-void tyche_earn::_apl_reward(const name& from, const asset& quant) {
+void tyche_earn::_apl_reward(const name& from, const asset& quant, const uint64_t& term_code) {
 
    rewardglobal_t::table reward_global(_gstate.reward_contract, _gstate.reward_contract.value);
    auto reward_gstate = reward_global.get();
@@ -684,7 +683,7 @@ void tyche_earn::_apl_reward(const name& from, const asset& quant) {
             reward_gstate.annual_interest_rate * _gstate.apl_farm.unit_reward.amount / PCT_BOOST;
 
    if(apls_amount > 0) {
-      ALLOT_APPLE( _gstate.apl_farm.contract, _gstate.apl_farm.lease_id, from, asset(apls_amount, APLINK_SYMBOL), "tyche earn reward" )
+      ALLOT_APPLE( _gstate.apl_farm.contract, _gstate.apl_farm.lease_id, from, asset(apls_amount, APLINK_SYMBOL), "tyche earn reward:" + to_string(term_code))
    }
 }
 
@@ -710,16 +709,6 @@ void tyche_earn::setpooltime(const uint64_t& code, const uint64_t& created_at ) 
    pools.modify( pool_itr, _self, [&]( auto& c ) {
       c.created_at = tp;
    });
-}
-
-void tyche_earn::allotapl( const name& owner){
-   require_auth(_self);
-   
-   auto accts              = earner_t::tbl_t(_self, 5);
-   auto acct               = accts.find( owner.value );
-   CHECKC(acct != accts.end(), err::ACCOUNT_INVALID, "account invalid")
-   _apl_reward(owner, acct->avl_principal);
-   
 }
 
 }

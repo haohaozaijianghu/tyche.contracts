@@ -91,10 +91,8 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
 
    ACTION setpooltime(const uint64_t& code, const uint64_t& created_at );
 
-   ACTION allotapl( const name& owner);
-
    private:
-      void _apl_reward(const name& from, const asset& quant);
+      void _apl_reward(const name& from, const asset& quant, const uint64_t& term_code);
       void _claimreward(const name& from, const uint64_t& term_code, const symbol& sym );  
       bool _claim_pool_rewards(const name& from, const uint64_t& term_code );
 
