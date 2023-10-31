@@ -384,54 +384,7 @@ void tyche_earn::onredeem( const name& from, const uint64_t& term_code, const as
    CHECKC(acct->avl_principal.amount == quant.amount, err::INCORRECT_AMOUNT, "insufficient deposit amount" )
    CHECKC(acct->term_ended_at <= now, err::TIME_PREMATURE, "premature to redeedm" )
    
-   auto pool_airdrop_rewards      = pool_itr->airdrop_rewards;
-   auto earner_airdrop_rewards    = acct->airdrop_rewards;
-   for (auto& pool_airdrop_rewards_kv : pool_itr->airdrop_rewards) { //for循环每一个token
-      auto reward_symbols        = reward_symbol_t::idx_t(_self, _self.value);
-      auto pool_airdrop_reward   = pool_airdrop_rewards_kv.second;
-      auto code                  = pool_airdrop_rewards_kv.first;
-      
-      auto reward_symbol         = reward_symbols.find( pool_airdrop_reward.total_rewards.symbol.code().raw());
-      CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found: " + pool_airdrop_reward.total_rewards.symbol.code().to_string() )
-      CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "save plan not on shelf: "+ pool_airdrop_reward.total_rewards.symbol.code().to_string() )
-      earner_reward_st earner_airdrop_reward = {0, asset(0, pool_airdrop_reward.total_rewards.symbol), asset(0, pool_airdrop_reward.total_rewards.symbol), asset(0, pool_airdrop_reward.total_rewards.symbol)};
-      if( acct->airdrop_rewards.count(code) ){
-         earner_airdrop_reward  = acct->airdrop_rewards.at(code);
-      }
-      auto total_rewards               = _update_reward_info(pool_airdrop_reward, earner_airdrop_reward, acct->avl_principal, true);
-      pool_airdrop_rewards[code]       = pool_airdrop_reward;
-      earner_airdrop_rewards[code]     = earner_airdrop_reward;
-      // 内部调用发放利息
-      // 发放利息
-      if(total_rewards.amount > 0 ) {
-         tyche_reward::claimreward_action claim_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
-         claim_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "reward:" + to_string(term_code));
-      }
-   }
-
-   auto pool_interest_reward     = pool_itr->interest_reward;
-   auto eraner_interest_reward   = acct->interest_reward;
-   {
-      auto total_rewards         = _update_reward_info(pool_interest_reward, eraner_interest_reward, acct->avl_principal, true);
-      //内部调用发放利息
-      //发放利息
-      if(total_rewards.amount > 0) {
-         tyche_reward::claimintr_action cliam_interest_act(_gstate.reward_contract, { {get_self(), "active"_n} });
-         cliam_interest_act.send(from, MUSDT_BANK, total_rewards, "interest:" + to_string(term_code));
-      }
-   }
-
-   pools.modify( pool_itr, _self, [&]( auto& c ) {
-      c.interest_reward                = pool_interest_reward;
-      c.avl_principal.amount           -= quant.amount;
-      c.airdrop_rewards                = pool_airdrop_rewards;
-   });
-
-   accts.modify( acct, _self, [&]( auto& a ) {
-      a.interest_reward                = eraner_interest_reward; 
-      a.avl_principal.amount           -= quant.amount;
-      a.airdrop_rewards                = earner_airdrop_rewards;
-   });
+   _claim_pool_rewards(from, term_code, true);
 
    //打出本金MUSDT
    TRANSFER( MUSDT_BANK, from, asset(quant.amount, MUSDT), "redeem:" + to_string(term_code) )
@@ -460,52 +413,6 @@ void tyche_earn::setmindepamt(const asset& quant) {
    _gstate.min_deposit_amount      = quant;
 }
 
-
-void  tyche_earn::_claimreward(const name& from, const uint64_t& term_code, const symbol& sym ){
-   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
-   auto code               =  sym;
-   auto reward_symbol      = reward_symbols.find( code.code().raw() );
-   CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "save plan not found" )
-   CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "save plan not on shelf" )
-   
-   auto now                = time_point_sec(current_time_point());
-   auto pools              = earn_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr           = pools.find( term_code );
-   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "earn pool not found" )
-
-   auto accts  = earner_t::tbl_t(_self, term_code);
-   auto acct   = accts.find( from.value );
-   CHECKC( acct != accts.end(), err::RECORD_NOT_FOUND, "account not found" )
-
-   CHECKC(pool_itr->airdrop_rewards.count( code ),  err::RECORD_NOT_FOUND, "reward conf not found" )
-   earner_reward_st earner_airdrop_reward = {0, asset(0, sym), asset(0,sym), asset(0, sym)};
-   if(acct->airdrop_rewards.count( code ) >0) {
-      earner_airdrop_reward   = acct->airdrop_rewards.at(code);
-   }
-   
-   auto pool_airdrop_reward     = pool_itr->airdrop_rewards.at(code);
-
-   auto earner_airdrop_rewards   = acct->airdrop_rewards;
-   auto pool_airdrop_rewards     = pool_itr->airdrop_rewards;
-   auto total_rewards            = _update_reward_info(pool_airdrop_reward, earner_airdrop_reward, acct->avl_principal, false);
-   earner_airdrop_rewards[code]  = earner_airdrop_reward;
-   pool_airdrop_rewards[code]    = pool_airdrop_reward;
-   
-   pools.modify( pool_itr, _self, [&]( auto& c ) {
-      c.airdrop_rewards          = pool_airdrop_rewards;
-   });
-   accts.modify( acct, _self, [&]( auto& a ) {
-      a.airdrop_rewards          = earner_airdrop_rewards;
-   });
-
-   //内部调用发放利息
-   //发放利息
-   if(total_rewards.amount > 0) {
-      tyche_reward::claimreward_action claim_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
-      claim_reward_act.send(from, reward_symbol->sym.get_contract(), total_rewards, "reward:" + to_string(term_code));
-   }
-}
-
 void tyche_earn::claimrewards(const name& from){
    require_auth(from);
 
@@ -514,7 +421,7 @@ void tyche_earn::claimrewards(const name& from){
    bool finalclaimed = false;
    while( pool_itr != pools.end() ) {
       if( !pool_itr->on_shelf ) { pool_itr++; continue; }
-      auto claimed   = _claim_pool_rewards(from, pool_itr->code);
+      auto claimed   = _claim_pool_rewards(from, pool_itr->code, false);
       if (!finalclaimed) 
          finalclaimed = claimed;
 
@@ -523,7 +430,7 @@ void tyche_earn::claimrewards(const name& from){
    CHECKC(finalclaimed, err::RECORD_NOT_FOUND, "no reward to claim for " + from.to_string() )
 }
 
-bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& term_code ){
+bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& term_code, const bool& term_end_flag ){
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
    bool existed            = false;
 
@@ -554,7 +461,7 @@ bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& term_code
       auto pool_airdrop_reward     = pool_itr->airdrop_rewards.at(sym);
 
 
-      auto total_rewards            = _update_reward_info(pool_airdrop_reward, earner_airdrop_reward, acct->avl_principal, false);
+      auto total_rewards            = _update_reward_info(pool_airdrop_reward, earner_airdrop_reward, acct->avl_principal, term_end_flag);
       earner_airdrop_rewards[sym]  = earner_airdrop_reward;
       pool_airdrop_rewards[sym]    = pool_airdrop_reward;
       //内部调用发放利息
@@ -566,20 +473,36 @@ bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& term_code
       }
       reward_symbol_ptr++;
    }
-   
+
+
+   auto pool_interest_reward     = pool_itr->interest_reward;
+   auto eraner_interest_reward   = acct->interest_reward;
+   {
+      auto total_rewards         = _update_reward_info(pool_interest_reward, eraner_interest_reward, acct->avl_principal, term_end_flag);
+      //内部调用发放利息
+      //发放利息
+      if(total_rewards.amount > 0) {
+         tyche_reward::claimintr_action cliam_interest_act(_gstate.reward_contract, { {get_self(), "active"_n} });
+         cliam_interest_act.send(from, MUSDT_BANK, total_rewards, "interest:" + to_string(term_code));
+      }
+      existed = true;
+   }
+
+
    pools.modify( pool_itr, _self, [&]( auto& c ) {
-      c.airdrop_rewards          = pool_airdrop_rewards;
+      c.interest_reward                = pool_interest_reward;
+      if( term_end_flag )
+         c.avl_principal.amount        = 0;
+      c.airdrop_rewards                = pool_airdrop_rewards;
    });
+
    accts.modify( acct, _self, [&]( auto& a ) {
-      a.airdrop_rewards          = earner_airdrop_rewards;
+      a.interest_reward                = eraner_interest_reward; 
+      if( term_end_flag ) 
+         a.avl_principal.amount        = 0;
+      a.airdrop_rewards                = earner_airdrop_rewards;
    });
    return existed;
-}
-
-
-void  tyche_earn::claimreward(const name& from, const uint64_t& term_code, const symbol& sym ){
-   require_auth(from);
-   _claimreward(from, term_code, sym);
 }
 
 //领取奖励,返回要领取的奖励
@@ -690,12 +613,5 @@ void tyche_earn::setaplconf( const uint64_t& lease_id, const asset& unit_reward 
    _gstate.apl_farm.lease_id     = lease_id;
    _gstate.apl_farm.unit_reward  = unit_reward;
 }
-
-// time_point_sec string_to_time_point_sec(const string& s) {
-//   time_point_sec tp;
-//   istringstream ss(s);
-//   ss >> tp;
-//   return tp;
-// }
 
 }
