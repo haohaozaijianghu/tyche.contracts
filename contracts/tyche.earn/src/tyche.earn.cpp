@@ -316,7 +316,7 @@ void tyche_earn::ondeposit( const name& from, const uint64_t& term_code, const a
             earner_airdrop_reward.unclaimed_rewards         = asset(0, pool_airdrop_reward.total_rewards.symbol);
             earner_airdrop_reward.claimed_rewards           = asset(0, pool_airdrop_reward.total_rewards.symbol);
             earner_airdrop_reward.total_claimed_rewards     = asset(0, pool_airdrop_reward.total_rewards.symbol);
-            earner_airdrop_reward.last_reward_per_share     = pool_airdrop_reward.reward_per_share;
+            earner_airdrop_reward.last_reward_per_share     = 0; //如果没有，说明此用户在奖励前质押的
          }
 
          int128_t reward_per_share_delta = pool_airdrop_reward.reward_per_share - earner_airdrop_reward.last_reward_per_share;
