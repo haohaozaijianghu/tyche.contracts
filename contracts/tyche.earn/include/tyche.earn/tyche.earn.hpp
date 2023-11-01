@@ -88,6 +88,8 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
 
    ACTION setaplconf(const uint64_t& lease_id, const asset& unit_reward);
 
+   ACTION updatepool(const uint64_t& term_code);
+
    private:
       void _apl_reward(const name& from, const asset& quant, const uint64_t& term_code);
       bool _claim_pool_rewards(const name& from, const uint64_t& term_code, const bool& term_end_flag );
