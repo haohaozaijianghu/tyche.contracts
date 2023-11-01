@@ -172,13 +172,12 @@ void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& tota
    CHECKC( pool_itr->on_shelf, err::RECORD_NOT_FOUND, "save plan not on_shelf" )
 
    pools.modify( pool_itr, _self, [&]( auto& c ) {
-         auto& reward                              = c.airdrop_rewards[ total_rewards.symbol ];
-         reward.reward_id                          = _global_state->new_reward_id();
-         reward.prev_reward_added_at               = reward.reward_added_at;
-         reward.reward_added_at                    = current_time_point();
-
-         earn_pool_reward_map::iterator reward_itr = c.airdrop_rewards.find(total_rewards.symbol);
-         if(reward_itr ==  c.airdrop_rewards.end() ){
+   
+         
+         auto count =  c.airdrop_rewards.count(total_rewards.symbol);
+         if(count == 0 ){
+            auto reward =   earn_pool_reward_st();
+            reward.reward_id                       = _global_state->new_reward_id();
             reward.total_rewards                   = total_rewards;
             reward.last_rewards                    = total_rewards;
             reward.unalloted_rewards               = total_rewards;
@@ -186,13 +185,21 @@ void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& tota
             reward.claimed_rewards                 = asset(0, total_rewards.symbol);
             reward.last_reward_per_share           = 0; 
             reward.reward_per_share                = calc_reward_per_share_delta(total_rewards, pool_itr->avl_principal);
-            
+            reward.prev_reward_added_at            = current_time_point();
+            reward.reward_added_at                 = current_time_point();
+            c.airdrop_rewards[ total_rewards.symbol ] = reward;
          } else {
+            auto  reward                           =  c.airdrop_rewards[ total_rewards.symbol ];
+            reward.reward_id                       = _global_state->new_reward_id();
             reward.total_rewards                   += total_rewards;
             reward.last_rewards                    = total_rewards;
             reward.unalloted_rewards               += total_rewards;
             reward.last_reward_per_share           = reward.reward_per_share;
             reward.reward_per_share                = reward.reward_per_share + calc_reward_per_share_delta(total_rewards, pool_itr->avl_principal);
+            reward.prev_reward_added_at            = reward.reward_added_at;
+            reward.reward_added_at                 = current_time_point();
+            c.airdrop_rewards[ total_rewards.symbol ] = reward;
+            
          }
    });
 }
