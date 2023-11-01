@@ -474,7 +474,6 @@ bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& term_code
       reward_symbol_ptr++;
    }
 
-
    auto pool_interest_reward     = pool_itr->interest_reward;
    auto eraner_interest_reward   = acct->interest_reward;
    {
@@ -484,8 +483,8 @@ bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& term_code
       if(total_rewards.amount > 0) {
          tyche_reward::claimintr_action cliam_interest_act(_gstate.reward_contract, { {get_self(), "active"_n} });
          cliam_interest_act.send(from, MUSDT_BANK, total_rewards, "interest:" + to_string(term_code));
+         existed = true;
       }
-      existed = true;
    }
 
 
