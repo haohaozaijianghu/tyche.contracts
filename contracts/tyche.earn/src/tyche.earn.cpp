@@ -615,28 +615,4 @@ void tyche_earn::setaplconf( const uint64_t& lease_id, const asset& unit_reward 
    _gstate.apl_farm.unit_reward  = unit_reward;
 }
 
-void tyche_earn::updatepool(const uint64_t& term_code){
-   require_auth(_self);
-   auto pools              = earn_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr           = pools.find( term_code );
-   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "earn pool not found" )
-  
-   pools.modify( pool_itr, _self, [&]( auto& c ) {
-      c.avl_principal.amount = 0;
-   });
-
-   auto accts              = earner_t::tbl_t(_self, term_code);
-   auto acct_itr           = accts.begin();
-   auto avl_principal_amount = 0;
-   while( acct_itr != accts.end() ) {
-      avl_principal_amount += acct_itr->avl_principal.amount;
-      acct_itr++;
-   }
-
-   pools.modify( pool_itr, _self, [&]( auto& c ) {
-      c.avl_principal.amount = avl_principal_amount;
-   });
-}
-
-
 }
