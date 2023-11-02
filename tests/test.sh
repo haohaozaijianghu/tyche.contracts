@@ -34,6 +34,7 @@ tcli push action tyche.token transfer '{"from": "joss", "to": "'$earn'", "quanti
 tcli push action tyche.token transfer '["joss", "'$earn'", "100.00000000 TYCHE", ""]' -p joss
 
 
+
 tcli push action $earn setpool '[1, 1800, 1]' -p $earn
 tcli push action $earn setpool '[2, 1860, 2]' -p $earn
 tcli push action $earn setpool '[3, 1920, 3]' -p $earn
