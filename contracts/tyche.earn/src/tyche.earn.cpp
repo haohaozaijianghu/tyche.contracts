@@ -437,6 +437,24 @@ void tyche_earn::claimrewards(const name& from){
    CHECKC(finalclaimed, err::RECORD_NOT_FOUND, "no reward to claim for " + from.to_string() )
 }
 
+
+void tyche_earn::claimreward(const name& from, const symbol& sym){
+   require_auth(from);
+
+   auto pools        = earn_pool_t::tbl_t(_self, _self.value);
+   auto pool_itr     = pools.begin();
+   bool finalclaimed = false;
+   while( pool_itr != pools.end() ) {
+      if( !pool_itr->on_shelf ) { pool_itr++; continue; }
+      auto claimed   = _claim_pool_rewards_by_symbol(from, pool_itr->code, sym, false);
+      if (!finalclaimed) 
+         finalclaimed = claimed;
+
+      pool_itr++;
+   }
+   CHECKC(finalclaimed, err::RECORD_NOT_FOUND, "no reward to claim for " + from.to_string() )
+}
+
 bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& term_code, const bool& term_end_flag ){
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
    bool existed            = false;
@@ -512,6 +530,72 @@ bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& term_code
    });
    return existed;
 }
+
+bool tyche_earn::_claim_pool_rewards_by_symbol(const name& from, const uint64_t& term_code, const symbol& reward_symbol, const bool& term_end_flag ){
+   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
+   bool existed            = false;
+
+   auto now                = time_point_sec(current_time_point());
+   auto pools              = earn_pool_t::tbl_t(_self, _self.value);
+   auto pool_itr           = pools.find( term_code );
+   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "earn pool not found" )
+
+   auto accts  = earner_t::tbl_t(_self, term_code);
+   auto acct   = accts.find( from.value );
+   if(acct == accts.end())
+      return false;
+
+   auto reward_symbol_ptr        = reward_symbols.find(reward_symbol.code().raw());
+   auto earner_airdrop_rewards   = acct->airdrop_rewards;
+   auto pool_airdrop_rewards     = pool_itr->airdrop_rewards;
+   if(reward_symbol_ptr != reward_symbols.end() && reward_symbol_ptr->on_shelf && pool_itr->airdrop_rewards.count( reward_symbol ) != 0) {
+      earner_reward_st earner_airdrop_reward = {0, asset(0, reward_symbol), asset(0,reward_symbol), asset(0, reward_symbol)};
+      if(acct->airdrop_rewards.count( reward_symbol ) > 0) {
+         earner_airdrop_reward   = acct->airdrop_rewards.at(reward_symbol);
+      }
+      auto pool_airdrop_reward     = pool_itr->airdrop_rewards.at(reward_symbol);
+
+
+      auto total_rewards                     = _update_reward_info(pool_airdrop_reward, earner_airdrop_reward, acct->avl_principal, term_end_flag);
+      earner_airdrop_rewards[reward_symbol]  = earner_airdrop_reward;
+      pool_airdrop_rewards[reward_symbol]    = pool_airdrop_reward;
+      //内部调用发放利息
+      //发放利息
+      if(total_rewards.amount > 0) {
+         tyche_reward::claimreward_action claim_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
+         claim_reward_act.send(from, reward_symbol_ptr->sym.get_contract(), total_rewards, "reward:" + to_string(term_code));
+         existed = true;
+      }
+      reward_symbol_ptr++;
+   }
+
+   auto pool_interest_reward     = pool_itr->interest_reward;
+   auto eraner_interest_reward   = acct->interest_reward;
+   
+   if(reward_symbol == MUSDT) {
+      auto total_rewards         = _update_reward_info(pool_interest_reward, eraner_interest_reward, acct->avl_principal, term_end_flag);
+      //内部调用发放利息
+      //发放利息
+      if(total_rewards.amount > 0) {
+         tyche_reward::claimintr_action cliam_interest_act(_gstate.reward_contract, { {get_self(), "active"_n} });
+         cliam_interest_act.send(from, MUSDT_BANK, total_rewards, "interest:" + to_string(term_code));
+         existed = true;
+      }
+   }
+
+   pools.modify( pool_itr, _self, [&]( auto& c ) {
+      c.interest_reward                = pool_interest_reward;
+      c.airdrop_rewards                = pool_airdrop_rewards;
+   });
+
+   accts.modify( acct, _self, [&]( auto& a ) {
+      a.interest_reward                = eraner_interest_reward;          
+      a.airdrop_rewards                = earner_airdrop_rewards;
+   });
+   return existed;
+}
+
+
 
 //领取奖励,返回要领取的奖励
 asset tyche_earn::_update_reward_info( earn_pool_reward_st& pool_reward, earner_reward_st& earner_reward, const asset& earner_avl_principal, const bool& term_end_flag) {

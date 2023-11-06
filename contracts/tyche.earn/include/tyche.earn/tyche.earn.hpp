@@ -75,6 +75,8 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
 
    //USER
    ACTION claimrewards( const name& from );
+
+   ACTION claimreward( const name& from, const symbol& sym);
    
    //admin
    ACTION addrewardsym(const extended_symbol& sym);
@@ -92,6 +94,7 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
    private:
       void _apl_reward(const name& from, const asset& quant, const uint64_t& term_code);
       bool _claim_pool_rewards(const name& from, const uint64_t& term_code, const bool& term_end_flag );
+      bool _claim_pool_rewards_by_symbol(const name& from, const uint64_t& term_code, const symbol& reward_symbol, const bool& term_end_flag );
 
       void onredeem( const name& from, const uint64_t& term_code, const asset& quant );
 
