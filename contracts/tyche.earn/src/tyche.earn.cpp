@@ -402,6 +402,14 @@ void tyche_earn::onredeem( const name& from, const uint64_t& term_code, const as
    }
 }
 
+
+void tyche_earn::settychepct(const uint64_t& tyche_farm_ratio, const uint64_t& tyche_farm_lock_ratio){
+   require_auth(_self);
+   CHECKC(tyche_farm_ratio + tyche_farm_lock_ratio == 100, err::INCORRECT_AMOUNT, "all tyche farm ratio must be 1%")
+   _gstate.tyche_farm_ratio            = tyche_farm_ratio;
+   _gstate.tyche_farm_lock_ratio       = tyche_farm_lock_ratio;
+}
+
 void tyche_earn::addrewardsym(const extended_symbol& sym) {
    require_auth(_self);
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);

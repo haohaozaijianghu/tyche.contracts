@@ -78,8 +78,9 @@ tcli push action mdao.token transfer '{"from": "joss", "to": "'$reward'", "quant
 
 
 
-tcli push action $earn claimreward '[ "joss", 2, "6,MUSDC" ]' -p joss
- tcli push action $earn claimreward '[ "joss", 2, "6,AMMX" ]' -p joss
+tcli push action $earn claimreward '[ "joss", "6,MUSDC" ]' -p joss
+ tcli push action $earn claimreward '[ "joss", "6,AMMX" ]' -p joss
+ tcli push action $earn claimreward '[ "jtest2", "6,MUSDT" ]' -p jtest2
 
 
 tcli push action $reward splitintr '{}' -p joss
