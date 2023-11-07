@@ -109,8 +109,10 @@ tcli push action $earn setpooltime '[1,]' -p $earn
 tcli push action $earn setaplconf '[9, "10.0000 APL"]' -p $earn
 
 tcli push action $earn allotapl '["josstest"]' -p $earn
+tcli push action $earn settychepct '[20,80]' -p $earn
 
 
+tcli push action $earn addrewardsym '{"sym":{ "sym":"6,HSTZ", "contract":"mdao.token" }}' -p  $earn
 
 
 tcli push action $earn updatepool '[1]' -p $earn

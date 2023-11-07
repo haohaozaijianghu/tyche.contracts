@@ -446,15 +446,16 @@ void tyche_earn::claimrewards(const name& from){
 }
 
 
-void tyche_earn::claimreward(const name& from, const symbol& sym){
+void tyche_earn::claimreward(const name& from, const std::string& sym){
    require_auth(from);
 
    auto pools        = earn_pool_t::tbl_t(_self, _self.value);
    auto pool_itr     = pools.begin();
+   auto sym_code     = symbol_from_string(sym);
    bool finalclaimed = false;
    while( pool_itr != pools.end() ) {
       if( !pool_itr->on_shelf ) { pool_itr++; continue; }
-      auto claimed   = _claim_pool_rewards_by_symbol(from, pool_itr->code, sym, false);
+      auto claimed   = _claim_pool_rewards_by_symbol(from, pool_itr->code, sym_code, false);
       if (!finalclaimed) 
          finalclaimed = claimed;
 

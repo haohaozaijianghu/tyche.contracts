@@ -76,7 +76,7 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
    //USER
    ACTION claimrewards( const name& from );
 
-   ACTION claimreward( const name& from, const symbol& sym);
+   ACTION claimreward( const name& from, const std::string& sym);
    
    //admin
    ACTION addrewardsym(const extended_symbol& sym);
