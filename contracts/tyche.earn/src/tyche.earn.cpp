@@ -414,7 +414,7 @@ void tyche_earn::addrewardsym(const extended_symbol& sym) {
    require_auth(_self);
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
    auto reward_symbol      = reward_symbols.find( sym.get_symbol().code().raw() );
-   CHECKC( reward_symbol == reward_symbols.end(), err::RECORD_EXISTING, "save plan not found" )
+   CHECKC( reward_symbol == reward_symbols.end(), err::RECORD_EXISTING, "reward symbol already exist")
    reward_symbols.emplace( _self, [&]( auto& s ) {
       s.sym                         = sym;
       s.on_shelf                    = true;
