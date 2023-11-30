@@ -51,6 +51,19 @@ struct aplink_farm {
     asset unit_reward       = asset(1, symbol("APL", 4));
 };
 
+// Scope: _self
+struct point_history_st {
+    uint64_t                bias;   
+    uint64_t                slope;
+    uint64_t                block_time;
+    uint64_t                block_num;
+
+    point_history_st() {}
+
+    // EOSLIB_SERIALIZE( point_history_t,  (bias)(slope)(block_time)(block_num) )
+};
+
+
 NTBL("global") global_t {
     name                admin                   = "tyche.admin"_n;
     name                lp_refueler             = "tyche.admin"_n;                          //LP TRUSD系统充入账户
@@ -66,6 +79,7 @@ NTBL("global") global_t {
     uint8_t             transfers_enabled       = 1;                                     //是否允许转账
 
     std::map<uint64_t, int64_t> slope_changes;                                              //# time -> signed slope change
+    std::map<uint64_t, point_history_st> point_history;                                               //# time -> signed bias change
 
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(reward_contract)
@@ -122,22 +136,6 @@ TBL user_point_epoch_t {
     EOSLIB_SERIALIZE( user_point_epoch_t, (earner)(epoch) )
 };
 
-//Scope: _self
-TBL point_history_t {
-    uint64_t                epoch;            //global epoch
-    uint64_t                bias;   
-    uint64_t                slope;
-    uint64_t                block_time;
-    uint64_t                block_num;
-
-    point_history_t() {}
-    point_history_t(const uint64_t& c): epoch(c) {}
-    uint64_t primary_key()const { return epoch; }
-
-    typedef multi_index<"pointhistory"_n, point_history_t> tbl_t;
-
-    EOSLIB_SERIALIZE( point_history_t,  (epoch)(bias)(slope)(block_time)(block_num) )
-};
 
 TBL globalidx {
     uint64_t        reward_id                   = 0;               // the auto-increament reward id

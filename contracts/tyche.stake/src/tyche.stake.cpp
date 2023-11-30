@@ -41,6 +41,14 @@ void tyche_stake::init(const name& admin, const name& lp_refueler, const extende
    require_auth( _self );
    _gstate.admin                    = admin;
    _gstate.lp_refueler              = lp_refueler;
+   _gstate.principal_token          = principal_token;
+   _gstate.lp_token                 = lp_token;
+   _gstate.enabled                  = true;
+   _gstate.min_deposit_amount       = asset(10'000000, principal_token.get_symbol());
+   auto ph = point_history_st();
+   ph.block_time = current_time_point().sec_since_epoch();
+   // ph.block_num = current_block_num();
+   _gstate.point_history[0] = ph;
 }
 
 /**
