@@ -72,8 +72,14 @@ class [[eosio::contract("tyche.stake")]] tyche_stake : public contract {
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
    
 
-   private:
-
+   private: 
+      void _check_point(const name& earner, lock_balance_st& old_locked, lock_balance_st& new_locked);
+      uint128_t get_slope(uint128_t amount, uint64_t time){
+         return amount  / time;
+      }
+      uint64_t get_bias(uint128_t slope, uint64_t time){
+         return slope * time;
+      }
       global_singleton     _global;
       global_t             _gstate;
       dbc                  _db;

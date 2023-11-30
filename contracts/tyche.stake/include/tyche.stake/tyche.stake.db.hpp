@@ -35,8 +35,12 @@ static constexpr name       TYCHE_BANK       = "tyche.token"_n;
 static constexpr symbol     TYCHE            = symbol(symbol_code("TYCHE"), 8);
 static constexpr name       APLINK_BANK      = "aplink.token"_n ;
 static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
-// static constexpr name       INTEREST         = "interest"_n ;
-// static constexpr name       REDPACK          = "redpack"_n ;
+
+
+
+static constexpr uint128_t    WEEK            = 7 * 86400;  // all future times are rounded by week
+static constexpr uint128_t    MAXTIME         = 4 * 365 * 86400;  //4 years
+static constexpr uint128_t    MULTIPLIER      = 1000000000000000000;    // 10^18
 
 
 #define HASH256(str) sha256(const_cast<char*>(str.c_str()), str.size())
@@ -51,18 +55,17 @@ struct aplink_farm {
     asset unit_reward       = asset(1, symbol("APL", 4));
 };
 
-// Scope: _self
-struct point_history_st {
-    uint64_t                bias;   
-    uint64_t                slope;
-    uint64_t                block_time;
-    uint64_t                block_num;
-
-    point_history_st() {}
-
-    // EOSLIB_SERIALIZE( point_history_t,  (bias)(slope)(block_time)(block_num) )
+struct lock_balance_st {
+    asset               quant;                  //锁仓金额
+    uint64_t            end;                    //解锁时间
+    lock_balance_st(){};
 };
-
+struct point_t {
+    int128_t                bias        =0;   
+    int128_t                slope       =0;                      // - dweight / dt
+    uint64_t                block_time  =0;
+    uint64_t                block_num   =0;
+};
 
 NTBL("global") global_t {
     name                admin                   = "tyche.admin"_n;
@@ -79,18 +82,18 @@ NTBL("global") global_t {
     uint8_t             transfers_enabled       = 1;                                     //是否允许转账
 
     std::map<uint64_t, int64_t> slope_changes;                                              //# time -> signed slope change
-    std::map<uint64_t, point_history_st> point_history;                                               //# time -> signed bias change
+    std::map<uint64_t, point_t> point_history;                                               //# time -> signed bias change
 
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(reward_contract)
                                 (principal_token)(lp_token)(min_deposit_amount)
-                                (total_supply)(point_history_epoch)(enabled)(transfers_enabled)(slope_changes))
+                                (total_supply)(point_history_epoch)(enabled)(transfers_enabled)(slope_changes)(point_history))
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
 
 //scope: _self
-struct earn_stake_locked {
+TBL earn_stake_locked {
     name                owner;                          //用户  PK
     asset               amount;                         //锁仓金额
     time_point_sec      unlocked_at;                    //解锁时间
@@ -109,8 +112,8 @@ struct earn_stake_locked {
 TBL user_point_history_t {
     uint64_t                epoch;                             //PK  
     name                    earner;                            //PK: 1,2,3,4,5
-    uint64_t                bias;   
-    uint64_t                slope;
+    int128_t                bias;   
+    int128_t                slope;
     uint64_t                block_time;
     uint64_t                block_num;
 
