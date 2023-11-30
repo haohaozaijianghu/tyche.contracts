@@ -56,111 +56,87 @@ NTBL("global") global_t {
     name                lp_refueler             = "tyche.admin"_n;                          //LP TRUSD系统充入账户
     name                reward_contract         = "tyche.reward"_n;
 
-    extended_symbol     principal_token         = extended_symbol(MUSDT,  MUSDT_BANK);      //代币MUSDT,用户存入的本金
+    extended_symbol     principal_token         = extended_symbol(TYCHE,  TYCHE_BANK);      //代币MUSDT,用户存入的本金
     extended_symbol     lp_token                = extended_symbol(TRUSD,  TRUSD_BANK);      //代币TRUSD
-    asset               min_deposit_amount      = asset(10'000000, MUSDT);                  //10 MU 
+    asset               min_deposit_amount      = asset(10'000000, TYCHE);                  //10 MU 
  
-    uint64_t            tyche_farm_ratio        = 10;                                       //每100MUSDT 奖励0.1TYCHE
-    uint64_t            tyche_farm_lock_ratio   = 90;                                       //每100MUSDT 锁仓0.9TYCHE
-    uint64_t            tyche_reward_pool_code  = 5;
+    asset               total_supply            = asset(0, TYCHE);                          //总发行量
+    uint64_t            point_history_epoch     = 0;                                        //point_history  epoch
+    bool                enabled                 = true;                                     //是否启用
+    uint8_t             transfers_enabled       = 1;                                     //是否允许转账
 
-    aplink_farm         apl_farm;
-    bool                enabled                 = true; 
+    std::map<uint64_t, int64_t> slope_changes;                                              //# time -> signed slope change
+
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(reward_contract)
                                 (principal_token)(lp_token)(min_deposit_amount)
-                                (tyche_farm_ratio)(tyche_farm_lock_ratio)(tyche_reward_pool_code)
-                                (apl_farm)(enabled) )
+                                (total_supply)(point_history_epoch)(enabled)(transfers_enabled)(slope_changes))
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
-//E.g. MUSDT, MBTC,HSTZ,MUSDT
-struct earn_pool_reward_st {                             
-    uint64_t        reward_id;                          //increase upon every reward distribution                                 
-    asset           total_rewards;                      //总奖励 = unalloted_rewards + unclaimed_rewards + claimed_rewards
-    asset           last_rewards;                       //上一次总奖励金额
-    asset           unalloted_rewards;                  //未分配的奖励(admin)
-    asset           unclaimed_rewards;                  //已分配未领取奖励(customer)
-    asset           claimed_rewards;                    //已领取奖励
-    int128_t        reward_per_share            = 0;    //每票已分配奖励
-    int128_t        last_reward_per_share       = 0;    //奖励发放delta
-    time_point_sec  reward_added_at;                    //最近奖励发放时间(admin)
-    time_point_sec  prev_reward_added_at;               //前一次奖励发放时间间隔
-};
-using earn_pool_reward_map = std::map<eosio::symbol, earn_pool_reward_st>;
 
-//Scope: _self
-TBL earn_pool_t {
-    uint64_t                code;                                           //PK: 1,2,3,4,5
-    uint64_t                term_interval_sec       = DAY_SECONDS;          //入池锁仓时长秒: x 1, 30, 90, 180, 360 
-    uint64_t                share_multiplier        = 1;
+//scope: _self
+struct earn_stake_locked {
+    name                owner;                          //用户  PK
+    asset               amount;                         //锁仓金额
+    time_point_sec      unlocked_at;                    //解锁时间
 
-    asset                   cum_principal           = asset(0, MUSDT);      //历史总存款金额（本金）
-    asset                   avl_principal           = asset(0, MUSDT);      //剩余存款金额（本金）
-    earn_pool_reward_st     interest_reward;                                //利息信息, E.g. 3% APY, triggered
-    earn_pool_reward_map    airdrop_rewards;                                //manually airdropped rewards, including MUSDT etc types
-    
-    bool                    on_shelf                = true;
-    time_point_sec          created_at;
+    uint64_t primary_key() const { return owner.value; }
+    uint64_t by_unlocked_at() const { return unlocked_at.sec_since_epoch(); }
 
-    earn_pool_t() {}
-    earn_pool_t(const uint64_t& c): code(c) {}
-    uint64_t primary_key()const { return code; }
+    typedef eosio::multi_index< "earnslocked"_n, earn_stake_locked,
+        indexed_by< "unlockedat"_n, const_mem_fun<earn_stake_locked, uint64_t, &earn_stake_locked::by_unlocked_at> >
+    > tbl_t;
 
-    typedef multi_index<"earnpools"_n, earn_pool_t> tbl_t;
-
-    EOSLIB_SERIALIZE( earn_pool_t,  (code)(term_interval_sec)(share_multiplier)
-                                    (cum_principal)(avl_principal)(interest_reward)(airdrop_rewards)
-                                    (on_shelf)(created_at) )
+    EOSLIB_SERIALIZE( earn_stake_locked, (owner)(amount)(unlocked_at) )
 };
 
-struct earner_reward_st {
-    int128_t            last_reward_per_share       = 0;
-    asset               unclaimed_rewards;
-    asset               claimed_rewards;            //每个池子，每一个期间领取的奖励
-    asset               total_claimed_rewards;          
+//Scope: account
+TBL user_point_history_t {
+    uint64_t                epoch;                             //PK  
+    name                    earner;                            //PK: 1,2,3,4,5
+    uint64_t                bias;   
+    uint64_t                slope;
+    uint64_t                block_time;
+    uint64_t                block_num;
+
+    user_point_history_t() {}
+    user_point_history_t(const uint64_t& c): epoch(c) {}
+    uint64_t primary_key()const { return epoch; }
+
+    typedef multi_index<"olduserpoint"_n, user_point_history_t> tbl_t;
+
+    EOSLIB_SERIALIZE( user_point_history_t,  (epoch)(earner)(bias)(slope)(block_time)(block_num) )
 };
+//scope: _self
+TBL user_point_epoch_t {
+    name                earner;
+    uint64_t            epoch;
 
-using earner_reward_map = std::map<eosio::symbol/*symbol code*/, earner_reward_st>;
+    uint64_t primary_key() const { return earner.value; }
+    user_point_epoch_t() {}
+    user_point_epoch_t(const name& a): earner(a) {}
 
-//Scope: code
-//Note: record will be deleted upon withdrawal/redemption
-TBL earner_t {
-    name                owner;                          //PK
-    asset               cum_principal;                  //总存款金额
-    asset               avl_principal;                  //当前存款金额
+    typedef eosio::multi_index< "upointepoch"_n, user_point_epoch_t > tbl_t;
 
-    earner_reward_st    interest_reward;                //利息信息
-    earner_reward_map   airdrop_rewards;                //每票已分配奖励
-   
-    time_point_sec      term_started_at;                //利息周期开始时间一旦有钱充入进来，周期从当前时间开始
-    time_point_sec      term_ended_at;                  //利息周期结束时间
-    time_point_sec      created_at;
-
-    earner_t() {}
-    earner_t(const name& a): owner(a) {}
-
-    uint64_t primary_key()const { return owner.value; }
-
-    typedef multi_index<"earners"_n, earner_t> tbl_t;
-
-    EOSLIB_SERIALIZE( earner_t,     (owner)(cum_principal)(avl_principal)
-                                    (interest_reward)(airdrop_rewards)
-                                    (term_started_at)(term_ended_at)(created_at) )
+    EOSLIB_SERIALIZE( user_point_epoch_t, (earner)(epoch) )
 };
 
 //Scope: _self
-TBL reward_symbol_t {
-    extended_symbol sym;                                    //PK, sym.code MUSDT,8@amax.mtoken
-    bool            on_shelf;
+TBL point_history_t {
+    uint64_t                epoch;            //global epoch
+    uint64_t                bias;   
+    uint64_t                slope;
+    uint64_t                block_time;
+    uint64_t                block_num;
 
-    reward_symbol_t() {}
+    point_history_t() {}
+    point_history_t(const uint64_t& c): epoch(c) {}
+    uint64_t primary_key()const { return epoch; }
 
-    uint64_t primary_key() const { return sym.get_symbol().code().raw(); }
+    typedef multi_index<"pointhistory"_n, point_history_t> tbl_t;
 
-    typedef eosio::multi_index< "rewardsymbol"_n, reward_symbol_t > idx_t;
-
-    EOSLIB_SERIALIZE( reward_symbol_t, (sym)(on_shelf) )
+    EOSLIB_SERIALIZE( point_history_t,  (epoch)(bias)(slope)(block_time)(block_num) )
 };
 
 TBL globalidx {

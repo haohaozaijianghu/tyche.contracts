@@ -66,52 +66,13 @@ class [[eosio::contract("tyche.stake")]] tyche_stake : public contract {
       _global_state->save(get_self());
    }
 
+   ACTION init(const name& admin, const name& lp_refueler, const extended_symbol& principal_token, const extended_symbol& lp_token);
+
    [[eosio::on_notify("*::transfer")]]
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
    
-   //inline action call by tyche.reward
-   ACTION refuelreward( const name& token_bank, const asset& total_rewards, const uint64_t& seconds, const uint64_t& pool_conf_code );
-   ACTION refuelintrst( const name& token_bank, const asset& total_rewards, const uint64_t& seconds );
-
-   //USER
-   ACTION claimrewards( const name& from );
-
-   ACTION claimreward( const name& from, const std::string& sym);
-   
-   //admin
-   ACTION addrewardsym(const extended_symbol& sym);
-   ACTION setmindepamt(const asset& quant);
-
-   ACTION setpool(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier);
-   
-   ACTION init(const name& admin, const name& reward_contract, const name& lp_refueler, const bool& enabled);
-   
-   ACTION onshelfsym(const extended_symbol& sym, const bool& on_shelf);
-
-   ACTION setaplconf(const uint64_t& lease_id, const asset& unit_reward);
-
-   ACTION settychepct(const uint64_t& tyche_farm_ratio, const uint64_t& tyche_farm_lock_ratio);
 
    private:
-      void _apl_reward(const name& from, const asset& quant, const uint64_t& term_code);
-      bool _claim_pool_rewards(const name& from, const uint64_t& term_code, const bool& term_end_flag );
-      bool _claim_pool_rewards_by_symbol(const name& from, const uint64_t& term_code, const symbol& reward_symbol, const bool& term_end_flag );
-
-      void onredeem( const name& from, const uint64_t& term_code, const asset& quant );
-
-      //初始化全局利息的配置
-      earn_pool_reward_st _init_interest_conf();
-
-      earner_reward_map _get_new_shared_earner_reward_map(const earn_pool_reward_map& rewards);
-      earner_reward_st   _get_new_shared_earner_reward(const earn_pool_reward_st& pool_reward);
-      //更新奖励信息
-      asset _update_reward_info( earn_pool_reward_st& reward_conf, earner_reward_st& earner_reward, const asset& earner_avl_principal, const bool& term_end_flag);
-
-      void ondeposit( const name& from, const uint64_t& term_code, const asset& quant );
-
-      void refuelreward_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds);
-         
-      void refuelreward_to_pool( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code );
 
       global_singleton     _global;
       global_t             _gstate;
