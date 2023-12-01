@@ -161,13 +161,15 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
                 new_dslope -= u_new.slope ; // old slope disappeared at this point
                 _gstate.slope_changes[new_locked.end] = new_dslope;
 
-      //   # Now handle user history
-      //   user_epoch: uint256 = self.user_point_epoch[addr] + 1
-
-      //   self.user_point_epoch[addr] = user_epoch
-      //   u_new.ts = block.timestamp
-      //   u_new.blk = block.number
-      //   self.user_point_history[addr][user_epoch] = u_new
+      user_point_history_t::tbl_t user_point_history(_self, earner.value);
+      user_point_history.emplace( _self, [&]( auto& row ) {
+         row.epoch       = _epoch;
+         row.earner      = earner;
+         row.bias        = u_new.bias;
+         row.slope       = u_new.slope;
+         row.block_time  = now;
+         row.block_num   = curr_block_num;
+      });
    }
 
 }
