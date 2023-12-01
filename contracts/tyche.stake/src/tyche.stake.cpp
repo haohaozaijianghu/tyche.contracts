@@ -67,8 +67,20 @@ void tyche_stake::ontransfer(const name& from, const name& to, const asset& quan
 
    if (from == get_self() || to != get_self()) return;
    auto token_bank = get_first_receiver();
-}
 
+   if (token_bank == _gstate.principal_token.get_contract()) {
+      CHECKC(quant.symbol == _gstate.principal_token.get_symbol(), err::SYMBOL_MISMATCH, "symbol mismatch");
+      CHECKC(quant.amount >= _gstate.min_deposit_amount.amount, err::NOT_POSITIVE, "deposit amount must be positive");
+    
+   } else if (token_bank == _gstate.lp_token.get_contract()) {
+      CHECKC(quant.symbol == _gstate.lp_token.get_symbol(), err::SYMBOL_MISMATCH, "symbol mismatch");
+      CHECKC(quant.amount > 0, err::NOT_POSITIVE, "deposit amount must be positive");
+      CHECKC(memo.size() > 0, err::PARAM_ERROR, "memo is empty");
+
+   } else {
+      eosio::check(false, "unknown token bank");
+   }
+}
 
 void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, lock_balance_st& new_locked) {
    auto u_old = point_t();
@@ -93,9 +105,9 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
       old_dslope = _gstate.slope_changes[old_locked.end];
       if (new_locked.end != 0) {
          if (new_locked.end == old_locked.end)
-               new_dslope = old_dslope;
+            new_dslope = old_dslope;
          else
-               new_dslope = _gstate.slope_changes[new_locked.end];
+            new_dslope = _gstate.slope_changes[new_locked.end];
       }
    }
 
@@ -106,12 +118,8 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
 
    auto last_checkpoint       = last_point.block_time;
    auto initial_last_point    = last_point;
-   uint128_t block_slope = 0;  // dblock/dt
-   if (now > last_point.block_time) 
-        block_slope = MULTIPLIER * (curr_block_num - last_point.block_num) / (now - last_point.block_time);
 
    auto t_i = (last_checkpoint / WEEK) * WEEK;
-
    for( uint64_t i=0; i<255; i++ ){
       t_i += WEEK;
       uint128_t d_slope = 0;
@@ -121,7 +129,7 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
          d_slope = _gstate.slope_changes[t_i];
       }
 
-      last_point.bias += (block_slope + d_slope) * (t_i - last_checkpoint) / MULTIPLIER;
+      last_point.bias += ( d_slope) * (t_i - last_checkpoint) / MULTIPLIER;
       _epoch += 1;
       if (t_i == now) {
          last_point.block_num = curr_block_num;
@@ -171,10 +179,62 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
          row.block_num   = curr_block_num;
       });
    }
+}
 
+void tyche_stake::create_lock(const name& earner, const asset& quant, const uint64_t& _unlock_time){
+   auto now             = current_time_point().sec_since_epoch();
+
+   auto unlock_time = (_unlock_time / WEEK) * WEEK ; // Locktime is rounded down to weeks
+   CHECKC(unlock_time > 0, err::NOT_POSITIVE, "unlock time must be positive");
+   CHECKC(unlock_time <= now + MAXTIME, err::TIME_EXPIRED, "Voting lock can be 4 years max");
+   CHECKC(quant.amount > 0, err::NOT_POSITIVE, "deposit amount must be positive");
+
+   _deposit_for(earner, quant, unlock_time,CREATE_LOCK_TYPE);
+}
+
+void tyche_stake::_deposit_for(const name& earner, const asset& quant, const uint64_t& unlock_time, const uint64_t& type){
+   _gstate.total_supply += quant;
+
+   earn_stake_locked::tbl_t earns_locked(_self, _self.value);
+   lock_balance_st old_locked = {asset(0, quant.symbol), 0};
+   lock_balance_st _locked = {asset(0, quant.symbol), 0};
+   auto itr = earns_locked.find(earner.value);
+   if (itr == earns_locked.end()) {
+      CHECKC(unlock_time > 0, err::NOT_POSITIVE, "unlock time must be positive");
+      earns_locked.emplace(_self, [&](auto& row) {
+         row.owner       = earner;
+         row.amount      = quant;
+         row.end         = unlock_time;
+      });
+      _locked = {quant, unlock_time};
+   } else {
+      earns_locked.modify(itr, _self, [&](auto& row) {
+         old_locked.quant  = row.amount;
+         old_locked.end    = row.end;
+         row.amount      += quant;
+         if(unlock_time > 0) {
+            row.end         = unlock_time;
+         }
+         _locked = {row.amount, row.end};
+      });
+   }
+   _check_point(earner, old_locked, _locked );
 }
 
 
+void tyche_stake::withdraw(const name& earner){
+   require_auth( earner );
+   earn_stake_locked::tbl_t earns_locked(_self, _self.value);
+   auto itr = earns_locked.find(earner.value);
+   CHECKC(itr != earns_locked.end(), err::NOT_STARTED, "no locked balance");
+   CHECKC(itr->end <= current_time_point().sec_since_epoch(), err::TIME_PREMATURE, "locked balance not matured yet");
+   CHECKC(itr->amount.amount > 0, err::NOT_POSITIVE, "locked balance must be positive");
+   _gstate.total_supply -= itr->amount;
 
+   lock_balance_st old_locked = {itr->amount, itr->end};
+   earns_locked.erase(itr);
 
+   lock_balance_st _locked = {asset(0, itr->amount.symbol), 0};
+   _check_point(earner, old_locked, _locked);
+}
 }

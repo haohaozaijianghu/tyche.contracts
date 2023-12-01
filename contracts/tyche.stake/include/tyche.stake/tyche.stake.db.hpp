@@ -36,7 +36,10 @@ static constexpr symbol     TYCHE            = symbol(symbol_code("TYCHE"), 8);
 static constexpr name       APLINK_BANK      = "aplink.token"_n ;
 static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
 
-
+static constexpr uint32_t DEPOSIT_FOR_TYPE   = 0;
+static constexpr uint32_t CREATE_LOCK_TYPE   = 1;
+static constexpr uint32_t INCREASE_LOCK_AMOUNT = 2;
+static constexpr uint32_t INCREASE_UNLOCK_TIME = 3;
 
 static constexpr uint128_t    WEEK            = 7 * 86400;  // all future times are rounded by week
 static constexpr uint128_t    MAXTIME         = 4 * 365 * 86400;  //4 years
@@ -58,7 +61,6 @@ struct aplink_farm {
 struct lock_balance_st {
     asset               quant;                  //锁仓金额
     uint64_t            end;                    //解锁时间
-    lock_balance_st(){};
 };
 struct point_t {
     int128_t                bias        =0;   
@@ -96,16 +98,16 @@ typedef eosio::singleton< "global"_n, global_t > global_singleton;
 TBL earn_stake_locked {
     name                owner;                          //用户  PK
     asset               amount;                         //锁仓金额
-    time_point_sec      unlocked_at;                    //解锁时间
+    uint64_t            end;                    //解锁时间
 
     uint64_t primary_key() const { return owner.value; }
-    uint64_t by_unlocked_at() const { return unlocked_at.sec_since_epoch(); }
+    uint64_t by_end() const { return end; }
 
     typedef eosio::multi_index< "earnslocked"_n, earn_stake_locked,
-        indexed_by< "unlockedat"_n, const_mem_fun<earn_stake_locked, uint64_t, &earn_stake_locked::by_unlocked_at> >
+        indexed_by< "unlockedat"_n, const_mem_fun<earn_stake_locked, uint64_t, &earn_stake_locked::by_end> >
     > tbl_t;
 
-    EOSLIB_SERIALIZE( earn_stake_locked, (owner)(amount)(unlocked_at) )
+    EOSLIB_SERIALIZE( earn_stake_locked, (owner)(amount)(end) )
 };
 
 //Scope: account
