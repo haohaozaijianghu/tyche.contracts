@@ -72,12 +72,16 @@ class [[eosio::contract("tyche.stake")]] tyche_stake : public contract {
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
    
    ACTION withdraw(const name& earner);
+
+   ACTION balance(const name & earner);
+   ACTION createlock(const name& earner, const asset& quant, const uint64_t& _unlock_time);
+
    private: 
       void _check_point(const name& earner, lock_balance_st& old_locked, lock_balance_st& new_locked);
 
       void _deposit_for(const name& earner, const asset& quant, const uint64_t& unlock_time, const uint64_t& type);
 
-      void create_lock(const name& earner, const asset& quant, const uint64_t& _unlock_time);
+      // void create_lock(const name& earner, const asset& quant, const uint64_t& _unlock_time);
 
       uint128_t get_slope(uint128_t amount, uint64_t time){
          return amount  / time;

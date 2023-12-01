@@ -45,14 +45,10 @@ void tyche_stake::init(const name& admin, const name& lp_refueler, const extende
    _gstate.lp_token                 = lp_token;
    _gstate.enabled                  = true;
    _gstate.min_deposit_amount       = asset(10'000000, principal_token.get_symbol());
-   auto p                           = point_t();
-   p.block_time                     = current_time_point().sec_since_epoch();
-   // ph.block_num = current_block_num();
-   _gstate.point_history[0]         = p;
+   _gstate.total_supply             = asset(0, principal_token.get_symbol());
 }
 
 /**
- * @brief send nasset tokens into nftone marketplace
  *
  * @param from
  * @param to
@@ -89,7 +85,7 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
    uint128_t new_dslope = 0;
    auto _epoch          = _gstate.point_history_epoch;
    auto now             = current_time_point().sec_since_epoch();
-   auto curr_block_num       = 0; //get_block_num();
+   auto curr_block_num  = tapos_block_num(); //get_block_num();
 
    if(earner == name("")) {
       if (old_locked.end >= now && old_locked.quant.amount > 0) {
@@ -111,9 +107,18 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
       }
    }
 
-   point_t last_point = {0, 0, now, 0};
-   if( _epoch > 0){
-      last_point = _gstate.point_history[_epoch];
+   global_point_history_t last_point = global_point_history_t();
+   last_point.epoch = 0;
+   last_point.bias = 0;
+   last_point.slope = 0;
+   last_point.block_num = curr_block_num;
+   last_point.block_time = now;
+   global_point_history_t::tbl_t point_history(_self, _self.value);
+
+   if( _epoch > 0 ){
+      auto itr = point_history.find(_epoch);
+      CHECKC(itr != point_history.end(), err::NOT_STARTED, "no locked balance");
+      last_point = *itr;
    }
 
    auto last_checkpoint       = last_point.block_time;
@@ -135,7 +140,13 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
          last_point.block_num = curr_block_num;
          break;
       } else {
-         _gstate.point_history[_epoch] = last_point;
+         point_history.emplace( _self, [&]( auto& row ) {
+            row.epoch       = _epoch;
+            row.bias        = last_point.bias;
+            row.slope       = last_point.slope;
+            row.block_time  = last_point.block_time;
+            row.block_num   = last_point.block_num;
+         });
       }
    }
 
@@ -150,8 +161,13 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
             last_point.bias = 0;
    }
 
-   _gstate.point_history[_epoch] = last_point;
-
+   point_history.emplace( _self, [&]( auto& row ) {
+      row.epoch       = _epoch;
+      row.bias        = last_point.bias;
+      row.slope       = last_point.slope;
+      row.block_time  = last_point.block_time;
+      row.block_num   = last_point.block_num;
+   });
    if (earner != name("")){
          // Schedule the slope changes (slope is going down)
          // We subtract new_user_slope from [new_locked.end]
@@ -170,8 +186,9 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
                 _gstate.slope_changes[new_locked.end] = new_dslope;
 
       user_point_history_t::tbl_t user_point_history(_self, earner.value);
+      _gstate.user_epoch = _gstate.user_epoch + 1;
       user_point_history.emplace( _self, [&]( auto& row ) {
-         row.epoch       = _epoch;
+         row.epoch       = _gstate.user_epoch;
          row.earner      = earner;
          row.bias        = u_new.bias;
          row.slope       = u_new.slope;
@@ -181,7 +198,7 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
    }
 }
 
-void tyche_stake::create_lock(const name& earner, const asset& quant, const uint64_t& _unlock_time){
+void tyche_stake::createlock(const name& earner, const asset& quant, const uint64_t& _unlock_time){
    auto now             = current_time_point().sec_since_epoch();
 
    auto unlock_time = (_unlock_time / WEEK) * WEEK ; // Locktime is rounded down to weeks
@@ -237,4 +254,15 @@ void tyche_stake::withdraw(const name& earner){
    lock_balance_st _locked = {asset(0, itr->amount.symbol), 0};
    _check_point(earner, old_locked, _locked);
 }
+
+void tyche_stake::balance(const name & earner) {
+   user_point_history_t::tbl_t user_point_history(_self, earner.value);
+   auto itr = user_point_history.begin();
+   CHECKC(itr != user_point_history.end(), err::NOT_STARTED, "no locked balance");
+
+
+
+
+}
+
 }

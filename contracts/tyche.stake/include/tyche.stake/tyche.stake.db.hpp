@@ -80,16 +80,18 @@ NTBL("global") global_t {
  
     asset               total_supply            = asset(0, TYCHE);                          //总发行量
     uint64_t            point_history_epoch     = 0;                                        //point_history  epoch
+    uint64_t            user_epoch              = 0;                                                 //point_history  epoch
+    
     bool                enabled                 = true;                                     //是否启用
     uint8_t             transfers_enabled       = 1;                                     //是否允许转账
 
     std::map<uint64_t, int64_t> slope_changes;                                              //# time -> signed slope change
-    std::map<uint64_t, point_t> point_history;                                               //# time -> signed bias change
 
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(reward_contract)
                                 (principal_token)(lp_token)(min_deposit_amount)
-                                (total_supply)(point_history_epoch)(enabled)(transfers_enabled)(slope_changes)(point_history))
+                                (total_supply)(point_history_epoch)(user_epoch)
+                                (enabled)(transfers_enabled)(slope_changes))
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
@@ -121,12 +123,35 @@ TBL user_point_history_t {
 
     user_point_history_t() {}
     user_point_history_t(const uint64_t& c): epoch(c) {}
-    uint64_t primary_key()const { return epoch; }
+    uint64_t primary_key()const { return 100000000000 - epoch; }
 
     typedef multi_index<"olduserpoint"_n, user_point_history_t> tbl_t;
 
     EOSLIB_SERIALIZE( user_point_history_t,  (epoch)(earner)(bias)(slope)(block_time)(block_num) )
 };
+
+TBL global_point_history_t {
+    uint64_t                epoch;          //PK     
+    int128_t                bias;   
+    int128_t                slope;
+    uint64_t                block_num;
+    uint64_t                block_time;     //# time -> signed bias change
+
+
+    global_point_history_t() {}
+    uint64_t primary_key()const { return epoch; }
+    uint64_t by_block_num() const { return block_num; }
+    uint64_t by_block_time() const { return block_time; }
+
+    typedef multi_index<"pointhistory"_n, global_point_history_t,
+                indexed_by<"byblocknum"_n, const_mem_fun<global_point_history_t, uint64_t, &global_point_history_t::by_block_num> >,
+                indexed_by<"byblocktime"_n, const_mem_fun<global_point_history_t, uint64_t, &global_point_history_t::by_block_time> >
+            > tbl_t;
+
+    EOSLIB_SERIALIZE( global_point_history_t,  (epoch)(bias)(slope)(block_time)(block_num) )
+};
+
+
 //scope: _self
 TBL user_point_epoch_t {
     name                earner;
