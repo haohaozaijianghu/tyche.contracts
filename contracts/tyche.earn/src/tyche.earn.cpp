@@ -640,6 +640,22 @@ earner_reward_map tyche_earn::_get_new_shared_earner_reward_map(const earn_pool_
    return airdrop_rewards;
 }
 
+
+void tyche_earn::updateexpiry(const uint64_t& code, const name& owner) {
+   require_auth(_self);
+   auto accts              = earner_t::tbl_t(_self, code);
+   auto acct               = accts.find( owner.value );
+   CHECKC( acct != accts.end(), err::RECORD_NOT_FOUND, "account not found" )
+
+   auto pools              = earn_pool_t::tbl_t(_self, _self.value);
+   auto pool_itr           = pools.find( code );
+   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "earn pool not found" )
+   accts.modify( acct, _self, [&]( auto& a ) {
+      a.term_ended_at       =  a.term_started_at + pool_itr->term_interval_sec;
+   });
+}
+
+
 void tyche_earn::setpool(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier) {
    require_auth(_self);
    auto pools              = earn_pool_t::tbl_t(_self, _self.value);

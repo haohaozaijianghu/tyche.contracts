@@ -83,6 +83,8 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
    ACTION setmindepamt(const asset& quant);
 
    ACTION setpool(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier);
+
+   ACTION updateexpiry(const uint64_t& code, const name& owner);
    
    ACTION init(const name& admin, const name& reward_contract, const name& lp_refueler, const bool& enabled);
    
