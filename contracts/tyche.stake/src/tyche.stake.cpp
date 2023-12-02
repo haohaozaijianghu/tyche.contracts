@@ -85,9 +85,8 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
    uint128_t new_dslope = 0;
    auto _epoch          = _gstate.point_history_epoch;
    auto now             = current_time_point().sec_since_epoch();
-   auto curr_block_num  = tapos_block_num(); //get_block_num();
 
-   if(earner == name("")) {
+   if(earner != name("")) {
       if (old_locked.end >= now && old_locked.quant.amount > 0) {
          u_old.slope    = get_slope(old_locked.quant.amount * MULTIPLIER , MAXTIME);
          u_old.bias     = get_bias(u_old.slope , (old_locked.end - now));
@@ -111,7 +110,6 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
    last_point.epoch = 0;
    last_point.bias = 0;
    last_point.slope = 0;
-   last_point.block_num = curr_block_num;
    last_point.block_time = now;
    global_point_history_t::tbl_t point_history(_self, _self.value);
 
@@ -133,11 +131,16 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
       } else {
          d_slope = _gstate.slope_changes[t_i];
       }
-
       last_point.bias += ( d_slope) * (t_i - last_checkpoint) / MULTIPLIER;
+
+      last_point.slope += d_slope;
+      if (last_point.bias < 0)  // This can happen
+         last_point.bias = 0;
+      last_checkpoint         = t_i;
+      last_point.block_time   = t_i;
+
       _epoch += 1;
       if (t_i == now) {
-         last_point.block_num = curr_block_num;
          break;
       } else {
          point_history.emplace( _self, [&]( auto& row ) {
@@ -145,7 +148,6 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
             row.bias        = last_point.bias;
             row.slope       = last_point.slope;
             row.block_time  = last_point.block_time;
-            row.block_num   = last_point.block_num;
          });
       }
    }
@@ -166,7 +168,6 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
       row.bias        = last_point.bias;
       row.slope       = last_point.slope;
       row.block_time  = last_point.block_time;
-      row.block_num   = last_point.block_num;
    });
    if (earner != name("")){
          // Schedule the slope changes (slope is going down)
@@ -193,7 +194,6 @@ void tyche_stake::_check_point(const name& earner, lock_balance_st& old_locked, 
          row.bias        = u_new.bias;
          row.slope       = u_new.slope;
          row.block_time  = now;
-         row.block_num   = curr_block_num;
       });
    }
 }
@@ -209,6 +209,19 @@ void tyche_stake::createlock(const name& earner, const asset& quant, const uint6
    _deposit_for(earner, quant, unlock_time,CREATE_LOCK_TYPE);
 }
 
+
+void tyche_stake::inctime(const name& earner, const uint64_t& unlock_time) {
+   auto now             = current_time_point().sec_since_epoch();
+   auto _unlock_time = (unlock_time / WEEK) * WEEK ; // Locktime is rounded down to weeks
+   asset quant= asset(0, _gstate.principal_token.get_symbol());
+   _deposit_for(earner, quant, _unlock_time, INCREASE_UNLOCK_TIME);
+}
+
+void tyche_stake::incamount(const name& earner, const asset& quant) {
+   auto now             = current_time_point().sec_since_epoch();
+   _deposit_for(earner, quant, 0, INCREASE_LOCK_AMOUNT);
+}
+
 void tyche_stake::_deposit_for(const name& earner, const asset& quant, const uint64_t& unlock_time, const uint64_t& type){
    _gstate.total_supply += quant;
 
@@ -218,6 +231,7 @@ void tyche_stake::_deposit_for(const name& earner, const asset& quant, const uin
    auto itr = earns_locked.find(earner.value);
    if (itr == earns_locked.end()) {
       CHECKC(unlock_time > 0, err::NOT_POSITIVE, "unlock time must be positive");
+      CHECKC(type == CREATE_LOCK_TYPE, err::PARAM_ERROR, "type error");
       earns_locked.emplace(_self, [&](auto& row) {
          row.owner       = earner;
          row.amount      = quant;
@@ -259,10 +273,50 @@ void tyche_stake::balance(const name & earner) {
    user_point_history_t::tbl_t user_point_history(_self, earner.value);
    auto itr = user_point_history.begin();
    CHECKC(itr != user_point_history.end(), err::NOT_STARTED, "no locked balance");
+   auto amount = itr->bias -(itr->slope * (current_time_point().sec_since_epoch() - itr->block_time));
 
 
+   auto quant = asset(uint32_t(amount / MULTIPLIER), _gstate.principal_token.get_symbol());
+
+   CHECKC( false, err::NOT_STARTED, earner.to_string() + "no locked balance: " + quant.to_string());
+}
+
+void tyche_stake::totalsupply2(const uint64_t& ts) {
+   global_point_history_t::tbl_t point_history(_self, _self.value);
+   auto itr = point_history.rbegin();
+   CHECKC(itr != point_history.rend(), err::NOT_STARTED, "no locked balance");
+   auto last_point = *itr;
+   auto curr_time =  ts;
+   auto t_i  = (itr->block_time / WEEK) * WEEK;
+   for (uint64_t i = 0; i < 255; i++)
+   {
+      t_i += WEEK;
+      uint128_t d_slope = 0;
+      if (t_i > curr_time) {
+         t_i = curr_time;
+      }
+      else {
+         d_slope = _gstate.slope_changes[t_i];
+      }
+      last_point.bias += (d_slope) * (t_i - last_point.block_time);
+      if(t_i == curr_time) 
+         break;
+
+      last_point.slope += d_slope;
+      last_point.block_time = t_i;
+   }
+   if (last_point.bias < 0)  // This can happen
+      last_point.bias = 0;
+
+   auto quant = asset(uint32_t(last_point.bias / MULTIPLIER), _gstate.principal_token.get_symbol());
+
+   CHECKC(false, err::NOT_STARTED,"time: "  + to_string(curr_time) + " total supply: " + quant.to_string());
+}
 
 
+void tyche_stake::totalsupply() {
+   auto now = current_time_point().sec_since_epoch();
+   totalsupply2(now);
 }
 
 }

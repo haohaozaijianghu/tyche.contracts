@@ -41,8 +41,8 @@ static constexpr uint32_t CREATE_LOCK_TYPE   = 1;
 static constexpr uint32_t INCREASE_LOCK_AMOUNT = 2;
 static constexpr uint32_t INCREASE_UNLOCK_TIME = 3;
 
-static constexpr uint128_t    WEEK            = 7 * 86400;  // all future times are rounded by week
-static constexpr uint128_t    MAXTIME         = 4 * 365 * 86400;  //4 years
+static constexpr uint128_t    WEEK            = 7 * 30;  // all future times are rounded by week
+static constexpr uint128_t    MAXTIME         = 4 * 365 * 30;  //4 years
 static constexpr uint128_t    MULTIPLIER      = 1000000000000000000;    // 10^18
 
 
@@ -66,7 +66,6 @@ struct point_t {
     int128_t                bias        =0;   
     int128_t                slope       =0;                      // - dweight / dt
     uint64_t                block_time  =0;
-    uint64_t                block_num   =0;
 };
 
 NTBL("global") global_t {
@@ -119,7 +118,6 @@ TBL user_point_history_t {
     int128_t                bias;   
     int128_t                slope;
     uint64_t                block_time;
-    uint64_t                block_num;
 
     user_point_history_t() {}
     user_point_history_t(const uint64_t& c): epoch(c) {}
@@ -127,28 +125,25 @@ TBL user_point_history_t {
 
     typedef multi_index<"olduserpoint"_n, user_point_history_t> tbl_t;
 
-    EOSLIB_SERIALIZE( user_point_history_t,  (epoch)(earner)(bias)(slope)(block_time)(block_num) )
+    EOSLIB_SERIALIZE( user_point_history_t,  (epoch)(earner)(bias)(slope)(block_time) )
 };
 
 TBL global_point_history_t {
     uint64_t                epoch;          //PK     
     int128_t                bias;   
     int128_t                slope;
-    uint64_t                block_num;
     uint64_t                block_time;     //# time -> signed bias change
 
 
     global_point_history_t() {}
     uint64_t primary_key()const { return epoch; }
-    uint64_t by_block_num() const { return block_num; }
     uint64_t by_block_time() const { return block_time; }
 
     typedef multi_index<"pointhistory"_n, global_point_history_t,
-                indexed_by<"byblocknum"_n, const_mem_fun<global_point_history_t, uint64_t, &global_point_history_t::by_block_num> >,
                 indexed_by<"byblocktime"_n, const_mem_fun<global_point_history_t, uint64_t, &global_point_history_t::by_block_time> >
             > tbl_t;
 
-    EOSLIB_SERIALIZE( global_point_history_t,  (epoch)(bias)(slope)(block_time)(block_num) )
+    EOSLIB_SERIALIZE( global_point_history_t,  (epoch)(bias)(slope)(block_time) )
 };
 
 

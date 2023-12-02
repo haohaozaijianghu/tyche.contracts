@@ -75,6 +75,10 @@ class [[eosio::contract("tyche.stake")]] tyche_stake : public contract {
 
    ACTION balance(const name & earner);
    ACTION createlock(const name& earner, const asset& quant, const uint64_t& _unlock_time);
+   ACTION inctime(const name& earner, const uint64_t& unlock_time);
+   ACTION incamount(const name& earner, const asset& quant); 
+   ACTION totalsupply2(const uint64_t& ts);
+   ACTION totalsupply();
 
    private: 
       void _check_point(const name& earner, lock_balance_st& old_locked, lock_balance_st& new_locked);
@@ -86,7 +90,7 @@ class [[eosio::contract("tyche.stake")]] tyche_stake : public contract {
       uint128_t get_slope(uint128_t amount, uint64_t time){
          return amount  / time;
       }
-      uint64_t get_bias(uint128_t slope, uint64_t time){
+      int128_t get_bias(uint128_t slope, uint64_t time){
          return slope * time;
       }
       global_singleton     _global;
