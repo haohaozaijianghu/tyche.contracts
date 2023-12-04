@@ -8,6 +8,8 @@
 // #include <eosiolib/time.hpp> 
 #include <eosio/time.hpp>
 #include<tyche.reward/tyche.reward.db.hpp>
+#include<string>
+
 
 static constexpr eosio::name active_permission{"active"_n};
 
@@ -203,7 +205,8 @@ void tyche_stake::createlock(const name& earner, const asset& quant, const uint6
 
    auto unlock_time = (_unlock_time / WEEK) * WEEK ; // Locktime is rounded down to weeks
    CHECKC(unlock_time > 0, err::NOT_POSITIVE, "unlock time must be positive");
-   CHECKC(unlock_time <= now + MAXTIME, err::TIME_EXPIRED, "Voting lock can be 4 years max");
+   int64_t expired_ts = unlock_time - now - MAXTIME;
+   CHECKC(unlock_time <= now + MAXTIME, err::TIME_EXPIRED, "Voting lock can be 4 years max: " + std::to_string(expired_ts) );
    CHECKC(quant.amount > 0, err::NOT_POSITIVE, "deposit amount must be positive");
 
    _deposit_for(earner, quant, unlock_time,CREATE_LOCK_TYPE);
@@ -239,6 +242,7 @@ void tyche_stake::_deposit_for(const name& earner, const asset& quant, const uin
       });
       _locked = {quant, unlock_time};
    } else {
+      CHECKC(type != CREATE_LOCK_TYPE, err::PARAM_ERROR, "type error");
       earns_locked.modify(itr, _self, [&](auto& row) {
          old_locked.quant  = row.amount;
          old_locked.end    = row.end;
@@ -270,21 +274,27 @@ void tyche_stake::withdraw(const name& earner){
 }
 
 void tyche_stake::balance(const name & earner) {
+   auto now = current_time_point().sec_since_epoch();
+
    user_point_history_t::tbl_t user_point_history(_self, earner.value);
    auto itr = user_point_history.begin();
    CHECKC(itr != user_point_history.end(), err::NOT_STARTED, "no locked balance");
    auto amount = itr->bias -(itr->slope * (current_time_point().sec_since_epoch() - itr->block_time));
 
-
    auto quant = asset(uint32_t(amount / MULTIPLIER), _gstate.principal_token.get_symbol());
 
-   CHECKC( false, err::NOT_STARTED, earner.to_string() + "no locked balance: " + quant.to_string());
+   CHECKC( false, err::NOT_STARTED, earner.to_string()  + "time: "  + to_string(now)+ " balance: " + quant.to_string());
 }
+
 
 void tyche_stake::totalsupply2(const uint64_t& ts) {
    global_point_history_t::tbl_t point_history(_self, _self.value);
-   auto itr = point_history.rbegin();
-   CHECKC(itr != point_history.rend(), err::NOT_STARTED, "no locked balance");
+
+   auto point_history_index = point_history.get_index<"byrblocktime"_n>();
+   const auto & itr = point_history_index.find(INT64_MAX - ts);
+
+   CHECKC(itr != point_history_index.end(), err::NOT_STARTED, "no locked balance");
+
    auto last_point = *itr;
    auto curr_time =  ts;
    auto t_i  = (itr->block_time / WEEK) * WEEK;
@@ -312,7 +322,6 @@ void tyche_stake::totalsupply2(const uint64_t& ts) {
 
    CHECKC(false, err::NOT_STARTED,"time: "  + to_string(curr_time) + " total supply: " + quant.to_string());
 }
-
 
 void tyche_stake::totalsupply() {
    auto now = current_time_point().sec_since_epoch();

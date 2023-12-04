@@ -22,9 +22,6 @@ using namespace eosio;
 
 
 static constexpr uint16_t  PCT_BOOST         = 10000;
-static constexpr uint64_t  DAY_SECONDS       = 24 * 60 * 60;
-static constexpr uint64_t  YEAR_SECONDS      = 24 * 60 * 60 * 365;
-static constexpr uint64_t  YEAR_DAYS         = 365;
 static constexpr int128_t  HIGH_PRECISION    = 1'000'000'000'000'000'000; // 10^18
 
 static constexpr name       MUSDT_BANK       = "amax.mtoken"_n;
@@ -137,10 +134,10 @@ TBL global_point_history_t {
 
     global_point_history_t() {}
     uint64_t primary_key()const { return epoch; }
-    uint64_t by_block_time() const { return block_time; }
+    uint64_t by_block_time() const { return INT64_MAX - block_time; }
 
     typedef multi_index<"pointhistory"_n, global_point_history_t,
-                indexed_by<"byblocktime"_n, const_mem_fun<global_point_history_t, uint64_t, &global_point_history_t::by_block_time> >
+                indexed_by<"byrblocktime"_n, const_mem_fun<global_point_history_t, uint64_t, &global_point_history_t::by_block_time> >
             > tbl_t;
 
     EOSLIB_SERIALIZE( global_point_history_t,  (epoch)(bias)(slope)(block_time) )

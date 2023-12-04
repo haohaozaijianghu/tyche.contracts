@@ -1,17 +1,27 @@
-stake=tyche.stk5
+stake=tyche.stk12
 admin=tyche.admin
 tnew $stake
 tset $stake tyche.stake
 tcli push action $stake init '["'$admin'","'$admin'",["6,MUSDT", "amax.mtoken"],["6,MUSDT", "amax.mtoken"]]' -p $stake
 #1732982400  2024-12-01 00:00:00
 #1764518400  2025-12-01 00:00:00
-tcli push action $stake createlock '["test","100.000000 MUSDT",1732982400]' -p $stake
-tcli push action $stake createlock '[ "test2", "100.000000 MUSDT",  1764518400 ]' -p $stake
 
-tcli push action $stake increasets '[ "test",  1764518400 ]' -p $stake
+1701513909
+tcli push action $stake createlock '["test","100.000000 MUSDT",1701657920]' -p $stake
+tcli push action $stake createlock '[ "test2", "100.000000 MUSDT",  1701513909 ]' -p $stake
+
+tcli push action $stake inctime '[ "test",  1764518400 ]' -p $stake
+tcli push action $stake incamount '[ "test",  "100.000000 MUSDT" ]' -p $stake
+tcli push action $stake withdraw '[ "test" ]' -p test
 
 
 tcli push action $stake balance '["test"]' -p $stake
+tcli push action $stake balance '["test"]' -p $stake
+
+
+tcli push action $stake totalsupply '[]' -p $stake
+tcli push action $stake totalsupply2 '[1701506586]' -p $stake
+
 
 
 
