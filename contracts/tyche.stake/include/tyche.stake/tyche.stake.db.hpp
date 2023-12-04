@@ -22,6 +22,7 @@ using namespace eosio;
 
 
 static constexpr uint16_t  PCT_BOOST         = 10000;
+
 static constexpr int128_t  HIGH_PRECISION    = 1'000'000'000'000'000'000; // 10^18
 
 static constexpr name       MUSDT_BANK       = "amax.mtoken"_n;
@@ -38,8 +39,10 @@ static constexpr uint32_t CREATE_LOCK_TYPE   = 1;
 static constexpr uint32_t INCREASE_LOCK_AMOUNT = 2;
 static constexpr uint32_t INCREASE_UNLOCK_TIME = 3;
 
-static constexpr uint128_t    WEEK            = 7 * 30;  // all future times are rounded by week
-static constexpr uint128_t    MAXTIME         = 4 * 365 * 30;  //4 years
+// static constexpr uint128_t    WEEK            = 7 * 60;  // all future times are rounded by week
+// static constexpr uint128_t    MAXTIME         = 4 * 365 * 60;  //4 years
+static constexpr uint128_t    WEEK            = 7 * 86400;  // all future times are rounded by week
+static constexpr uint128_t    MAXTIME         = 4 * 365 * 86400;  //4 years
 static constexpr uint128_t    MULTIPLIER      = 1000000000000000000;    // 10^18
 
 

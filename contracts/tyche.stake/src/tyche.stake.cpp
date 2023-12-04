@@ -279,37 +279,56 @@ void tyche_stake::balance(const name & earner) {
    user_point_history_t::tbl_t user_point_history(_self, earner.value);
    auto itr = user_point_history.begin();
    CHECKC(itr != user_point_history.end(), err::NOT_STARTED, "no locked balance");
-   auto amount = itr->bias -(itr->slope * (current_time_point().sec_since_epoch() - itr->block_time));
+   auto last_point = *itr;
+   auto amount = last_point.bias -(last_point.slope * (now - itr->block_time));
+   if(amount < 0 ) amount = 0;
 
-   auto quant = asset(uint32_t(amount / MULTIPLIER), _gstate.principal_token.get_symbol());
+   auto quant = asset(uint64_t(amount / MULTIPLIER), _gstate.principal_token.get_symbol());
 
    CHECKC( false, err::NOT_STARTED, earner.to_string()  + "time: "  + to_string(now)+ " balance: " + quant.to_string());
 }
 
+void tyche_stake::balanceof( const name & earner, const uint64_t& ts ){
+   user_point_history_t::tbl_t user_point_history(_self, earner.value);
+   auto itr = user_point_history.begin();
+   if( itr == user_point_history.end() ){
+      return;
+   }
+
+   auto last_point = *itr;
+
+   auto amount = last_point.bias -(last_point.slope * (ts - itr->block_time));
+   if(amount < 0 ) amount = 0;
+
+   auto quant = asset(uint64_t(amount / MULTIPLIER), _gstate.principal_token.get_symbol());
+
+   CHECKC( false, err::NOT_STARTED, earner.to_string()  + "time: "  + to_string(ts)+ " balance: " + quant.to_string());
+}
 
 void tyche_stake::totalsupply2(const uint64_t& ts) {
    global_point_history_t::tbl_t point_history(_self, _self.value);
 
-   auto point_history_index = point_history.get_index<"byrblocktime"_n>();
-   const auto & itr = point_history_index.find(INT64_MAX - ts);
+   auto idx = point_history.get_index<"byrblocktime"_n>();
+   auto lower_itr = idx.lower_bound(INT64_MAX - ts);
+   auto upper_itr = idx.upper_bound(INT64_MAX);
 
-   CHECKC(itr != point_history_index.end(), err::NOT_STARTED, "no locked balance");
+   CHECKC(lower_itr != upper_itr, err::NOT_STARTED, "no locked balance");
 
-   auto last_point = *itr;
-   auto curr_time =  ts;
-   auto t_i  = (itr->block_time / WEEK) * WEEK;
+   auto last_point = *lower_itr;
+   auto t =  ts;
+   auto t_i  = (lower_itr->block_time / WEEK) * WEEK;
    for (uint64_t i = 0; i < 255; i++)
    {
       t_i += WEEK;
       uint128_t d_slope = 0;
-      if (t_i > curr_time) {
-         t_i = curr_time;
-      }
-      else {
+      if (t_i > t) {
+         t_i = t;
+      } else {
          d_slope = _gstate.slope_changes[t_i];
       }
-      last_point.bias += (d_slope) * (t_i - last_point.block_time);
-      if(t_i == curr_time) 
+
+      last_point.bias -= last_point.slope * (t_i - last_point.block_time);
+      if(t_i == t) 
          break;
 
       last_point.slope += d_slope;
@@ -320,7 +339,7 @@ void tyche_stake::totalsupply2(const uint64_t& ts) {
 
    auto quant = asset(uint32_t(last_point.bias / MULTIPLIER), _gstate.principal_token.get_symbol());
 
-   CHECKC(false, err::NOT_STARTED,"time: "  + to_string(curr_time) + " total supply: " + quant.to_string());
+   CHECKC(false, err::NOT_STARTED,"time: "  + to_string(t) + " total supply: " + quant.to_string());
 }
 
 void tyche_stake::totalsupply() {
