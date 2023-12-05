@@ -51,6 +51,7 @@ enum class err: uint8_t {
  *
  * Similarly, the `stats` multi-index table, holds instances of `currency_stats` objects for each row, which contains information about current supply, maximum supply, and the creator account for a symbol token. The `stats` table is scoped to the token symbol.  Therefore, when one queries the `stats` table for a token symbol the result is one single entry/row corresponding to the queried symbol token if it was previously created, or nothing, otherwise.
  */
+
 class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    public:
       using contract::contract;
@@ -69,49 +70,11 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    [[eosio::on_notify("*::transfer")]]
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
    
-   //inline action call by tyche.reward
-   ACTION refuelreward( const name& token_bank, const asset& total_rewards, const uint64_t& seconds, const uint64_t& pool_conf_code );
-   ACTION refuelintrst( const name& token_bank, const asset& total_rewards, const uint64_t& seconds );
-
-   //USER
-   ACTION claimrewards( const name& from );
-
-   ACTION claimreward( const name& from, const std::string& sym);
-   
-   //admin
-   ACTION addrewardsym(const extended_symbol& sym);
-   ACTION setmindepamt(const asset& quant);
-
-   ACTION setpool(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier);
-   
    ACTION init(const name& admin, const name& reward_contract, const name& lp_refueler, const bool& enabled);
-   
-   ACTION onshelfsym(const extended_symbol& sym, const bool& on_shelf);
 
-   ACTION setaplconf(const uint64_t& lease_id, const asset& unit_reward);
-
-   ACTION settychepct(const uint64_t& tyche_farm_ratio, const uint64_t& tyche_farm_lock_ratio);
 
    private:
-      void _apl_reward(const name& from, const asset& quant, const uint64_t& term_code);
-      bool _claim_pool_rewards(const name& from, const uint64_t& term_code, const bool& term_end_flag );
-      bool _claim_pool_rewards_by_symbol(const name& from, const uint64_t& term_code, const symbol& reward_symbol, const bool& term_end_flag );
 
-      void onredeem( const name& from, const uint64_t& term_code, const asset& quant );
-
-      //初始化全局利息的配置
-      loan_pool_reward_st _init_interest_conf();
-
-      loaner_reward_map _get_new_shared_loaner_reward_map(const loan_pool_reward_map& rewards);
-      loaner_reward_st   _get_new_shared_loaner_reward(const loan_pool_reward_st& pool_reward);
-      //更新奖励信息
-      asset _update_reward_info( loan_pool_reward_st& reward_conf, loaner_reward_st& loaner_reward, const asset& loaner_avl_principal, const bool& term_end_flag);
-
-      void ondeposit( const name& from, const uint64_t& term_code, const asset& quant );
-
-      void refuelreward_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds);
-         
-      void refuelreward_to_pool( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code );
 
       global_singleton     _global;
       global_t             _gstate;
