@@ -56,19 +56,17 @@ NTBL("global") global_t {
     name                lp_refueler             = "tyche.admin"_n;                          //LP TRUSD系统充入账户
     name                reward_contract         = "tyche.reward"_n;
 
-    extended_symbol     collateral_token        = extended_symbol(MUSDT,  MUSDT_BANK);      //抵押物
-    extended_symbol     lp_token                = extended_symbol(TRUSD,  TRUSD_BANK);      //代币TRUSD
+    extended_symbol     loan_token             = extended_symbol(MUSDT,  MUSDT_BANK);      //代币TRUSD
     asset               min_deposit_amount      = asset(10'000000, MUSDT);                  //10 MU 
  
     uint64_t            tyche_farm_ratio        = 10;                                       //每100MUSDT 奖励0.1TYCHE
     uint64_t            tyche_farm_lock_ratio   = 90;                                       //每100MUSDT 锁仓0.9TYCHE
-    uint64_t            tyche_reward_pool_code  = 5;
 
     aplink_farm         apl_farm;
     bool                enabled                 = true; 
 
-    EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(reward_contract)(collateral_token)(lp_token)(min_deposit_amount)
-                                (tyche_farm_ratio)(tyche_farm_lock_ratio)(tyche_reward_pool_code)(apl_farm)(enabled) )
+    EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(reward_contract)(loan_token)(min_deposit_amount)
+                                (tyche_farm_ratio)(tyche_farm_lock_ratio)(apl_farm)(enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 

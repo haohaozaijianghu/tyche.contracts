@@ -77,8 +77,12 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
 
    if (from == get_self() || to != get_self()) return;
    auto token_bank = get_first_receiver();
-   
-}
 
+   if( quant.symbol == _gstate.lp_token.get_symbol() ) { 
+
+   }
+
+
+}
 
 }
