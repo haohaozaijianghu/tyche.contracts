@@ -72,10 +72,20 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    
    ACTION init(const name& admin, const name& reward_contract, const name& lp_refueler, const bool& enabled);
 
+   ACTION sendto(eosio::name from, eosio::name to, eosio::asset quantity, std::string memo) {
+      // 处理转账逻辑
+      // 可以在这里添加你的业务逻辑，例如记录转账日志等
+      require_auth(from);
+      // 调用 EOSIO 的内置转账操作
+      eosio::action(
+         eosio::permission_level{from, "active"_n},
+         "amax.token"_n,
+         "transfer"_n,
+         std::make_tuple(from, to, quantity, memo)
+      ).send();
+   }
 
    private:
-
-
       global_singleton     _global;
       global_t             _gstate;
       dbc                  _db;
