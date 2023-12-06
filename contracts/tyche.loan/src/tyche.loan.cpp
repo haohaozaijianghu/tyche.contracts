@@ -69,7 +69,7 @@ void tyche_loan::init(const name& admin, const name& reward_contract, const name
  * @param to
  * @param quantity
  * @param memo: two formats:
- *       1) redeem:$code - upon transferring in TRUSD to withdraw
+ *       1) 
  */
 void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant, const string& memo) {
    CHECKC(_gstate.enabled, err::PAUSED, "not effective yet");
@@ -78,10 +78,21 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
    if (from == get_self() || to != get_self()) return;
    auto token_bank = get_first_receiver();
 
-   if( quant.symbol == _gstate.lp_token.get_symbol() ) { 
-
+   if( quant.symbol == _gstate.loan_token.get_symbol() && token_bank == _gstate.loan_token.get_contract() ) { 
+      if( from == _gstate.lp_refueler )
+         return;
+      onredeem(from, quant);
+      return;
    }
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto itr = syms.find(quant.symbol.code().raw());
+   CHECHC(itr != syms.end(), err::SYMBOL_INVALID, "symbol not supported");
 
+
+
+}
+
+void tyche_loan::onredeem( const name& from, const asset& quant ){
 
 }
 
