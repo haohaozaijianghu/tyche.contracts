@@ -8,6 +8,7 @@
 // #include <eosiolib/time.hpp> 
 #include <eosio/time.hpp>
 #include<tyche.reward/tyche.reward.db.hpp>
+#include<tyche.loan.utils.hpp>
 
 static constexpr eosio::name active_permission{"active"_n};
 
@@ -174,6 +175,36 @@ void tyche_loan::onsubcallat( const name& from, const asset& quant ) {
    CHECKC(itr->avl_collateral_quant.amount > 0,  err::OVERSIZED,  "avl_principal must positive")
    CHECKC(itr->avl_collateral_quant.amount >= quant.amount, err::OVERSIZED,  "too many callat sub")
 
+   auto remain_collateral_quant = itr->avl_collateral_quant - quant;
+   //算新的抵押率
+   auto ratio = get_callation_ratio(remain_collateral_quant, itr->avl_principal);
+
+}
+
+uint64_t tyche_loan::get_callation_ratio(const asset& collateral_quant, const asset& principal ){
+   auto price           = get_index_price( _get_lower(collateral_quant.symbol) );
+   auto current_price   = asset( price, principal.symbol );
+   auto total_quant     = calc_quote_quant(collateral_quant, current_price);
+   auto ratio           = total_quant.amount * PCT_BOOST / principal.amount;
+
+   return ratio;
+}
+
+uint64_t tyche_loan::get_index_price( const name& base_code ){
+    const auto& prices = _price_conf().prices;
+    auto itr =  prices.find(base_code);
+    CHECKC(itr != prices.end(), err::RECORD_NOT_FOUND, "price not found: " + base_code.to_string()  )
+    return (itr->second)/ RATIO_PRECISION;
+}
+
+const price_global_t& tyche_loan::_price_conf() {
+    if(!_global_prices_ptr) {
+        CHECKC(_gstate.price_oracle_contract.value != 0,err::SYSTEM_ERROR, "Invalid price_oracle_contract");
+        _global_prices_tbl_ptr =  std::make_unique<price_global_t::idx_t>(_gstate.price_oracle_contract, _gstate.price_oracle_contract.value);
+        _global_prices_ptr = std::make_unique<price_global_t>(_global_prices_tbl_ptr->get());
+    }
+   TRACE_L("_price_conf end");
+   return *_global_prices_ptr;
 }
 
 }

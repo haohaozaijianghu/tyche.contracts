@@ -38,7 +38,8 @@ enum class err: uint8_t {
    PLAN_INEFFECTIVE     = 17,
    STATUS_ERROR         = 18,
    INCORRECT_AMOUNT     = 19,
-   UNAVAILABLE_PURCHASE = 20
+   UNAVAILABLE_PURCHASE = 20,
+   SYSTEM_ERROR         = 200
 
 };
 
@@ -79,11 +80,27 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
       void onredeem( const name& from, const symbol& collateral_sym, const asset& quant );
 
       void onaddcallat( const name& from, const asset& quant );
+
+      uint64_t get_callation_ratio(const asset& collateral_quant, const asset& principal );
+
+      uint64_t get_index_price( const name& base_code );
+
+      const price_global_t& _price_conf();
+
       
+      name _get_lower( const symbol& base_symbol) {
+         auto str = ( base_symbol.code().to_string() );
+         std::transform(str.begin(), str.end(),str.begin(), ::tolower);
+         return name(str);
+      }
+
       global_singleton     _global;
       global_t             _gstate;
       dbc                  _db;
       global_state::ptr_t   _global_state;
+
+      std::unique_ptr<price_global_t::idx_t>    _global_prices_tbl_ptr;
+      std::unique_ptr<price_global_t>     _global_prices_ptr;
 
 };
 } //namespace tychefi
