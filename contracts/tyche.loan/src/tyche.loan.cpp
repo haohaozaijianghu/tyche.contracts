@@ -89,14 +89,14 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
    auto itr = syms.find(quant.symbol.code().raw());
    CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
    CHECKC(token_bank == itr->sym.get_contract(), err::CONTRACT_MISMATCH, "symbol not supported");
-   oncollateral(from, quant);
+   onaddcallat(from, quant);
 
    return;
 
 
 
 }
-//赎回
+//赎回抵押物，用户打入MUSDT
 void tyche_loan::onredeem( const name& from, const symbol& collateral_sym, const asset& quant ){
 
    loaner_t::tbl_t loaners(_self, collateral_sym.code().raw());
@@ -131,13 +131,17 @@ void tyche_loan::onredeem( const name& from, const symbol& collateral_sym, const
    }
 
    loaners.modify(itr, _self, [&](auto& row){
-
+      row.avl_principal          = avl_principal;
+      row.paid_interest          = total_paid_interest;
+      row.unpaid_interest        = total_unpaid_interest;
+      row.term_settled_at        = eosio::current_time_point();
+      row.term_ended_at          = eosio::current_time_point() + eosio::days(365*2);
    });
 
 }
 
 //增加质押物
-void tyche_loan::oncollateral( const name& from, const asset& quant ){
+void tyche_loan::onaddcallat( const name& from, const asset& quant ){
    loaner_t::tbl_t loaners(_self, quant.symbol.code().raw());
    auto itr = loaners.find(from.value);
    if( itr == loaners.end() ){
@@ -159,6 +163,17 @@ void tyche_loan::oncollateral( const name& from, const asset& quant ){
          row.avl_collateral_quant += quant;
       });
    }
+}
+
+//赎回质押物，就是减少用户的质押物
+void tyche_loan::onsubcallat( const name& from, const asset& quant ) {
+   require_auth(from);
+   loaner_t::tbl_t loaners(_self, quant.symbol.code().raw());
+   auto itr = loaners.find(from.value);
+   CHECKC(itr != loaners.end(),           err::RECORD_NOT_FOUND,  "account not existed")
+   CHECKC(itr->avl_collateral_quant.amount > 0,  err::OVERSIZED,  "avl_principal must positive")
+   CHECKC(itr->avl_collateral_quant.amount >= quant.amount, err::OVERSIZED,  "too many callat sub")
 
 }
+
 }
