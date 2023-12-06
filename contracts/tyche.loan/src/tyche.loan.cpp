@@ -82,7 +82,7 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
    if( quant.symbol == _gstate.loan_token.get_symbol() && token_bank == _gstate.loan_token.get_contract() ) { 
       if( from == _gstate.lp_refueler )
          return;
-      onredeem(from, quant);
+      // onredeem(from, quant);
       return;
    }
    auto syms = collateral_symbol_t::idx_t(_self, _self.value);
@@ -96,12 +96,47 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
 
 
 }
+//赎回
+void tyche_loan::onredeem( const name& from, const symbol& collateral_sym, const asset& quant ){
 
-void tyche_loan::onredeem( const name& from, const asset& quant ){
+   loaner_t::tbl_t loaners(_self, collateral_sym.code().raw());
+   auto itr = loaners.find(from.value);
+   CHECKC(itr != loaners.end(),           err::RECORD_NOT_FOUND,  "account not existed")
+   CHECKC(itr->avl_principal.amount > 0,  err::OVERSIZED,         "avl_principal must positive")
 
+   //结算利息
+   auto elapsed =  (time_point_sec(current_time_point()) - itr->term_settled_at);
+   auto elapsed_seconds = elapsed.count() / 1000000;
+   CHECKC( elapsed_seconds > 0,        err::TIME_PREMATURE,       "time premature" )
+   auto total_unpaid_interest = itr->avl_principal * itr->interest_ratio / YEAR_SECONDS * elapsed_seconds / PCT_BOOST;
+   CHECKC( total_unpaid_interest.amount > 0,  err::INCORRECT_AMOUNT,     "interest must positive" )
+
+   total_unpaid_interest      += itr->unpaid_interest;
+   auto total_paid_interest   = itr->paid_interest;
+   auto avl_principal         = itr->avl_principal;
+   if (total_unpaid_interest > quant) {   //支付的钱只够利息
+      total_unpaid_interest   = total_unpaid_interest - quant;
+      total_paid_interest     += quant;
+   } else {
+      total_unpaid_interest   = asset(0,total_unpaid_interest.symbol );
+      total_paid_interest     += total_unpaid_interest;
+      auto principal_repay_quant = quant - total_unpaid_interest;
+      if(principal_repay_quant > avl_principal) {
+         //退还用户支付的MUSDT
+         //TODO
+         avl_principal        = asset(0, avl_principal.symbol);
+      } else {
+         avl_principal         -= principal_repay_quant;
+      }
+   }
+
+   loaners.modify(itr, _self, [&](auto& row){
+
+   });
 
 }
 
+//增加质押物
 void tyche_loan::oncollateral( const name& from, const asset& quant ){
    loaner_t::tbl_t loaners(_self, quant.symbol.code().raw());
    auto itr = loaners.find(from.value);
@@ -117,22 +152,11 @@ void tyche_loan::oncollateral( const name& from, const asset& quant ){
          row.term_ended_at          = eosio::current_time_point() + eosio::days(365*2);
          row.unpaid_interest        = asset(0, _gstate.loan_token.get_symbol());
          row.paid_interest          = asset(0, _gstate.loan_token.get_symbol());
-
       });
-   } else {   
-      //结算利息
-      auto elapsed =  (time_point_sec(current_time_point()) - itr->term_settled_at);
-      auto elapsed_seconds = elapsed.count() / 1000000;
-      CHECKC( elapsed_seconds > 0, err::TIME_PREMATURE, "time premature" )
-      auto total_interest = itr->avl_principal * itr->interest_ratio / YEAR_SECONDS * elapsed_seconds / PCT_BOOST;
-      CHECKC( total_interest.amount > 0, err::INCORRECT_AMOUNT, "interest must positive" )
-
+   } else {
       loaners.modify(itr, _self, [&](auto& row){
          row.cum_collateral_quant += quant;
          row.avl_collateral_quant += quant;
-         row.term_settled_at        = eosio::current_time_point();
-         row.term_ended_at          = eosio::current_time_point() + eosio::days(365*2);
-         row.unpaid_interest        += total_interest;
       });
    }
 

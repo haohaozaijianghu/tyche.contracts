@@ -74,7 +74,7 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    
    private:
 
-      void onredeem( const name& from, const asset& quant );
+      void onredeem( const name& from, const symbol& collateral_sym, const asset& quant );
 
       void oncollateral( const name& from, const asset& quant );
       
