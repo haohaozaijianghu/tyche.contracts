@@ -57,16 +57,14 @@ NTBL("global") global_t {
     name                reward_contract         = "tyche.reward"_n;
 
     extended_symbol     loan_token             = extended_symbol(MUSDT,  MUSDT_BANK);       //代币TRUSD
-    asset               min_deposit_amount      = asset(10'000000, MUSDT);                  //10 MU 
- 
-    uint64_t            tyche_farm_ratio        = 10;                                       //每100MUSDT 奖励0.1TYCHE
-    uint64_t            tyche_farm_lock_ratio   = 90;                                       //每100MUSDT 锁仓0.9TYCHE
+    asset               min_deposit_amount      = asset(10'000000, MUSDT);                  //10 MU
+    uint64_t            interest_ratio          = 800;                                     //8%
 
     aplink_farm         apl_farm;
     bool                enabled                 = true; 
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(reward_contract)(loan_token)(min_deposit_amount)
-                                (tyche_farm_ratio)(tyche_farm_lock_ratio)(apl_farm)(enabled) )
+                                (interest_ratio)(apl_farm)(enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
@@ -74,14 +72,17 @@ typedef eosio::singleton< "global"_n, global_t > global_singleton;
 //Note: record will be deleted upon withdrawal/redemption
 TBL loaner_t {
     name                owner;                          //PK
-    asset               cum_principal;                  //总存款金额
-    asset               avl_principal;                  //当前存款金额
+    asset               cum_collateral_quant;           //总存款金额 ETH
+    asset               avl_collateral_quant;           //当前存款金额 ETH
+    asset               avl_principal;                  //当前存款金额 MUSDT
+    uint64_t            interest_ratio;                 //利息率
 
     time_point_sec      term_started_at;                //入池时间
     time_point_sec      term_settled_at;                //利息结算时间
     time_point_sec      term_ended_at;                  //还款最后时间
 
     asset               unpaid_interest;                //未支付利息
+    asset               paid_interest;                  //已支付利息
 
     time_point_sec      created_at;
 
@@ -92,18 +93,19 @@ TBL loaner_t {
 
     typedef multi_index<"loaners"_n, loaner_t> tbl_t;
 
-    EOSLIB_SERIALIZE( loaner_t, (owner)(cum_principal)(avl_principal)
+    EOSLIB_SERIALIZE( loaner_t, (owner)(cum_collateral_quant)(avl_collateral_quant)(avl_principal)(interest_ratio)
                                 (term_started_at)(term_settled_at)(term_ended_at)
-                                (unpaid_interest)(created_at) )
+                                (unpaid_interest)(paid_interest)(created_at) )
 };
 
 //Scope: _self
 TBL collateral_symbol_t {
     extended_symbol sym;                                //PK, sym.code MUSDT,8@amax.mtoken
-    uint64_t    collateral_ratio;                       //抵押率, 50% = 5000
-    uint64_t    liquidation_ratio;                      //清算率, 80% = 8000
-    uint64_t    interest_ratio;
-    uint64_t    liquidation_penalty_ratio;              //清算惩罚率, 10% = 1000
+    uint64_t    init_collateral_ratio   = 20000;        //初始抵押率 200%
+    uint64_t    collateral_ratio        = 15000;        //抵押率: 150%
+    uint64_t    liquidation_ratio       = 12000;        //清算率: 120%
+    uint64_t    interest_ratio          = 800;          //利息率: 8% = 800
+    uint64_t    liquidation_penalty_ratio = 1000;       //清算惩罚率: 10% = 1000
     bool        on_shelf;
 
     collateral_symbol_t() {}

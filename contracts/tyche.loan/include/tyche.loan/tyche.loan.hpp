@@ -73,6 +73,11 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    ACTION init(const name& admin, const name& reward_contract, const name& lp_refueler, const bool& enabled);
    
    private:
+
+      void onredeem( const name& from, const asset& quant );
+
+      void oncollateral( const name& from, const asset& quant );
+      
       global_singleton     _global;
       global_t             _gstate;
       dbc                  _db;

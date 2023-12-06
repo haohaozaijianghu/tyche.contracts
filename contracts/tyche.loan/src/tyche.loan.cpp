@@ -78,6 +78,7 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
    if (from == get_self() || to != get_self()) return;
    auto token_bank = get_first_receiver();
 
+   //MUSDT
    if( quant.symbol == _gstate.loan_token.get_symbol() && token_bank == _gstate.loan_token.get_contract() ) { 
       if( from == _gstate.lp_refueler )
          return;
@@ -86,7 +87,11 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
    }
    auto syms = collateral_symbol_t::idx_t(_self, _self.value);
    auto itr = syms.find(quant.symbol.code().raw());
-   CHECHC(itr != syms.end(), err::SYMBOL_INVALID, "symbol not supported");
+   CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
+   CHECKC(token_bank == itr->sym.get_contract(), err::CONTRACT_MISMATCH, "symbol not supported");
+   oncollateral(from, quant);
+
+   return;
 
 
 
@@ -94,6 +99,42 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
 
 void tyche_loan::onredeem( const name& from, const asset& quant ){
 
+
 }
 
+void tyche_loan::oncollateral( const name& from, const asset& quant ){
+   loaner_t::tbl_t loaners(_self, quant.symbol.code().raw());
+   auto itr = loaners.find(from.value);
+   if( itr == loaners.end() ){
+      loaners.emplace(_self, [&](auto& row){
+         row.owner = from;
+         row.cum_collateral_quant   = quant;
+         row.avl_collateral_quant   = quant;
+         row.avl_principal          = asset(0, _gstate.loan_token.get_symbol());
+         row.interest_ratio         = _gstate.interest_ratio;
+         row.created_at             = eosio::current_time_point();
+         row.term_settled_at        = eosio::current_time_point();
+         row.term_ended_at          = eosio::current_time_point() + eosio::days(365*2);
+         row.unpaid_interest        = asset(0, _gstate.loan_token.get_symbol());
+         row.paid_interest          = asset(0, _gstate.loan_token.get_symbol());
+
+      });
+   } else {   
+      //结算利息
+      auto elapsed =  (time_point_sec(current_time_point()) - itr->term_settled_at);
+      auto elapsed_seconds = elapsed.count() / 1000000;
+      CHECKC( elapsed_seconds > 0, err::TIME_PREMATURE, "time premature" )
+      auto total_interest = itr->avl_principal * itr->interest_ratio / YEAR_SECONDS * elapsed_seconds / PCT_BOOST;
+      CHECKC( total_interest.amount > 0, err::INCORRECT_AMOUNT, "interest must positive" )
+
+      loaners.modify(itr, _self, [&](auto& row){
+         row.cum_collateral_quant += quant;
+         row.avl_collateral_quant += quant;
+         row.term_settled_at        = eosio::current_time_point();
+         row.term_ended_at          = eosio::current_time_point() + eosio::days(365*2);
+         row.unpaid_interest        += total_interest;
+      });
+   }
+
+}
 }
