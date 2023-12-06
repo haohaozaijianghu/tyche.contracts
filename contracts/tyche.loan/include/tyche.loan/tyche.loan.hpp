@@ -39,6 +39,7 @@ enum class err: uint8_t {
    STATUS_ERROR         = 18,
    INCORRECT_AMOUNT     = 19,
    UNAVAILABLE_PURCHASE = 20,
+   RATE_EXCEEDED        = 21,
    SYSTEM_ERROR         = 200
 
 };
@@ -75,6 +76,8 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    
    ACTION onsubcallat( const name& from, const asset& quant );
 
+   ACTION getmoreusdt( const name& from, const symbol& callat_sym, const asset& quant );
+
    private:
 
       void onredeem( const name& from, const symbol& collateral_sym, const asset& quant );
@@ -86,8 +89,9 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
       uint64_t get_index_price( const name& base_code );
 
       const price_global_t& _price_conf();
-
       
+      asset _get_interest( const asset& principal, const uint64_t& interest_ratio, const time_point_sec& term_settled_at );
+
       name _get_lower( const symbol& base_symbol) {
          auto str = ( base_symbol.code().to_string() );
          std::transform(str.begin(), str.end(),str.begin(), ::tolower);

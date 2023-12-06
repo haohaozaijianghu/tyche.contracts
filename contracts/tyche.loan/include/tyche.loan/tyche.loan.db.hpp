@@ -27,7 +27,7 @@ static constexpr uint64_t  DAY_SECONDS       = 24 * 60 * 60;
 static constexpr uint64_t  YEAR_SECONDS      = 24 * 60 * 60 * 365;
 static constexpr uint64_t  YEAR_DAYS         = 365;
 static constexpr int128_t  HIGH_PRECISION    = 1'000'000'000'000'000'000; // 10^18
-static constexpr int64_t RATIO_PRECISION     = 100000;       // 10^5, the ratio precision
+static constexpr int64_t    RATIO_PRECISION     = 100000;       // 10^5, the ratio precision
 
 
 static constexpr name       MUSDT_BANK       = "amax.mtoken"_n;
@@ -63,13 +63,14 @@ NTBL("global") global_t {
     extended_symbol     loan_token             = extended_symbol(MUSDT,  MUSDT_BANK);       //代币TRUSD
     asset               min_deposit_amount      = asset(10'000000, MUSDT);                  //10 MU
     uint64_t            interest_ratio          = 800;                                     //8%
+    uint64_t            term_interval_days      = 365 * 2;                        //30天
 
     aplink_farm         apl_farm;
     bool                enabled                 = true; 
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(reward_contract)(price_oracle_contract)
                                 (loan_token)(min_deposit_amount)
-                                (interest_ratio)(apl_farm)(enabled) )
+                                (interest_ratio)(term_interval_days)(apl_farm)(enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
