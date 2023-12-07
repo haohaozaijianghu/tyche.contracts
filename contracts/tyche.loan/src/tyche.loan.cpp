@@ -70,7 +70,8 @@ void tyche_loan::init(const name& admin, const name& reward_contract, const name
  * @param to
  * @param quantity
  * @param memo: two formats:
- *       1) 
+ *       1) musdt: "repay:6,ETH"  //降低抵押率，获得更多的MUSDT
+ *       2) meth:
  */
 void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant, const string& memo) {
    CHECKC(_gstate.enabled, err::PAUSED, "not effective yet");
@@ -79,18 +80,23 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
    if (from == get_self() || to != get_self()) return;
    auto token_bank = get_first_receiver();
 
+
    //MUSDT
    if( quant.symbol == _gstate.loan_token.get_symbol() && token_bank == _gstate.loan_token.get_contract() ) { 
       if( from == _gstate.lp_refueler )
          return;
-      // onredeem(from, quant);
+      auto parts  = split( memo, ":" );
+      if (parts[0] == "repay" ) {
+         auto sym = symbol_from_string(parts[1]);
+         _on_pay_musdt(from, sym, quant);
+      }
       return;
    }
    auto syms = collateral_symbol_t::idx_t(_self, _self.value);
    auto itr = syms.find(quant.symbol.code().raw());
    CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
    CHECKC(token_bank == itr->sym.get_contract(), err::CONTRACT_MISMATCH, "symbol not supported");
-   onaddcallat(from, quant);
+   _on_add_callateral(from, quant);
    return;
 
 }
@@ -98,7 +104,7 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
 
 //赎回抵押物，用户打入MUSDT
 //internal call
-void tyche_loan::onredeem( const name& from, const symbol& collateral_sym, const asset& quant ){
+void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, const asset& quant ){
 
    loaner_t::tbl_t loaners(_self, collateral_sym.code().raw());
    auto itr = loaners.find(from.value);
@@ -138,8 +144,7 @@ void tyche_loan::onredeem( const name& from, const symbol& collateral_sym, const
    });
 }
 
-
-//获得更多的MUSDT
+//external: 获得更多的MUSDT
 void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const asset& quant){
    require_auth(from);
    CHECKC(quant.amount > 0, err::INCORRECT_AMOUNT, "amount must positive")
@@ -151,12 +156,11 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    auto loaner_itr = loaner.find(from.value);
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 
-   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, loaner_itr->avl_principal + quant);
+   asset total_interest = _get_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at);
+   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest + quant);
    CHECKC( ratio >= itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
    //打USDT给用户
    TRANSFER( _gstate.loan_token.get_contract(), from, quant, "tyche loan" );
-
-   asset total_interest = _get_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at);
 
    //更新用户的MUSDT
    loaner.modify(loaner_itr, _self, [&](auto& row){
@@ -167,7 +171,7 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
 }
 
 //增加质押物
-void tyche_loan::onaddcallat( const name& from, const asset& quant ){
+void tyche_loan::_on_add_callateral( const name& from, const asset& quant ){
    loaner_t::tbl_t loaners(_self, quant.symbol.code().raw());
    auto itr = loaners.find(from.value);
    if( itr == loaners.end() ){
@@ -247,11 +251,47 @@ const price_global_t& tyche_loan::_price_conf() {
 asset tyche_loan::_get_interest( const asset& principal, const uint64_t& interest_ratio, const time_point_sec& term_settled_at ) {
    auto elapsed =  (time_point_sec(current_time_point()) - term_settled_at);
    auto elapsed_seconds = elapsed.count() / 1000000;
-   CHECKC( elapsed_seconds > 0,        err::TIME_PREMATURE,       "time premature" )
+   CHECKC( elapsed_seconds > 0,              err::TIME_PREMATURE,       "time premature" )
    auto total_unpaid_interest = principal * interest_ratio / YEAR_SECONDS * elapsed_seconds / PCT_BOOST;
    CHECKC( total_unpaid_interest.amount > 0,  err::INCORRECT_AMOUNT,     "interest must positive" )
    return total_unpaid_interest;
-
 }
 
+/***
+ * @brief 1. 用户打入MUSDT，获得抵押物
+ *           更具当前价格, 如果抵押率< 150%, 则按当前eth 价格87%的价格售卖,平台得到10%的利润,用户得到3%价格差奖励
+*/
+void tyche_loan::liqudate( const name& from, const name& liqudater, const symbol& callat_sym, const asset& quant ){
+   require_auth(from);
+   CHECKC(quant.amount > 0, err::INCORRECT_AMOUNT, "amount must positive")
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto itr = syms.find(callat_sym.code().raw());
+   CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
+
+   auto loaner = loaner_t::tbl_t(_self, callat_sym.code().raw());
+   auto loaner_itr = loaner.find(from.value);
+   CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
+
+   asset total_interest = _get_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at);
+   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest + quant);
+   CHECKC( ratio >= itr->liquidation_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
+
+   if(ratio < itr->liquidation_ratio && ratio >= itr->force_liquidate_ratio) {
+      //
+      //打USDT给用户
+      auto  return_quant = quant - loaner_itr->avl_principal;
+      TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, "tyche loan return principal" );
+      //TODO
+      loaner.modify(loaner_itr, _self, [&](auto& row){
+         row.avl_principal    = asset(0, _gstate.loan_token.get_symbol());
+         row.unpaid_interest  = asset(0, _gstate.loan_token.get_symbol());
+         row.paid_interest    = asset(0, _gstate.loan_token.get_symbol());
+         row.term_settled_at  = eosio::current_time_point();
+      });
+      return;
+   } else {
+      
+   }
 }
+
+} //namespace tychefi

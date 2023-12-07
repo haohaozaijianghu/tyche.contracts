@@ -78,11 +78,13 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
 
    ACTION getmoreusdt( const name& from, const symbol& callat_sym, const asset& quant );
 
+   ACTION liqudate( const name& from, const name& liqudater, const symbol& callat_sym, const asset& quant );
+
    private:
 
-      void onredeem( const name& from, const symbol& collateral_sym, const asset& quant );
+      void _on_pay_musdt( const name& from, const symbol& collateral_sym, const asset& quant );
 
-      void onaddcallat( const name& from, const asset& quant );
+      void _on_add_callateral( const name& from, const asset& quant );
 
       uint64_t get_callation_ratio(const asset& collateral_quant, const asset& principal );
 

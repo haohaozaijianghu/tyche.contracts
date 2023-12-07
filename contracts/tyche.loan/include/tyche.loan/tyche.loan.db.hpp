@@ -62,10 +62,15 @@ NTBL("global") global_t {
 
     extended_symbol     loan_token             = extended_symbol(MUSDT,  MUSDT_BANK);       //代币TRUSD
     asset               min_deposit_amount      = asset(10'000000, MUSDT);                  //10 MU
-    uint64_t            interest_ratio          = 800;                                     //8%
-    uint64_t            term_interval_days      = 365 * 2;                        //30天
+    uint64_t            interest_ratio          = 800;                                      //8%
+    uint64_t            term_interval_days      = 365 * 2;                                  //30天
 
     aplink_farm         apl_farm;
+
+    uint64_t            liquidation_penalty_ratio   = 1000;         //清算惩罚率: 10% = 1000
+    uint64_t            liquidation_price_ratio     = 9700 ;          //清算价格 97%
+
+
     bool                enabled                 = true; 
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(reward_contract)(price_oracle_contract)
@@ -107,11 +112,10 @@ TBL loaner_t {
 //Scope: _self
 TBL collateral_symbol_t {
     extended_symbol sym;                                //PK, sym.code MUSDT,8@amax.mtoken
-    uint64_t    init_collateral_ratio   = 20000;        //初始抵押率 200%
-    uint64_t    collateral_ratio        = 15000;        //抵押率: 150%
-    uint64_t    liquidation_ratio       = 12000;        //清算率: 120%
-    uint64_t    interest_ratio          = 800;          //利息率: 8% = 800
-    uint64_t    liquidation_penalty_ratio = 1000;       //清算惩罚率: 10% = 1000
+    uint64_t    init_collateral_ratio       = 20000;        //初始抵押率 200%
+    uint64_t    liquidation_ratio           = 15000;        //抵押率: 150%
+    uint64_t    force_liquidate_ratio       = 12000;        //率: 120%
+    uint64_t    interest_ratio              = 800;          //利息率: 8% = 800
     bool        on_shelf;
 
     collateral_symbol_t() {}
@@ -120,8 +124,8 @@ TBL collateral_symbol_t {
 
     typedef eosio::multi_index< "collsyms"_n, collateral_symbol_t > idx_t;
 
-    EOSLIB_SERIALIZE( collateral_symbol_t, (sym)(collateral_ratio)(liquidation_ratio)
-                                            (interest_ratio)(liquidation_penalty_ratio)(on_shelf) )
+    EOSLIB_SERIALIZE( collateral_symbol_t, (sym)(init_collateral_ratio)(liquidation_ratio)(force_liquidate_ratio)
+                                            (interest_ratio)(on_shelf) )
 };
 
 TBL globalidx {
@@ -181,6 +185,7 @@ struct global_state: public globalidx {
         }
     private:
         std::unique_ptr<global_table> _global_tbl;  
+        
 };
 
 } //namespace tychefi
