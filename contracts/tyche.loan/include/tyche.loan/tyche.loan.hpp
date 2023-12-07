@@ -40,6 +40,7 @@ enum class err: uint8_t {
    INCORRECT_AMOUNT     = 19,
    UNAVAILABLE_PURCHASE = 20,
    RATE_EXCEEDED        = 21,
+   PARAMETER_INVALID    = 22,
    SYSTEM_ERROR         = 200
 
 };

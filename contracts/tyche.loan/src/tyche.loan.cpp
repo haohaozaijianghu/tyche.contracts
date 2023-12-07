@@ -80,12 +80,12 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
    if (from == get_self() || to != get_self()) return;
    auto token_bank = get_first_receiver();
 
-
    //MUSDT
    if( quant.symbol == _gstate.loan_token.get_symbol() && token_bank == _gstate.loan_token.get_contract() ) { 
       if( from == _gstate.lp_refueler )
          return;
       auto parts  = split( memo, ":" );
+      CHECKC( parts.size() == 2, err::PARAMETER_INVALID, "memo format error" );
       if (parts[0] == "repay" ) {
          auto sym = symbol_from_string(parts[1]);
          _on_pay_musdt(from, sym, quant);
