@@ -22,13 +22,6 @@ using namespace std;
 using namespace eosio;
 
 
-static constexpr uint16_t  PCT_BOOST         = 10000;
-static constexpr uint64_t  DAY_SECONDS       = 24 * 60 * 60;
-static constexpr uint64_t  YEAR_SECONDS      = 24 * 60 * 60 * 365;
-static constexpr uint64_t  YEAR_DAYS         = 365;
-static constexpr int128_t  HIGH_PRECISION    = 1'000'000'000'000'000'000; // 10^18
-static constexpr int64_t    RATIO_PRECISION     = 100000;       // 10^5, the ratio precision
-
 
 static constexpr name       MUSDT_BANK       = "amax.mtoken"_n;
 static constexpr symbol     MUSDT            = symbol(symbol_code("MUSDT"), 6);
@@ -67,8 +60,8 @@ NTBL("global") global_t {
 
     aplink_farm         apl_farm;
 
-    uint64_t            liquidation_penalty_ratio   = 1000;         //清算惩罚率: 10% = 1000
-    uint64_t            liquidation_price_ratio     = 9700 ;          //清算价格 97%
+    uint64_t            liquidation_penalty_ratio   = 1000;             //清算惩罚率: 10% = 1000
+    uint64_t            liquidation_price_ratio     = 9700 ;            //清算价格 97%
 
 
     bool                enabled                 = true; 

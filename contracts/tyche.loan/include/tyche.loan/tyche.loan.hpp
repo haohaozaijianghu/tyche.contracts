@@ -83,6 +83,8 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
 
    private:
 
+      asset calc_collateral_quant( const asset& collateral_quant, const asset& paid_principal_quant );
+
       void _on_pay_musdt( const name& from, const symbol& collateral_sym, const asset& quant );
 
       void _on_add_callateral( const name& from, const asset& quant );

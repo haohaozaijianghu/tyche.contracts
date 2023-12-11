@@ -220,6 +220,7 @@ void tyche_loan::onsubcallat( const name& from, const asset& quant ) {
    TRANSFER( sym_itr->sym.get_contract(), from, quant, "tyche loan callat redeem" );
 }
 
+//计算抵押率
 uint64_t tyche_loan::get_callation_ratio(const asset& collateral_quant, const asset& principal ){
    if(principal.amount == 0)
       return PCT_BOOST;
@@ -229,6 +230,18 @@ uint64_t tyche_loan::get_callation_ratio(const asset& collateral_quant, const as
    auto ratio           = total_quant.amount * PCT_BOOST / principal.amount;
 
    return ratio;
+}
+
+//根据用户支付的金额, 算出抵押物的数量
+asset tyche_loan::calc_collateral_quant( const asset& collateral_quant, const asset& paid_principal_quant ){
+   CHECKC( collateral_quant.amount > 0, err::INCORRECT_AMOUNT, "collateral_quant must positive" )
+   CHECKC( paid_principal_quant.amount > 0, err::INCORRECT_AMOUNT, "principal_quant must positive" )
+
+   auto price                 = get_index_price( _get_lower(collateral_quant.symbol) );
+   auto settle_price          = calc_quant( asset( price, paid_principal_quant.symbol ), _gstate.liquidation_price_ratio );
+   auto paid_collateral_quant = calc_base_quant( paid_principal_quant, settle_price, collateral_quant.symbol );
+   CHECKC(paid_principal_quant < paid_collateral_quant, err::INCORRECT_AMOUNT, "paid_principal_quant must less than paid_collateral_quant" )
+   return paid_principal_quant;
 }
 
 uint64_t tyche_loan::get_index_price( const name& base_code ){
@@ -273,14 +286,23 @@ void tyche_loan::liqudate( const name& from, const name& liqudater, const symbol
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 
    asset total_interest = _get_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at);
-   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest + quant);
+   asset need_pay_interest = loaner_itr->unpaid_interest + total_interest;
+   CHECKC( need_pay_interest <= quant, err::OVERSIZED, "must pay more than interest");
+   asset need_pay_quant = loaner_itr->avl_principal + need_pay_interest;
+   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, need_pay_quant);
    CHECKC( ratio >= itr->liquidation_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
 
    if(ratio < itr->liquidation_ratio && ratio >= itr->force_liquidate_ratio) {
-      //
+      auto paid_quant = quant;
+      if( need_pay_quant <= quant) {
+         paid_quant = need_pay_quant;
+         auto return_quant = quant - need_pay_quant;
+         TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, "tyche loan return principal" );
+      }
+
       //打USDT给用户
-      auto  return_quant = quant - loaner_itr->avl_principal;
-      TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, "tyche loan return principal" );
+      // auto curr_price      = get_index_price( _get_lower(callat_sym) );
+
       //TODO
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_principal    = asset(0, _gstate.loan_token.get_symbol());
@@ -290,6 +312,7 @@ void tyche_loan::liqudate( const name& from, const name& liqudater, const symbol
       });
       return;
    } else {
+      //直接没收抵押物
       
    }
 }
