@@ -55,12 +55,12 @@ inline static asset calc_sharer_rewards(const asset& loaner_shares, const int128
    return asset( (int64_t)rewards, rewards_symbol );
 }
 
-void tyche_loan::init(const name& admin, const name& reward_contract, const name& lp_refueler, const bool& enabled) {
+void tyche_loan::init(const name& admin, const name& lp_refueler, const name& price_oracle_contract, const bool& enabled) {
    require_auth( _self );
    _gstate.admin                    = admin;
-   _gstate.reward_contract          = reward_contract;
    _gstate.lp_refueler              = lp_refueler;
    _gstate.enabled                  = enabled;
+   _gstate.price_oracle_contract    = price_oracle_contract;
 }
 
 /**

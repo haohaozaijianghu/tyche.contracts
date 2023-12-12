@@ -73,7 +73,7 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    [[eosio::on_notify("*::transfer")]]
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
    
-   ACTION init(const name& admin, const name& reward_contract, const name& lp_refueler, const bool& enabled);
+   ACTION init(const name& admin, const name& lp_refueler, const name& price_oracle_contract, const bool& enabled);
    
    ACTION onsubcallat( const name& from, const asset& quant );
 

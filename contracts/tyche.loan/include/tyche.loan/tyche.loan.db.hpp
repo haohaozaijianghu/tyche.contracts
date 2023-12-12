@@ -48,7 +48,6 @@ struct aplink_farm {
 NTBL("global") global_t {
     name                admin                   = "tyche.admin"_n;
     name                lp_refueler             = "tyche.admin"_n;                          //LP TRUSD系统充入账户
-    name                reward_contract         = "tyche.reward"_n;
     name                price_oracle_contract   = "price.oracle"_n;
 
     extended_symbol     loan_token             = extended_symbol(MUSDT,  MUSDT_BANK);       //代币TRUSD
@@ -64,7 +63,7 @@ NTBL("global") global_t {
 
     bool                enabled                 = true; 
 
-    EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(reward_contract)(price_oracle_contract)
+    EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(price_oracle_contract)
                                 (loan_token)(min_deposit_amount)
                                 (interest_ratio)(term_interval_days)(apl_farm)(enabled) )
 };
