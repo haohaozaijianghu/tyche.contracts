@@ -106,9 +106,7 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
    CHECKC(token_bank == itr->sym.get_contract(), err::CONTRACT_MISMATCH, "symbol not supported");
    _on_add_callateral(from, quant);
    return;
-
 }
-
 
 //赎回抵押物，用户打入MUSDT
 //internal call
