@@ -81,6 +81,8 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
 
    ACTION liqudate( const name& from, const name& liqudater, const symbol& callat_sym, const asset& quant );
 
+   ACTION forceliq( const name& from, const name& liqudater, const symbol& callat_sym );
+
    private:
 
       asset calc_collateral_quant( const asset& collateral_quant, const asset& paid_principal_quant );

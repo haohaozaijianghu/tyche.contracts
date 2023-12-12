@@ -282,7 +282,7 @@ void tyche_loan::liqudate( const name& from, const name& liqudater, const symbol
    CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
 
    auto loaner = loaner_t::tbl_t(_self, callat_sym.code().raw());
-   auto loaner_itr = loaner.find(from.value);
+   auto loaner_itr = loaner.find(liqudater.value);
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 
    asset total_interest = _get_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at);
@@ -294,7 +294,6 @@ void tyche_loan::liqudate( const name& from, const name& liqudater, const symbol
    if(ratio <= itr->liquidation_ratio && ratio >= itr->force_liquidate_ratio) {
       
       CHECKC( need_pay_interest <= quant, err::OVERSIZED, "must pay more than interest");
-
 
       auto paid_amount = divide_decimal(need_settle_quant.amount, _gstate.liquidation_penalty_ratio, PCT_BOOST );
       auto paid_quant = asset(paid_amount, need_settle_quant.symbol);
@@ -322,7 +321,15 @@ void tyche_loan::liqudate( const name& from, const name& liqudater, const symbol
       });
       return;
    } else {
-      TRANSFER( _gstate.loan_token.get_contract(), from, quant, "froce liqudate return principal" );
+      if( quant.amount > 0 ){
+         TRANSFER( _gstate.loan_token.get_contract(), from, quant, "froce liqudate return principal" );
+      }
+      syms.modify(itr, _self, [&](auto& row){
+         row.total_fore_collateral_quant += loaner_itr->avl_collateral_quant;
+         row.total_fore_principal        += loaner_itr->avl_principal;
+         row.avl_force_collateral_quant += loaner_itr->avl_collateral_quant;
+         row.avl_force_principal        += loaner_itr->avl_principal;
+      });
       //直接没收抵押物
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
@@ -331,11 +338,39 @@ void tyche_loan::liqudate( const name& from, const name& liqudater, const symbol
          row.paid_interest          += need_pay_interest;
          row.term_settled_at        = eosio::current_time_point();
       });
-
-
-
-      
    }
+}
+
+
+void tyche_loan::forceliq( const name& from, const name& liqudater, const symbol& callat_sym ){
+   require_auth(from);
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto itr = syms.find(callat_sym.code().raw());
+   CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
+
+   auto loaner = loaner_t::tbl_t(_self, callat_sym.code().raw());
+   auto loaner_itr = loaner.find(liqudater.value);
+   CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
+
+   asset total_interest = _get_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at);
+   asset need_pay_interest = loaner_itr->unpaid_interest + total_interest;
+   asset need_settle_quant = loaner_itr->avl_principal + need_pay_interest;
+   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, need_settle_quant);
+   CHECKC( ratio <= itr->force_liquidate_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
+   syms.modify(itr, _self, [&](auto& row){
+      row.total_fore_collateral_quant += loaner_itr->avl_collateral_quant;
+      row.total_fore_principal        += loaner_itr->avl_principal;
+      row.avl_force_collateral_quant += loaner_itr->avl_collateral_quant;
+      row.avl_force_principal        += loaner_itr->avl_principal;
+   });
+   //直接没收抵押物
+   loaner.modify(loaner_itr, _self, [&](auto& row){
+      row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
+      row.avl_principal          = asset(0, _gstate.loan_token.get_symbol()); 
+      row.unpaid_interest        = asset(0, _gstate.loan_token.get_symbol());
+      row.paid_interest          += need_pay_interest;
+      row.term_settled_at        = eosio::current_time_point();
+   });
 }
 
 void tyche_loan::_add_fee(const asset& quantity) {
