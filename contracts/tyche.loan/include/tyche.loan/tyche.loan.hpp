@@ -81,18 +81,20 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
 
    ACTION forceliq( const name& from, const name& liqudater, const symbol& callat_sym );
 
+   ACTION setcallatsym( const extended_symbol& sym, const name& oracle_sym_name );
+
    private:
 
       //清算
       void _liqudate( const name& from, const name& liqudater, const symbol& callat_sym, const asset& quant );
 
-      asset calc_collateral_quant( const asset& collateral_quant, const asset& paid_principal_quant );
+      asset calc_collateral_quant( const asset& collateral_quant, const asset& paid_principal_quant, const name& oracle_sym_name );
 
       void _on_pay_musdt( const name& from, const symbol& collateral_sym, const asset& quant );
 
       void _on_add_callateral( const name& from, const asset& quant );
 
-      uint64_t get_callation_ratio(const asset& collateral_quant, const asset& principal );
+      uint64_t get_callation_ratio(const asset& collateral_quant, const asset& principal, const name& oracle_sym_name);
 
       uint64_t get_index_price( const name& base_code );
 

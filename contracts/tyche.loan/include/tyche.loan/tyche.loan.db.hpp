@@ -101,11 +101,12 @@ TBL loaner_t {
 
 //Scope: _self
 TBL collateral_symbol_t {
-    extended_symbol sym;                                //PK, sym.code MUSDT,8@amax.mtoken
+    extended_symbol sym;                                    //PK, sym.code MUSDT,8@amax.mtoken
+    name        oracle_sym_name;                            //价格预言机
     uint64_t    init_collateral_ratio       = 20000;        //初始抵押率 200%
     uint64_t    liquidation_ratio           = 15000;        //抵押率: 150%
     uint64_t    force_liquidate_ratio       = 12000;        //率: 120%
-    uint64_t    interest_ratio              = 800;          //利息率: 8% = 800
+    uint64_t    interest_ratio              = 800;           //利息率: 8% = 800
     asset       total_fore_collateral_quant;                 //强平抵押物总量
     asset       total_fore_principal;                        //强平总本金
     asset       avl_force_collateral_quant;                  //强平抵押物总量
@@ -118,7 +119,7 @@ TBL collateral_symbol_t {
 
     typedef eosio::multi_index< "collsyms"_n, collateral_symbol_t > idx_t;
 
-    EOSLIB_SERIALIZE( collateral_symbol_t, (sym)(init_collateral_ratio)(liquidation_ratio)(force_liquidate_ratio)
+    EOSLIB_SERIALIZE( collateral_symbol_t, (sym)(oracle_sym_name)(init_collateral_ratio)(liquidation_ratio)(force_liquidate_ratio)
                                             (interest_ratio)(total_fore_collateral_quant)(total_fore_principal)
                                             (avl_force_collateral_quant)(avl_force_principal)(on_shelf) )
 };
