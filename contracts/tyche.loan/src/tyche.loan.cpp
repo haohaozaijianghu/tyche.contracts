@@ -118,29 +118,25 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
    auto itr = loaners.find(from.value);
    CHECKC(itr != loaners.end(),           err::RECORD_NOT_FOUND,  "account not existed")
    CHECKC(itr->avl_principal.amount > 0,  err::OVERSIZED,         "avl_principal must positive")
-
    //结算利息
    auto total_unpaid_interest = _get_interest(itr->avl_principal, itr->interest_ratio, itr->term_settled_at);
 
    total_unpaid_interest      += itr->unpaid_interest;
    auto total_paid_interest   = itr->paid_interest;
    auto avl_principal         = itr->avl_principal;
-   if (total_unpaid_interest > quant) {   //支付的钱只够利息
-      total_unpaid_interest   = total_unpaid_interest - quant;
-      total_paid_interest     += quant;
+   CHECKC(total_unpaid_interest<= quant, err::OVERSIZED, "must pay more than interest")
+  
+   total_unpaid_interest   = asset(0,total_unpaid_interest.symbol );
+   total_paid_interest     += total_unpaid_interest;
+   auto principal_repay_quant = quant - total_unpaid_interest;
+   if(principal_repay_quant > avl_principal) {
+      //打USDT给用户
+      auto  return_quant = principal_repay_quant - avl_principal;
+      TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, "tyche loan return principal" );
+      //TODO
+      avl_principal        = asset(0, avl_principal.symbol);
    } else {
-      total_unpaid_interest   = asset(0,total_unpaid_interest.symbol );
-      total_paid_interest     += total_unpaid_interest;
-      auto principal_repay_quant = quant - total_unpaid_interest;
-      if(principal_repay_quant > avl_principal) {
-         //打USDT给用户
-         auto  return_quant = principal_repay_quant - avl_principal;
-         TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, "tyche loan return principal" );
-         //TODO
-         avl_principal        = asset(0, avl_principal.symbol);
-      } else {
-         avl_principal         -= principal_repay_quant;
-      }
+      avl_principal         -= principal_repay_quant;
    }
 
    loaners.modify(itr, _self, [&](auto& row){
