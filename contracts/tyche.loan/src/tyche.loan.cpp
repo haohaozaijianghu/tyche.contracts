@@ -388,16 +388,16 @@ void tyche_loan::_add_fee(const asset& quantity) {
 }
 
 asset tyche_loan::_sub_fee(const symbol& sym) {
-    auto fee_tbl = make_fee_table( get_self() );
-    auto itr = fee_tbl.find( sym.code().raw() );
+   auto fee_tbl = make_fee_table( get_self() );
+   auto itr = fee_tbl.find( sym.code().raw() );
 
-    CHECKC( itr != fee_tbl.end(), err::RECORD_NOT_FOUND, "The user does not exist or has fee" )
-    CHECKC( itr->fees.amount > 0, err::PARAM_ERROR, "not enought balance" )
-    auto quant = itr->fees;
-    fee_tbl.modify( *itr, _self, [&](auto &row ) {
-        row.fees = asset( 0, sym );
-    });
-    return quant;
+   CHECKC( itr != fee_tbl.end(), err::RECORD_NOT_FOUND, "The user does not exist or has fee" )
+   CHECKC( itr->fees.amount > 0, err::PARAM_ERROR, "not enought balance" )
+   auto quant = itr->fees;
+   fee_tbl.modify( *itr, _self, [&](auto &row ) {
+      row.fees = asset( 0, sym );
+   });
+   return quant;
 }
 
 } //namespace tychefi
