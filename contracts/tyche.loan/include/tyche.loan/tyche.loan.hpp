@@ -93,6 +93,10 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
 
       uint64_t get_index_price( const name& base_code );
 
+      void _add_fee(const asset& quantity);
+
+      asset _sub_fee(const symbol& sym);
+
       const price_global_t& _price_conf();
       
       asset _get_interest( const asset& principal, const uint64_t& interest_ratio, const time_point_sec& term_settled_at );

@@ -276,7 +276,7 @@ asset tyche_loan::_get_interest( const asset& principal, const uint64_t& interes
 */
 void tyche_loan::liqudate( const name& from, const name& liqudater, const symbol& callat_sym, const asset& quant ){
    require_auth(from);
-   CHECKC(quant.amount > 0, err::INCORRECT_AMOUNT, "amount must positive")
+   CHECKC(quant.amount >= 0, err::INCORRECT_AMOUNT, "amount must positive")
    auto syms = collateral_symbol_t::idx_t(_self, _self.value);
    auto itr = syms.find(callat_sym.code().raw());
    CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
@@ -287,34 +287,82 @@ void tyche_loan::liqudate( const name& from, const name& liqudater, const symbol
 
    asset total_interest = _get_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at);
    asset need_pay_interest = loaner_itr->unpaid_interest + total_interest;
-   CHECKC( need_pay_interest <= quant, err::OVERSIZED, "must pay more than interest");
-   asset need_pay_quant = loaner_itr->avl_principal + need_pay_interest;
-   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, need_pay_quant);
+   asset need_settle_quant = loaner_itr->avl_principal + need_pay_interest;
+   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, need_settle_quant);
    CHECKC( ratio >= itr->liquidation_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
+   
+   if(ratio <= itr->liquidation_ratio && ratio >= itr->force_liquidate_ratio) {
+      
+      CHECKC( need_pay_interest <= quant, err::OVERSIZED, "must pay more than interest");
 
-   if(ratio < itr->liquidation_ratio && ratio >= itr->force_liquidate_ratio) {
-      auto paid_quant = quant;
-      if( need_pay_quant <= quant) {
-         paid_quant = need_pay_quant;
-         auto return_quant = quant - need_pay_quant;
+
+      auto paid_amount = divide_decimal(need_settle_quant.amount, _gstate.liquidation_penalty_ratio, PCT_BOOST );
+      auto paid_quant = asset(paid_amount, need_settle_quant.symbol);
+      if( paid_quant <= quant) {
+         auto return_quant = quant - paid_quant;
          TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, "tyche loan return principal" );
       }
-
-      //打USDT给用户
-      // auto curr_price      = get_index_price( _get_lower(callat_sym) );
-
-      //TODO
+      auto return_collateral_quant = calc_collateral_quant(loaner_itr->avl_collateral_quant, paid_quant);
+      //把抵押物转给协议平仓的人
+      TRANSFER( itr->sym.get_contract(), from, return_collateral_quant, "tyche loan return principal" );
+      //平台内结算
+      //添加平台金额
+      auto platform_quant = paid_quant - need_settle_quant;
+      auto paid_principal = need_settle_quant - need_pay_interest;
+      CHECKC( paid_principal.amount > 0, err::INCORRECT_AMOUNT, "paid_principal must positive" )
+      CHECKC( paid_principal <= loaner_itr->avl_principal, err::INCORRECT_AMOUNT, "principal need < avl_principal" )
+      _add_fee(platform_quant);
+      //结算用户质押物
       loaner.modify(loaner_itr, _self, [&](auto& row){
-         row.avl_principal    = asset(0, _gstate.loan_token.get_symbol());
-         row.unpaid_interest  = asset(0, _gstate.loan_token.get_symbol());
-         row.paid_interest    = asset(0, _gstate.loan_token.get_symbol());
-         row.term_settled_at  = eosio::current_time_point();
+         row.avl_collateral_quant   -= return_collateral_quant;              //减少抵押物
+         row.avl_principal          -= paid_principal; 
+         row.unpaid_interest        = asset(0, _gstate.loan_token.get_symbol());
+         row.paid_interest          += need_pay_interest;
+         row.term_settled_at        = eosio::current_time_point();
       });
       return;
    } else {
+      TRANSFER( _gstate.loan_token.get_contract(), from, quant, "froce liqudate return principal" );
       //直接没收抵押物
+      loaner.modify(loaner_itr, _self, [&](auto& row){
+         row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
+         row.avl_principal          = asset(0, _gstate.loan_token.get_symbol()); 
+         row.unpaid_interest        = asset(0, _gstate.loan_token.get_symbol());
+         row.paid_interest          += need_pay_interest;
+         row.term_settled_at        = eosio::current_time_point();
+      });
+
+
+
       
    }
+}
+
+void tyche_loan::_add_fee(const asset& quantity) {
+    auto fees           = make_fee_table( get_self() );
+    auto it             = fees.find( quantity.symbol.code().raw() );
+    if (it != fees.end()) {
+        fees.modify(*it, _self, [&](auto &row) {
+            row.fees += quantity;
+        });
+    } else {
+        fees.emplace(_self, [&]( auto& row ) {
+            row.fees = quantity;
+        });
+    }
+}
+
+asset tyche_loan::_sub_fee(const symbol& sym) {
+    auto fee_tbl = make_fee_table( get_self() );
+    auto itr = fee_tbl.find( sym.code().raw() );
+
+    CHECKC( itr != fee_tbl.end(), err::RECORD_NOT_FOUND, "The user does not exist or has fee" )
+    CHECKC( itr->fees.amount > 0, err::PARAM_ERROR, "not enought balance" )
+    auto quant = itr->fees;
+    fee_tbl.modify( *itr, _self, [&](auto &row ) {
+        row.fees = asset( 0, sym );
+    });
+    return quant;
 }
 
 } //namespace tychefi

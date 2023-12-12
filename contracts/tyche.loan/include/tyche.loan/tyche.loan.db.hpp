@@ -34,12 +34,10 @@ static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
 // static constexpr name       INTEREST         = "interest"_n ;
 // static constexpr name       REDPACK          = "redpack"_n ;
 
-
 #define HASH256(str) sha256(const_cast<char*>(str.c_str()), str.size())
 
 #define TBL struct [[eosio::table, eosio::contract("tyche.loan")]]
 #define NTBL(name) struct [[eosio::table(name), eosio::contract("tyche.loan")]]
-
 
 struct aplink_farm {
     name contract           = "aplink.farm"_n;
@@ -60,7 +58,7 @@ NTBL("global") global_t {
 
     aplink_farm         apl_farm;
 
-    uint64_t            liquidation_penalty_ratio   = 1000;             //清算惩罚率: 10% = 1000
+    uint64_t            liquidation_penalty_ratio   = 9000;             //清算惩罚率: 10% = 1000
     uint64_t            liquidation_price_ratio     = 9700 ;            //清算价格 97%
 
 
@@ -109,6 +107,10 @@ TBL collateral_symbol_t {
     uint64_t    liquidation_ratio           = 15000;        //抵押率: 150%
     uint64_t    force_liquidate_ratio       = 12000;        //率: 120%
     uint64_t    interest_ratio              = 800;          //利息率: 8% = 800
+    asset       total_fore_collateral_quant;                 //强平抵押物总量
+    asset       total_fore_principal;                        //强平总本金
+    asset       avl_force_collateral_quant;                  //强平抵押物总量
+    asset       avl_force_principal;                         //强平需要总本金
     bool        on_shelf;
 
     collateral_symbol_t() {}
@@ -118,8 +120,23 @@ TBL collateral_symbol_t {
     typedef eosio::multi_index< "collsyms"_n, collateral_symbol_t > idx_t;
 
     EOSLIB_SERIALIZE( collateral_symbol_t, (sym)(init_collateral_ratio)(liquidation_ratio)(force_liquidate_ratio)
-                                            (interest_ratio)(on_shelf) )
+                                            (interest_ratio)(total_fore_collateral_quant)(total_fore_principal)
+                                            (avl_force_collateral_quant)(avl_force_principal)(on_shelf) )
 };
+
+TBL fee_pool_t {
+    asset fees;      //PK
+
+    uint64_t primary_key() const { return fees.symbol.code().raw(); }
+
+    fee_pool_t() {}
+
+    EOSLIB_SERIALIZE(fee_pool_t, (fees))
+
+};
+
+typedef eosio::multi_index<"feepool"_n, fee_pool_t> feepool_tbl;
+inline static feepool_tbl make_fee_table( const name& self ) { return feepool_tbl(self, self.value); }
 
 TBL globalidx {
     uint64_t        reward_id                   = 0;               // the auto-increament reward id
