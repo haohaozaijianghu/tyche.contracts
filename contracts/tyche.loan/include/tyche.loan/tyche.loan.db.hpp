@@ -65,7 +65,9 @@ NTBL("global") global_t {
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(price_oracle_contract)
                                 (loan_token)(min_deposit_amount)
-                                (interest_ratio)(term_interval_days)(apl_farm)(enabled) )
+                                (interest_ratio)(term_interval_days)(apl_farm)
+                                (liquidation_penalty_ratio)(liquidation_price_ratio)
+                                (enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
