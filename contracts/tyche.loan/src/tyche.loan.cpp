@@ -71,6 +71,7 @@ void tyche_loan::init(const name& admin, const name& reward_contract, const name
  * @param quantity
  * @param memo: two formats:
  *       1) musdt: "repay:6,ETH"  //降低抵押率，获得更多的MUSDT
+ *       1) liqudate: "liqudate:name:6,ETH"  //降低抵押率，获得更多的MUSDT
  *       2) meth:
  */
 void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant, const string& memo) {
@@ -85,13 +86,20 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
       if( from == _gstate.lp_refueler )
          return;
       auto parts  = split( memo, ":" );
-      CHECKC( parts.size() == 2, err::PARAMETER_INVALID, "memo format error" );
       if (parts[0] == "repay" ) {
+         CHECKC( parts.size() == 2, err::PARAMETER_INVALID, "memo format error" );
          auto sym = symbol_from_string(parts[1]);
          _on_pay_musdt(from, sym, quant);
+      } else if( parts[0] == "liqudate" ) {
+         CHECKC( parts.size() == 3, err::PARAMETER_INVALID, "memo format error" );
+         auto sym = symbol_from_string(parts[2]);
+         _liqudate(from, name(parts[1]), sym, quant);
+      } else {
+         //CHECKC( false, err::PARAMETER_INVALID, "memo format error" );
       }
       return;
    }
+   //ETH
    auto syms = collateral_symbol_t::idx_t(_self, _self.value);
    auto itr = syms.find(quant.symbol.code().raw());
    CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
@@ -274,7 +282,7 @@ asset tyche_loan::_get_interest( const asset& principal, const uint64_t& interes
  * @brief 1. 用户打入MUSDT，获得抵押物
  *           更具当前价格, 如果抵押率< 150%, 则按当前eth 价格87%的价格售卖,平台得到10%的利润,用户得到3%价格差奖励
 */
-void tyche_loan::liqudate( const name& from, const name& liqudater, const symbol& callat_sym, const asset& quant ){
+void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbol& callat_sym, const asset& quant ){
    require_auth(from);
    CHECKC(quant.amount >= 0, err::INCORRECT_AMOUNT, "amount must positive")
    auto syms = collateral_symbol_t::idx_t(_self, _self.value);
