@@ -120,13 +120,9 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
    auto total_unpaid_interest = _get_interest(itr->avl_principal, itr->interest_ratio, itr->term_settled_at);
 
    total_unpaid_interest      += itr->unpaid_interest;
-   auto total_paid_interest   = itr->paid_interest;
-   auto avl_principal         = itr->avl_principal;
    CHECKC(total_unpaid_interest<= quant, err::OVERSIZED, "must pay more than interest")
-  
-   total_unpaid_interest   = asset(0,total_unpaid_interest.symbol );
-   total_paid_interest     += total_unpaid_interest;
    auto principal_repay_quant = quant - total_unpaid_interest;
+   auto avl_principal = itr->avl_principal;
    if(principal_repay_quant > avl_principal) {
       //打USDT给用户
       auto  return_quant = principal_repay_quant - avl_principal;
@@ -139,8 +135,8 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
 
    loaners.modify(itr, _self, [&](auto& row){
       row.avl_principal          = avl_principal;
-      row.paid_interest          = total_paid_interest;
-      row.unpaid_interest        = total_unpaid_interest;
+      row.paid_interest          += total_unpaid_interest;
+      row.unpaid_interest        = asset(0, total_unpaid_interest.symbol);
       row.term_settled_at        = eosio::current_time_point();
       row.term_ended_at          = eosio::current_time_point() + eosio::days(_gstate.term_interval_days);
    });
@@ -159,8 +155,11 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 
    asset total_interest = _get_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at);
+   // CHECKC(false, err::RATE_EXCEEDED, " " +loaner_itr->avl_principal.to_string() + " " + loaner_itr->unpaid_interest.to_string() +  " " + total_interest.to_string() +  "  " + quant.to_string() );
+
    auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest + quant, itr->oracle_sym_name);
-   CHECKC( ratio >= itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
+   //TODO
+   // CHECKC( ratio >= itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
    //打USDT给用户
    TRANSFER( _gstate.loan_token.get_contract(), from, quant, "tyche loan" );
 
@@ -170,6 +169,31 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
       row.unpaid_interest  += total_interest;
       row.term_settled_at  = eosio::current_time_point();
    });
+}
+
+void tyche_loan::tgetprice( const symbol& collateral_sym ){
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto sym_itr = syms.find(collateral_sym.code().raw());
+   CHECKC(sym_itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
+   auto price = get_index_price( sym_itr->oracle_sym_name );
+
+   CHECKC(false, err::SYSTEM_ERROR, "current pirce: " + asset(price, collateral_sym).to_string() );
+}
+
+void tyche_loan::tgetliqrate( const name& owner, const symbol& callat_sym )
+{
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto itr = syms.find(callat_sym.code().raw());
+   CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
+
+   auto loaner = loaner_t::tbl_t(_self, _get_lower(callat_sym).value);
+   auto loaner_itr = loaner.find(owner.value);
+   CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
+
+   asset total_interest = _get_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at);
+
+   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest, itr->oracle_sym_name);
+   CHECKC( false, err::RATE_EXCEEDED, "callation ratio: "  + to_string(ratio));
 }
 
 //增加质押物
@@ -243,15 +267,15 @@ asset tyche_loan::calc_collateral_quant( const asset& collateral_quant, const as
    auto price                 = get_index_price( oracle_sym_name );
    auto settle_price          = calc_quant( asset( price, paid_principal_quant.symbol ), _gstate.liquidation_price_ratio );
    auto paid_collateral_quant = calc_base_quant( paid_principal_quant, settle_price, collateral_quant.symbol );
-   CHECKC(paid_principal_quant < paid_collateral_quant, err::INCORRECT_AMOUNT, "paid_principal_quant must less than paid_collateral_quant" )
-   return paid_principal_quant;
+   CHECKC(collateral_quant >= paid_collateral_quant, err::INCORRECT_AMOUNT, "paid_principal_quant must less than paid_collateral_quant" )
+   return paid_collateral_quant;
 }
 
 uint64_t tyche_loan::get_index_price( const name& base_code ){
     const auto& prices = _price_conf().prices;
     auto itr =  prices.find(base_code);
     CHECKC(itr != prices.end(), err::RECORD_NOT_FOUND, "price not found: " + base_code.to_string()  )
-    return (itr->second)/ RATIO_PRECISION;
+    return itr->second;
 }
 
 const price_global_t& tyche_loan::_price_conf() {
@@ -269,7 +293,7 @@ asset tyche_loan::_get_interest( const asset& principal, const uint64_t& interes
    auto elapsed_seconds = elapsed.count() / 1000000;
    CHECKC( elapsed_seconds > 0,              err::TIME_PREMATURE,       "time premature" )
    auto total_unpaid_interest = principal * interest_ratio / YEAR_SECONDS * elapsed_seconds / PCT_BOOST;
-   CHECKC( total_unpaid_interest.amount > 0,  err::INCORRECT_AMOUNT,     "interest must positive" )
+   CHECKC( total_unpaid_interest.amount >= 0,  err::INCORRECT_AMOUNT,     "interest must positive" )
    return total_unpaid_interest;
 }
 
@@ -278,7 +302,6 @@ asset tyche_loan::_get_interest( const asset& principal, const uint64_t& interes
  *           更具当前价格, 如果抵押率< 150%, 则按当前eth 价格87%的价格售卖,平台得到10%的利润,用户得到3%价格差奖励
 */
 void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbol& callat_sym, const asset& quant ){
-   require_auth(from);
    CHECKC(quant.amount >= 0, err::INCORRECT_AMOUNT, "amount must positive")
    auto syms = collateral_symbol_t::idx_t(_self, _self.value);
    auto itr = syms.find(callat_sym.code().raw());
@@ -292,18 +315,19 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
    asset need_pay_interest = loaner_itr->unpaid_interest + total_interest;
    asset need_settle_quant = loaner_itr->avl_principal + need_pay_interest;
    auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, need_settle_quant, itr->oracle_sym_name);
-   CHECKC( ratio >= itr->liquidation_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
+   CHECKC( ratio <= itr->liquidation_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
    
    if(ratio <= itr->liquidation_ratio && ratio >= itr->force_liquidate_ratio) {
-      
       CHECKC( need_pay_interest <= quant, err::OVERSIZED, "must pay more than interest");
 
       auto paid_amount = divide_decimal(need_settle_quant.amount, _gstate.liquidation_penalty_ratio, PCT_BOOST );
       auto paid_quant = asset(paid_amount, need_settle_quant.symbol);
+
       if( paid_quant <= quant) {
          auto return_quant = quant - paid_quant;
          TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, "tyche loan return principal" );
       }
+
       auto return_collateral_quant = calc_collateral_quant(loaner_itr->avl_collateral_quant, paid_quant, itr->oracle_sym_name);
       //把抵押物转给协议平仓的人
       TRANSFER( itr->sym.get_contract(), from, return_collateral_quant, "tyche loan return principal" );
@@ -314,6 +338,7 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
       CHECKC( paid_principal.amount > 0, err::INCORRECT_AMOUNT, "paid_principal must positive" )
       CHECKC( paid_principal <= loaner_itr->avl_principal, err::INCORRECT_AMOUNT, "principal need < avl_principal" )
       _add_fee(platform_quant);
+      // CHECKC(false, err::RATE_EXCEEDED, "test callation ratio: "  + to_string(ratio) + "return_collateral_quant: " + return_collateral_quant.to_string() + " paid_principal:" + paid_principal.to_string());
       //结算用户质押物
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_collateral_quant   -= return_collateral_quant;              //减少抵押物
