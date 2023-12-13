@@ -111,8 +111,8 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
 //赎回抵押物，用户打入MUSDT
 //internal call
 void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, const asset& quant ){
-
-   loaner_t::tbl_t loaners(_self, collateral_sym.code().raw());
+   
+   loaner_t::tbl_t loaners(_self, _get_lower(collateral_sym).value);
    auto itr = loaners.find(from.value);
    CHECKC(itr != loaners.end(),           err::RECORD_NOT_FOUND,  "account not existed")
    CHECKC(itr->avl_principal.amount > 0,  err::OVERSIZED,         "avl_principal must positive")
@@ -154,7 +154,7 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    auto itr = syms.find(callat_sym.code().raw());
    CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
 
-   auto loaner = loaner_t::tbl_t(_self, callat_sym.code().raw());
+   auto loaner = loaner_t::tbl_t(_self, _get_lower(callat_sym).value);
    auto loaner_itr = loaner.find(from.value);
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 
@@ -174,7 +174,7 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
 
 //增加质押物
 void tyche_loan::_on_add_callateral( const name& from, const asset& quant ){
-   loaner_t::tbl_t loaners(_self, quant.symbol.code().raw());
+   loaner_t::tbl_t loaners(_self, _get_lower(quant.()).value);
    auto itr = loaners.find(from.value);
    if( itr == loaners.end() ){
       loaners.emplace(_self, [&](auto& row){
@@ -200,7 +200,7 @@ void tyche_loan::_on_add_callateral( const name& from, const asset& quant ){
 //赎回质押物，就是减少用户的质押物
 void tyche_loan::onsubcallat( const name& from, const asset& quant ) {
    require_auth(from);
-   loaner_t::tbl_t loaners(_self, quant.symbol.code().raw());
+   loaner_t::tbl_t loaners(_self, _get_lower(quant.get_symbol()).value);
    auto itr = loaners.find(from.value);
    CHECKC(itr != loaners.end(),           err::RECORD_NOT_FOUND,  "account not existed")
    CHECKC(itr->avl_collateral_quant.amount > 0,  err::OVERSIZED,  "avl_principal must positive")
@@ -284,7 +284,7 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
    auto itr = syms.find(callat_sym.code().raw());
    CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
 
-   auto loaner = loaner_t::tbl_t(_self, callat_sym.code().raw());
+   auto loaner = loaner_t::tbl_t(_self, _get_lower(collateral_sym));
    auto loaner_itr = loaner.find(liqudater.value);
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 
@@ -372,7 +372,7 @@ void tyche_loan::forceliq( const name& from, const name& liqudater, const symbol
    auto itr = syms.find(callat_sym.code().raw());
    CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
 
-   auto loaner = loaner_t::tbl_t(_self, callat_sym.code().raw());
+   auto loaner = loaner_t::tbl_t(_self, _get_lower(collateral_sym).value);
    auto loaner_itr = loaner.find(liqudater.value);
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 

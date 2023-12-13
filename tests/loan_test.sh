@@ -1,4 +1,4 @@
-loan=tyche.l4
+loan=tyche.lo1
 admin=ad
 lp=joss
 or=oracle3
@@ -11,6 +11,8 @@ tcli get table $loan $loan global
 tcli push action $loan setcallatsym '[["6,METH", "amax.mtoken"], "eth"]' -p $admin
 tcli get table $loan $loan collsyms
 
-tcli push action amax.mtoken transfer '{"from": "'$user1'", "to": "'$loan'", "quantity": "1.00000000 METH", "memo": "deposit"}' -p joss
+tcli push action amax.mtoken transfer '{"from": "ad", "to": "'$user1'", "quantity": "10.00000000 METH", "memo": "deposit"}' -p ad
 
+tcli push action amax.mtoken transfer '{"from": "'$user1'", "to": "'$loan'", "quantity": "1.00000000 METH", "memo": "deposit"}' -p $user1
+tcli get table $loan $loan loaners
 
