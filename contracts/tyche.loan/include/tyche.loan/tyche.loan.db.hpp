@@ -71,6 +71,18 @@ NTBL("global") global_t {
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
+TBL interest_t {
+    time_point_sec      begin_at;
+    time_point_sec      ended_at;
+    uint64_t            interest_ratio;
+    uint64_t primary_key()const { return UINT64_MAX - (uint64_t)begin_at.utc_seconds; }
+
+    typedef multi_index<"interests"_n, interest_t> tbl_t;
+
+    EOSLIB_SERIALIZE( interest_t, (begin_at)(ended_at)(interest_ratio) )
+};
+
+
 //Scope: symbol
 //Note: record will be deleted upon withdrawal/redemption
 TBL loaner_t {
