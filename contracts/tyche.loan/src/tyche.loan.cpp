@@ -422,20 +422,15 @@ asset tyche_loan::_get_dynamic_interest( const asset& quant, const uint64_t& beg
                                           const time_point_sec& time_start, const time_point_sec& time_end){
    auto interests = interest_t::tbl_t(_self, _self.value);
    auto beg_itr   = interests.begin();
-   auto upper_itr = interests.upper_bound(INT64_MAX - (uint64_t)time_start.utc_seconds);
    auto begin_at  = time_start;
    auto ended_at  = time_end;
    auto interest = asset(0, quant.symbol);
 
-   while( beg_itr != upper_itr && upper_itr != interests.end() ) {
-      if( beg_itr->begin_at >= time_start ) {
-            interest += _get_interest(quant, beg_itr->interest_ratio, beg_itr->begin_at, beg_itr->ended_at);
-            ended_at = beg_itr->begin_at;
-      }
+   while( beg_itr != interests.end() && beg_itr->ended_at > time_start ) {
+      interest += _get_interest(quant, beg_itr->interest_ratio, beg_itr->begin_at, ended_at);
+      ended_at = beg_itr->begin_at;
       beg_itr++;
    }
-
-   interest += _get_interest(quant, begin_interest_ratio, begin_at, ended_at);
    return interest;
 }
 
