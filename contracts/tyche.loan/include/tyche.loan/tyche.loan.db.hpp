@@ -60,13 +60,13 @@ NTBL("global") global_t {
     uint64_t            liquidation_penalty_ratio   = 9000;             //清算惩罚率: 10% = 1000
     uint64_t            liquidation_price_ratio     = 9700 ;            //清算价格 97%
 
-
+    asset               total_principal_quant;                         //总本金
     bool                enabled                 = true; 
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(price_oracle_contract)
                                 (loan_token)(min_deposit_amount)
                                 (interest_ratio)(term_interval_days)(apl_farm)
-                                (liquidation_penalty_ratio)(liquidation_price_ratio)
+                                (liquidation_penalty_ratio)(liquidation_price_ratio)(total_principal_quant)
                                 (enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
@@ -121,10 +121,17 @@ TBL collateral_symbol_t {
     uint64_t    liquidation_ratio           = 15000;        //抵押率: 150%
     uint64_t    force_liquidate_ratio       = 12000;        //率: 120%
     uint64_t    interest_ratio              = 800;           //利息率: 8% = 800
+
+    asset       total_collateral_quant;                     //抵押物总量    
+    asset       avl_collateral_quant;                       //可用抵押物总量
+    asset       total_principal;                            //总本金
+    asset       avl_principal;                              //可用本金
+
     asset       total_fore_collateral_quant;                 //强平抵押物总量
     asset       total_fore_principal;                        //强平总本金
     asset       avl_force_collateral_quant;                  //强平抵押物总量
     asset       avl_force_principal;                         //强平需要总本金
+
     bool        on_shelf;
 
     collateral_symbol_t() {}
@@ -134,7 +141,8 @@ TBL collateral_symbol_t {
     typedef eosio::multi_index< "collsyms"_n, collateral_symbol_t > idx_t;
 
     EOSLIB_SERIALIZE( collateral_symbol_t, (sym)(oracle_sym_name)(init_collateral_ratio)(liquidation_ratio)(force_liquidate_ratio)
-                                            (interest_ratio)(total_fore_collateral_quant)(total_fore_principal)
+                                            (interest_ratio)(total_collateral_quant)(avl_collateral_quant)(total_principal)(avl_principal)
+                                            (total_fore_collateral_quant)(total_fore_principal)
                                             (avl_force_collateral_quant)(avl_force_principal)(on_shelf) )
 };
 
