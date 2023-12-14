@@ -117,7 +117,7 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
    CHECKC(itr != loaners.end(),           err::RECORD_NOT_FOUND,  "account not existed")
    CHECKC(itr->avl_principal.amount > 0,  err::OVERSIZED,         "avl_principal must positive")
    //结算利息
-   auto total_unpaid_interest = _get_dynamic_interest(itr->avl_principal, itr->interest_ratio, itr->term_settled_at);
+   auto total_unpaid_interest = _get_dynamic_interest(itr->avl_principal, itr->interest_ratio, itr->term_settled_at, eosio::current_time_point());
 
    total_unpaid_interest      += itr->unpaid_interest;
    CHECKC(total_unpaid_interest<= quant, err::OVERSIZED, "must pay more than interest")
@@ -154,7 +154,7 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    auto loaner_itr = loaner.find(from.value);
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 
-   asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at);
+   asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at, eosio::current_time_point());
    // CHECKC(false, err::RATE_EXCEEDED, " " +loaner_itr->avl_principal.to_string() + " " + loaner_itr->unpaid_interest.to_string() +  " " + total_interest.to_string() +  "  " + quant.to_string() );
 
    auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest + quant, itr->oracle_sym_name);
@@ -190,7 +190,7 @@ void tyche_loan::tgetliqrate( const name& owner, const symbol& callat_sym )
    auto loaner_itr = loaner.find(owner.value);
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 
-   asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at);
+   asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at,eosio::current_time_point());
 
    auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest, itr->oracle_sym_name);
    CHECKC( false, err::RATE_EXCEEDED, "callation ratio: "  + to_string(ratio));
@@ -303,7 +303,7 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
    auto loaner_itr = loaner.find(liqudater.value);
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 
-   asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at);
+   asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at, eosio::current_time_point());
    asset need_pay_interest = loaner_itr->unpaid_interest + total_interest;
    asset need_settle_quant = loaner_itr->avl_principal + need_pay_interest;
    auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, need_settle_quant, itr->oracle_sym_name);
@@ -393,13 +393,13 @@ void tyche_loan::addinteret(const uint64_t& interest_ratio) {
       interests.modify(first_itr, _self, [&](auto& row){
          row.ended_at = eosio::current_time_point();
       });
-   } else {
-      interests.emplace(_self, [&](auto& row){
-         row.interest_ratio   = interest_ratio;
-         row.begin_at         = eosio::current_time_point();
-         row.ended_at         = eosio::current_time_point() + eosio::days(365*10);
-      });
-   }
+   } 
+   interests.emplace(_self, [&](auto& row){
+      row.interest_ratio   = interest_ratio;
+      row.begin_at         = eosio::current_time_point();
+      row.ended_at         = eosio::current_time_point() + eosio::days(365*10);
+   });
+
 }
 
 uint64_t tyche_loan::_get_current_interest_ratio() {
@@ -413,18 +413,18 @@ uint64_t tyche_loan::_get_current_interest_ratio() {
 
 
 void tyche_loan::tgetinterest(const asset& principal, const uint64_t& interest_ratio, const time_point_sec& started_at, const time_point_sec& ended_at) {
-   auto interest = _get_interest(principal, interest_ratio, started_at, ended_at);
+   auto interest = _get_dynamic_interest(principal, interest_ratio, started_at, ended_at);
    CHECKC(false, err::SYSTEM_ERROR, "interest: " + interest.to_string() );
 
 }
 
 asset tyche_loan::_get_dynamic_interest( const asset& quant, const uint64_t& begin_interest_ratio,
-                                          const time_point_sec& time_start ){
+                                          const time_point_sec& time_start, const time_point_sec& time_end){
    auto interests = interest_t::tbl_t(_self, _self.value);
    auto beg_itr   = interests.begin();
    auto upper_itr = interests.upper_bound(INT64_MAX - (uint64_t)time_start.utc_seconds);
    auto begin_at  = time_start;
-   auto ended_at  = eosio::current_time_point();
+   auto ended_at  = time_end;
    auto interest = asset(0, quant.symbol);
 
    while( beg_itr != upper_itr && upper_itr != interests.end() ) {
@@ -441,7 +441,7 @@ asset tyche_loan::_get_dynamic_interest( const asset& quant, const uint64_t& beg
 
 asset tyche_loan::_get_interest(const asset& quant, const uint64_t& interest_ratio, 
                                  const time_point_sec& started_at, const time_point_sec& ended_at) {
-      auto elapsed =  (time_point_sec(current_time_point()) - started_at);
+      auto elapsed =  (ended_at - started_at);
       auto elapsed_seconds = elapsed.count() / 1000000;
       CHECKC( elapsed_seconds > 0,              err::TIME_PREMATURE,       "time premature" )
 
@@ -460,7 +460,7 @@ void tyche_loan::forceliq( const name& from, const name& liqudater, const symbol
    auto loaner_itr = loaner.find(liqudater.value);
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 
-   asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at );
+   asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->interest_ratio, loaner_itr->term_settled_at,eosio::current_time_point() );
    asset need_pay_interest = loaner_itr->unpaid_interest + total_interest;
    asset need_settle_quant = loaner_itr->avl_principal + need_pay_interest;
    auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, need_settle_quant, itr->oracle_sym_name);

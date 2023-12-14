@@ -1,4 +1,4 @@
-loan=tyche.lo2
+loan=tyche.lo3
 admin=ad
 lp=joss
 or=oracle3
@@ -30,3 +30,10 @@ tcli push action $loan tgetliqrate '["'$user1'", "6,METH"]' -p $user1
 
 tcli push action amax.mtoken transfer '{"from": "'$user1'", "to": "'$loan'", "quantity": "500.000000 MUSDT", "memo": "repay:6,METH"}' -p $user1
 
+tcli push action $loan addinteret '[800]' -p $admin
+tcli push action $loan addinteret '[600]' -p $admin
+tcli get table $loan $loan interests
+
+tcli push action $loan tgetinterest '["10000.000000 MUSDT", 800, "2023-12-14T06:41:32", "2023-12-14T06:45:06"]' -p $user1
+
+146/86400*8+30/86400*6

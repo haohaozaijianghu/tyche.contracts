@@ -85,6 +85,7 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    
    ACTION setcallatsym( const extended_symbol& sym, const name& oracle_sym_name );
 
+   //admin
    ACTION tgetprice( const symbol& collateral_sym );
    ACTION tgetliqrate( const name& owner, const symbol& collateral_sym );
    ACTION tgetinterest(const asset& principal, const uint64_t& interest_ratio, const time_point_sec& started_at, const time_point_sec& ended_at );
@@ -110,7 +111,7 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
 
       uint64_t _get_current_interest_ratio();
       asset _get_dynamic_interest( const asset& quant, const uint64_t& begin_interest_ratio,
-                                          const time_point_sec& time_start );
+                                          const time_point_sec& time_start, const time_point_sec& time_end);
 
       const price_global_t& _price_conf();
 
