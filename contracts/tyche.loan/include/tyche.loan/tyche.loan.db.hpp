@@ -61,12 +61,14 @@ NTBL("global") global_t {
     uint64_t            liquidation_price_ratio     = 9700 ;            //清算价格 97%
 
     asset               total_principal_quant;                         //总本金
+    asset               avl_principal_quant;                           //可用本金
     bool                enabled                 = true; 
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(price_oracle_contract)
                                 (loan_token)(min_deposit_amount)
                                 (interest_ratio)(term_interval_days)(apl_farm)
-                                (liquidation_penalty_ratio)(liquidation_price_ratio)(total_principal_quant)
+                                (liquidation_penalty_ratio)(liquidation_price_ratio)
+                                (total_principal_quant)(avl_principal_quant)
                                 (enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;

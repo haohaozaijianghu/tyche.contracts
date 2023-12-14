@@ -99,7 +99,7 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
 
       void _on_pay_musdt( const name& from, const symbol& collateral_sym, const asset& quant );
 
-      void _on_add_callateral( const name& from, const asset& quant );
+      void _on_add_callateral( const name& from, const name& token_bank, const asset& quant );
 
       uint64_t get_callation_ratio(const asset& collateral_quant, const asset& principal, const name& oracle_sym_name);
 

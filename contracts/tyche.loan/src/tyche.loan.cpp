@@ -86,6 +86,7 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
    if( quant.symbol == _gstate.loan_token.get_symbol() && token_bank == _gstate.loan_token.get_contract() ) { 
       if( from == _gstate.lp_refueler ){
          _gstate.total_principal_quant += quant;
+         _gstate.avl_principal_quant   += quant;
          return;
       }
       auto parts  = split( memo, ":" );
@@ -102,12 +103,8 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
       }
       return;
    }
-   //ETH
-   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
-   auto itr = syms.find(quant.symbol.code().raw());
-   CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
-   CHECKC(token_bank == itr->sym.get_contract(), err::CONTRACT_MISMATCH, "symbol not supported");
-   _on_add_callateral(from, quant);
+
+   _on_add_callateral(from, token_bank, quant);
    return;
 }
 
@@ -153,6 +150,8 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    auto itr = syms.find(callat_sym.code().raw());
    CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
 
+   CHECKC(_gstate.avl_principal_quant >= quant, err::OVERSIZED, "principal not enough")
+
    auto loaner = loaner_t::tbl_t(_self, _get_lower(callat_sym).value);
    auto loaner_itr = loaner.find(from.value);
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
@@ -172,6 +171,13 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
       row.unpaid_interest  += total_interest;
       row.term_settled_at  = eosio::current_time_point();
    });
+
+   syms.modify(itr, _self, [&](auto& row){
+      row.total_principal += quant;
+      row.avl_principal   += quant;
+   });
+
+   _gstate.avl_principal_quant -= quant;
 }
 
 void tyche_loan::tgetprice( const symbol& collateral_sym ){
@@ -200,7 +206,14 @@ void tyche_loan::tgetliqrate( const name& owner, const symbol& callat_sym )
 }
 
 //增加质押物
-void tyche_loan::_on_add_callateral( const name& from, const asset& quant ){
+void tyche_loan::_on_add_callateral( const name& from, const name& token_bank, const asset& quant ){
+
+   //ETH
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto sym_itr = syms.find(quant.symbol.code().raw());
+   CHECKC(sym_itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
+   CHECKC(token_bank == sym_itr->sym.get_contract(), err::CONTRACT_MISMATCH, "symbol not supported");
+
    loaner_t::tbl_t loaners(_self, _get_lower(quant.symbol).value);
    auto itr = loaners.find(from.value);
    if( itr == loaners.end() ){
@@ -222,6 +235,12 @@ void tyche_loan::_on_add_callateral( const name& from, const asset& quant ){
          row.avl_collateral_quant += quant;
       });
    }
+
+   syms.modify(sym_itr, _self, [&](auto& row){
+      row.total_collateral_quant += quant;
+      row.avl_collateral_quant   += quant;
+   });
+
 }
 
 //赎回质押物，就是减少用户的质押物
@@ -245,6 +264,10 @@ void tyche_loan::onsubcallat( const name& from, const asset& quant ) {
 
    loaners.modify(itr, _self, [&](auto& row){
       row.avl_collateral_quant = remain_collateral_quant;
+   });
+
+   syms.modify(sym_itr, _self, [&](auto& row){
+      row.avl_collateral_quant   -= quant;
    });
 
    TRANSFER( sym_itr->sym.get_contract(), from, quant, "tyche loan callat redeem" );
