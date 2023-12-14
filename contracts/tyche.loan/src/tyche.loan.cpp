@@ -61,6 +61,8 @@ void tyche_loan::init(const name& admin, const name& lp_refueler, const name& pr
    _gstate.lp_refueler              = lp_refueler;
    _gstate.enabled                  = enabled;
    _gstate.price_oracle_contract    = price_oracle_contract;
+   _gstate.total_principal_quant    = asset(0, _gstate.loan_token.get_symbol());
+   _gstate.avl_principal_quant      = asset(0, _gstate.loan_token.get_symbol());
 }
 
 /**
@@ -103,7 +105,6 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
       }
       return;
    }
-
    _on_add_callateral(from, token_bank, quant);
    return;
 }
@@ -224,6 +225,7 @@ void tyche_loan::_on_add_callateral( const name& from, const name& token_bank, c
          row.avl_principal          = asset(0, _gstate.loan_token.get_symbol());
          row.interest_ratio         = _gstate.interest_ratio;
          row.created_at             = eosio::current_time_point();
+         row.term_started_at        = eosio::current_time_point();
          row.term_settled_at        = eosio::current_time_point();
          row.term_ended_at          = eosio::current_time_point() + eosio::days(_gstate.term_interval_days);
          row.unpaid_interest        = asset(0, _gstate.loan_token.get_symbol());
@@ -400,6 +402,10 @@ void tyche_loan::setcallatsym(const extended_symbol& sym, const name& oracle_sym
          row.total_fore_principal = asset(0, _gstate.loan_token.get_symbol());
          row.avl_force_collateral_quant = asset(0, sym.get_symbol());
          row.avl_force_principal = asset(0, _gstate.loan_token.get_symbol());
+         row.total_collateral_quant = asset(0, sym.get_symbol());
+         row.avl_collateral_quant = asset(0, sym.get_symbol());
+         row.total_principal = asset(0, _gstate.loan_token.get_symbol());
+         row.avl_principal = asset(0, _gstate.loan_token.get_symbol());
       });
    } else {
       syms.modify(itr, _self, [&](auto& row){

@@ -1,6 +1,6 @@
-loan=tyche.lo3
+loan=tyche.l12
 admin=ad
-lp=joss
+lp=ad
 or=oracle3
 user1=josstest
 user2=josstest2
@@ -14,16 +14,20 @@ tcli get table $loan $loan global
 tcli push action $loan addinteret '[800]' -p $admin
 
 
-tcli push action $loan setcallatsym '[["6,METH", "amax.mtoken"], "eth"]' -p $admin
+tcli push action $loan setcallatsym '[["8,METH", "amax.mtoken"], "eth"]' -p $admin
 tcli get table $loan $loan collsyms
 
 tcli push action amax.mtoken transfer '{"from": "ad", "to": "'$loan'", "quantity": "10000.000000 MUSDT", "memo": "deposit"}' -p ad
 
 
-tcli push action amax.mtoken transfer '{"from": "ad", "to": "'$user1'", "quantity": "10.00000000 METH", "memo": "deposit"}' -p ad
+# tcli push action amax.mtoken transfer '{"from": "ad", "to": "'$user1'", "quantity": "10.00000000 METH", "memo": "deposit"}' -p ad
 
 tcli push action amax.mtoken transfer '{"from": "'$user1'", "to": "'$loan'", "quantity": "1.00000000 METH", "memo": "deposit"}' -p $user1
 tcli get table $loan meth loaners
+
+tcli push action $loan addinteret '[600]' -p $admin
+
+
 
 tcli push action $loan getmoreusdt '[ "'$user1'", "6,METH", "1000.000000 MUSDT"]' -p $user1
 tcli push action $loan tgetprice '[ "6,METH"]' -p $user1
