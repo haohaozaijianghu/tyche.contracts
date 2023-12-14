@@ -396,8 +396,8 @@ void tyche_loan::addinteret(const uint64_t& interest_ratio) {
    } else {
       interests.emplace(_self, [&](auto& row){
          row.interest_ratio   = interest_ratio;
-         row.begin_at       = eosio::current_time_point();
-         row.ended_at         = eosio::current_time_point() + eosio::days(_gstate.term_interval_days);
+         row.begin_at         = eosio::current_time_point();
+         row.ended_at         = eosio::current_time_point() + eosio::days(365*10);
       });
    }
 }
