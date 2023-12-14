@@ -87,6 +87,7 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
 
    ACTION tgetprice( const symbol& collateral_sym );
    ACTION tgetliqrate( const name& owner, const symbol& collateral_sym );
+   ACTION tgetinterest(const asset& principal, const uint64_t& interest_ratio, const time_point_sec& started_at, const time_point_sec& ended_at );
 
    private:
 

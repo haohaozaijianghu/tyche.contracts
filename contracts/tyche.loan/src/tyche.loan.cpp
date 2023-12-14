@@ -411,6 +411,13 @@ uint64_t tyche_loan::_get_current_interest_ratio() {
    return first_itr->interest_ratio;
 }
 
+
+void tyche_loan::tgetinterest(const asset& principal, const uint64_t& interest_ratio, const time_point_sec& started_at, const time_point_sec& ended_at) {
+   auto interest = _get_interest(principal, interest_ratio, started_at, ended_at);
+   CHECKC(false, err::SYSTEM_ERROR, "interest: " + interest.to_string() );
+
+}
+
 asset tyche_loan::_get_dynamic_interest( const asset& quant, const uint64_t& begin_interest_ratio,
                                           const time_point_sec& time_start ){
    auto interests = interest_t::tbl_t(_self, _self.value);
