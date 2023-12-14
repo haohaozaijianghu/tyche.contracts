@@ -52,7 +52,6 @@ NTBL("global") global_t {
 
     extended_symbol     loan_token             = extended_symbol(MUSDT,  MUSDT_BANK);       //代币TRUSD
     asset               min_deposit_amount      = asset(10'000000, MUSDT);                  //10 MU
-    uint64_t            interest_ratio          = 800;                                      //8%
     uint64_t            term_interval_days      = 365 * 2;                                  //30天
 
     aplink_farm         apl_farm;
@@ -65,8 +64,7 @@ NTBL("global") global_t {
     bool                enabled                 = true; 
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(price_oracle_contract)
-                                (loan_token)(min_deposit_amount)
-                                (interest_ratio)(term_interval_days)(apl_farm)
+                                (loan_token)(min_deposit_amount)(term_interval_days)(apl_farm)
                                 (liquidation_penalty_ratio)(liquidation_price_ratio)
                                 (total_principal_quant)(avl_principal_quant)
                                 (enabled) )
@@ -92,7 +90,6 @@ TBL loaner_t {
     asset               cum_collateral_quant;           //总存款金额 ETH
     asset               avl_collateral_quant;           //当前存款金额 ETH
     asset               avl_principal;                  //当前存款金额 MUSDT
-    uint64_t            interest_ratio;                 //利息率
 
     time_point_sec      term_started_at;                //入池时间
     time_point_sec      term_settled_at;                //利息结算时间
@@ -110,7 +107,7 @@ TBL loaner_t {
 
     typedef multi_index<"loaners"_n, loaner_t> tbl_t;
 
-    EOSLIB_SERIALIZE( loaner_t, (owner)(cum_collateral_quant)(avl_collateral_quant)(avl_principal)(interest_ratio)
+    EOSLIB_SERIALIZE( loaner_t, (owner)(cum_collateral_quant)(avl_collateral_quant)(avl_principal)
                                 (term_started_at)(term_settled_at)(term_ended_at)
                                 (unpaid_interest)(paid_interest)(created_at) )
 };
@@ -122,7 +119,6 @@ TBL collateral_symbol_t {
     uint64_t    init_collateral_ratio       = 20000;        //初始抵押率 200%
     uint64_t    liquidation_ratio           = 15000;        //抵押率: 150%
     uint64_t    force_liquidate_ratio       = 12000;        //率: 120%
-    uint64_t    interest_ratio              = 800;           //利息率: 8% = 800
 
     asset       total_collateral_quant;                     //抵押物总量    
     asset       avl_collateral_quant;                       //可用抵押物总量
@@ -143,7 +139,7 @@ TBL collateral_symbol_t {
     typedef eosio::multi_index< "collsyms"_n, collateral_symbol_t > idx_t;
 
     EOSLIB_SERIALIZE( collateral_symbol_t, (sym)(oracle_sym_name)(init_collateral_ratio)(liquidation_ratio)(force_liquidate_ratio)
-                                            (interest_ratio)(total_collateral_quant)(avl_collateral_quant)(total_principal)(avl_principal)
+                                            (total_collateral_quant)(avl_collateral_quant)(total_principal)(avl_principal)
                                             (total_fore_collateral_quant)(total_fore_principal)
                                             (avl_force_collateral_quant)(avl_force_principal)(on_shelf) )
 };
