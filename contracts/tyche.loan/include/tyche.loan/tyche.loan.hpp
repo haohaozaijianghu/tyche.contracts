@@ -90,6 +90,9 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    ACTION tgetliqrate( const name& owner, const symbol& collateral_sym );
    ACTION tgetinterest(const asset& principal, const time_point_sec& started_at, const time_point_sec& ended_at );
 
+   ACTION notifyliq( const liqlog_t& liqlog );
+   using notifyliq_action   = action_wrapper<"notifyliq"_n,  &tyche_loan::notifyliq>;
+
    private:
 
       //清算

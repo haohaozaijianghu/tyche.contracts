@@ -206,16 +206,16 @@ struct global_state: public globalidx {
         }
     private:
         std::unique_ptr<global_table> _global_tbl;  
-        
 };
 
  struct liqlog_t {
         uint64_t    id;                     //PK
-        name        tpcode;
+        name        liqtype;                //清算类型: liq: 清算 | forceliq:强平 
         name        owner;
         name        liqdater;
-        asset       collateral_quant;
-        asset       principal_quant;
+        asset       paid_principal_quant;   //支付的金额
+        asset       collateral_quant;    
+        asset       principal_quant;        //本金
         asset       price;
         uint64_t    collateral_ratio;   
         time_point  deal_time;

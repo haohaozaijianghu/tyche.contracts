@@ -16,6 +16,11 @@ namespace tychefi {
 using namespace std;
 using namespace wasm::safemath;
 
+#define NOTIFY_LIQ_ACTION( item) \
+     { tyche_loan::notifyliq_action act{ _self, { {_self, active_perm} } };\
+	        act.send( item );}
+
+
 #define ALLOT_APPLE(farm_contract, lease_id, to, quantity, memo) \
     {   aplink::farm::allot_action(farm_contract, { {_self, active_perm} }).send( \
             lease_id, to, quantity, memo );}
@@ -336,6 +341,10 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
    auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, need_settle_quant, itr->oracle_sym_name);
    CHECKC( ratio <= itr->liquidation_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
    
+
+   auto price           = get_index_price( itr->oracle_sym_name );
+   auto current_price   = asset( price, quant.symbol );
+
    if(ratio <= itr->liquidation_ratio && ratio >= itr->force_liquidate_ratio) {
       CHECKC( need_pay_interest <= quant, err::OVERSIZED, "must pay more than interest");
 
@@ -366,17 +375,27 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
          row.paid_interest          += need_pay_interest;
          row.term_settled_at        = eosio::current_time_point();
       });
+
+      liqlog_t liqlog = {_global_state->new_liqlog_id(), "liq"_n, liqudater, from,
+                   need_settle_quant, return_collateral_quant,  paid_principal, current_price,
+                   ratio, eosio::current_time_point()};
+      NOTIFY_LIQ_ACTION(liqlog);
       return;
    } else {
       if( quant.amount > 0 ){
          TRANSFER( _gstate.loan_token.get_contract(), from, quant, "froce liqudate return principal" );
       }
       syms.modify(itr, _self, [&](auto& row){
-         row.total_fore_collateral_quant += loaner_itr->avl_collateral_quant;
-         row.total_fore_principal        += loaner_itr->avl_principal;
-         row.avl_force_collateral_quant += loaner_itr->avl_collateral_quant;
-         row.avl_force_principal        += loaner_itr->avl_principal;
+         row.total_fore_collateral_quant  += loaner_itr->avl_collateral_quant;
+         row.total_fore_principal         += loaner_itr->avl_principal;
+         row.avl_force_collateral_quant   += loaner_itr->avl_collateral_quant;
+         row.avl_force_principal          += loaner_itr->avl_principal;
       });
+
+      liqlog_t liqlog = {_global_state->new_liqlog_id(), "forceliq"_n, liqudater, from,
+         need_settle_quant, loaner_itr->avl_collateral_quant,loaner_itr->avl_principal, current_price,
+         ratio, eosio::current_time_point()};
+
       //直接没收抵押物
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
@@ -385,6 +404,7 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
          row.paid_interest          += need_pay_interest;
          row.term_settled_at        = eosio::current_time_point();
       });
+      NOTIFY_LIQ_ACTION(liqlog);
    }
 }
 
@@ -497,6 +517,15 @@ void tyche_loan::forceliq( const name& from, const name& liqudater, const symbol
       row.avl_force_collateral_quant += loaner_itr->avl_collateral_quant;
       row.avl_force_principal        += loaner_itr->avl_principal;
    });
+   auto price           = get_index_price( itr->oracle_sym_name );
+   auto current_price   = asset( price, itr->avl_principal.symbol );
+
+    liqlog_t liqlog = {_global_state->new_liqlog_id(), "forceliq"_n, liqudater, from,
+               need_settle_quant, loaner_itr->avl_collateral_quant,  loaner_itr->avl_principal, current_price,
+               ratio, eosio::current_time_point()};
+
+    NOTIFY_LIQ_ACTION(liqlog);
+
    //直接没收抵押物
    loaner.modify(loaner_itr, _self, [&](auto& row){
       row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
@@ -505,6 +534,7 @@ void tyche_loan::forceliq( const name& from, const name& liqudater, const symbol
       row.paid_interest          += need_pay_interest;
       row.term_settled_at        = eosio::current_time_point();
    });
+  
 }
 
 void tyche_loan::_add_fee(const asset& quantity) {
@@ -533,5 +563,10 @@ asset tyche_loan::_sub_fee(const symbol& sym) {
    });
    return quant;
 }
+void tyche_loan::notifyliq( const liqlog_t& liqlog ){
+   require_auth(get_self());
+   require_recipient(get_self());
+}
+
 
 } //namespace tychefi
