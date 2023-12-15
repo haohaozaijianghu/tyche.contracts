@@ -159,9 +159,7 @@ typedef eosio::multi_index<"feepool"_n, fee_pool_t> feepool_tbl;
 inline static feepool_tbl make_fee_table( const name& self ) { return feepool_tbl(self, self.value); }
 
 TBL globalidx {
-    uint64_t        reward_id                   = 0;               // the auto-increament reward id
-    uint64_t        deposit_id                  = 0;               // 本金提取后再存入，id变化
-    uint64_t        interest_withdraw_id        = 0;               // the auto-increament id of deal item
+    uint64_t        liqlog_id                   = 0;               // the auto-increament reward id
 };
 typedef eosio::singleton< "globalidx"_n, globalidx > global_table;
 
@@ -192,15 +190,8 @@ struct global_state: public globalidx {
             return id;
         }
 
-        inline uint64_t new_reward_id() {
-            return new_auto_inc_id(reward_id);
-        }
-
-        inline uint64_t new_deposit_id() {
-            return new_auto_inc_id(deposit_id);
-        }
-        inline uint64_t new_interest_withdraw_id() {
-            return new_auto_inc_id(interest_withdraw_id);
+        inline uint64_t new_liqlog_id() {
+            return new_auto_inc_id(liqlog_id);
         }
         inline void change() {
             changed = true;
@@ -217,5 +208,19 @@ struct global_state: public globalidx {
         std::unique_ptr<global_table> _global_tbl;  
         
 };
+
+ struct liqlog_t {
+        uint64_t    id;                     //PK
+        name        tpcode;
+        name        owner;
+        name        liqdater;
+        asset       collateral_quant;
+        asset       principal_quant;
+        asset       price;
+        uint64_t    collateral_ratio;   
+        time_point  deal_time;
+        uint64_t primary_key() const    { return id; }
+ };
+
 
 } //namespace tychefi
