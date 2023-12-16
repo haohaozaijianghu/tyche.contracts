@@ -120,6 +120,7 @@ TBL collateral_symbol_t {
     uint64_t    liquidation_ratio           = 15000;        //抵押率: 150%
     uint64_t    force_liquidate_ratio       = 12000;        //率: 120%
 
+    asset       max_principal;                              //最大可用本金 
     asset       total_collateral_quant;                     //抵押物总量    
     asset       avl_collateral_quant;                       //可用抵押物总量
     asset       total_principal;                            //总本金
@@ -139,7 +140,7 @@ TBL collateral_symbol_t {
     typedef eosio::multi_index< "collsyms"_n, collateral_symbol_t > idx_t;
 
     EOSLIB_SERIALIZE( collateral_symbol_t, (sym)(oracle_sym_name)(init_collateral_ratio)(liquidation_ratio)(force_liquidate_ratio)
-                                            (total_collateral_quant)(avl_collateral_quant)(total_principal)(avl_principal)
+                                            (max_principal)(total_collateral_quant)(avl_collateral_quant)(total_principal)(avl_principal)
                                             (total_fore_collateral_quant)(total_fore_principal)
                                             (avl_force_collateral_quant)(avl_force_principal)(on_shelf) )
 };

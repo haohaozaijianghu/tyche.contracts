@@ -79,7 +79,6 @@ void tyche_loan::init(const name& admin, const name& lp_refueler, const name& pr
  * @param memo: two formats:
  *       1) musdt: "repay:6,ETH"  //降低抵押率，获得更多的MUSDT
  *                 "liqudate:name:6,ETH"  //降低抵押率，获得更多的MUSDT
- *                 "liquidity"
  *       2) meth:
  */
 void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant, const string& memo) {
