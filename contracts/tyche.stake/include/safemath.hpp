@@ -23,9 +23,5 @@ namespace wasm { namespace safemath {
     #define div(a, b, p) divide_decimal(a, b, p)
     #define mul_up(a, b, p) multiply_decimal_up(a, b, p)
     #define mul_down(a, b, p) multiply_decimal_down(a, b, p)
-    #define div64(a, b, precision) divide_decimal<int64_t>(a, b, precision)
-    #define mul64(a, b, precision) multiply_decimal<int64_t>(a, b, precision)
-    #define mul128(a, b, precision) multiply_decimal<int128_t>(a, b, precision)
-
 
 } } //safemath

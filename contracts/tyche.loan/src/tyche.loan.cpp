@@ -8,12 +8,18 @@
 // #include <eosiolib/time.hpp> 
 #include <eosio/time.hpp>
 #include<tyche.reward/tyche.reward.db.hpp>
+#include<tyche.loan.utils.hpp>
 
 static constexpr eosio::name active_permission{"active"_n};
 
 namespace tychefi {
 using namespace std;
 using namespace wasm::safemath;
+
+#define NOTIFY_LIQ_ACTION( item) \
+     { tyche_loan::notifyliq_action act{ _self, { {_self, active_perm} } };\
+	        act.send( item );}
+
 
 #define ALLOT_APPLE(farm_contract, lease_id, to, quantity, memo) \
     {   aplink::farm::allot_action(farm_contract, { {_self, active_perm} }).send( \
@@ -54,12 +60,14 @@ inline static asset calc_sharer_rewards(const asset& loaner_shares, const int128
    return asset( (int64_t)rewards, rewards_symbol );
 }
 
-void tyche_loan::init(const name& admin, const name& reward_contract, const name& lp_refueler, const bool& enabled) {
+void tyche_loan::init(const name& admin, const name& lp_refueler, const name& price_oracle_contract, const bool& enabled) {
    require_auth( _self );
    _gstate.admin                    = admin;
-   _gstate.reward_contract          = reward_contract;
    _gstate.lp_refueler              = lp_refueler;
    _gstate.enabled                  = enabled;
+   _gstate.price_oracle_contract    = price_oracle_contract;
+   _gstate.total_principal_quant    = asset(0, _gstate.loan_token.get_symbol());
+   _gstate.avl_principal_quant      = asset(0, _gstate.loan_token.get_symbol());
 }
 
 /**
@@ -69,8 +77,9 @@ void tyche_loan::init(const name& admin, const name& reward_contract, const name
  * @param to
  * @param quantity
  * @param memo: two formats:
- *       1) redeem:$code - upon transferring in TRUSD to withdraw
- *       2) deposit:$code  - codes: 1,30,90,180,360
+ *       1) musdt: "repay:6,ETH"  //降低抵押率，获得更多的MUSDT
+ *                 "liqudate:name:6,ETH"  //降低抵押率，获得更多的MUSDT
+ *       2) meth:
  */
 void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant, const string& memo) {
    CHECKC(_gstate.enabled, err::PAUSED, "not effective yet");
@@ -79,640 +88,485 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
    if (from == get_self() || to != get_self()) return;
    auto token_bank = get_first_receiver();
 
-   if( quant.symbol == _gstate.lp_token.get_symbol() ) { //提取奖励
-      CHECKC( _gstate.lp_token.get_contract() == token_bank, err::CONTRACT_MISMATCH, "LP token contract mismatches" )
-      if(from == _gstate.lp_refueler) //充入TRUSD到合约
+   //MUSDT
+   if( quant.symbol == _gstate.loan_token.get_symbol() && token_bank == _gstate.loan_token.get_contract() ) { 
+      if( from == _gstate.lp_refueler ){
+         _gstate.total_principal_quant += quant;
+         _gstate.avl_principal_quant   += quant;
          return;
-
-      vector<string_view> params = split(memo, ":");
-      CHECKC( params.size() == 2 && params[0] == "redeem", err::MEMO_FORMAT_ERROR, "redeem memo format error" )
-
-      //用户提取奖励和本金
-      auto term_code = (uint64_t) stoi(string(params[1]));
-      onredeem(from, term_code, quant );
+      }
+      auto parts  = split( memo, ":" );
+      if (parts[0] == "repay" ) {
+         CHECKC( parts.size() == 2, err::PARAMETER_INVALID, "memo format error" );
+         auto sym = symbol_from_string(parts[1]);
+         _on_pay_musdt(from, sym, quant);
+      } else if( parts[0] == "liqudate" ) {
+         CHECKC( parts.size() == 3, err::PARAMETER_INVALID, "memo format error" );
+         auto sym = symbol_from_string(parts[2]);
+         _liqudate(from, name(parts[1]), sym, quant);
+      } else {
+         //CHECKC( false, err::PARAMETER_INVALID, "memo format error" );
+      }
       return;
    }
-
-   vector<string_view> params = split(memo, ":");
-   //用户充入本金
-   if(params.size() == 2 && params[0] == "deposit" && quant.symbol == _gstate.principal_token.get_symbol()) {
-      auto term_code = (uint64_t) stoi(string(params[1]));
-      ondeposit(from, term_code, quant);
-      return;
-   }
-   //TYCHE奖励充入
-   if(quant.symbol == TYCHE && token_bank == TYCHE_BANK && from == _gstate.lp_refueler) {
-      return;
-   }
-   CHECKC(false, err::PARAM_ERROR, "invalid memo format")
+   _on_add_callateral(from, token_bank, quant);
+   return;
 }
 
-//管理员打入奖励
-void tyche_loan::refuelreward( const name& token_bank, const asset& total_rewards, const uint64_t& seconds, const uint64_t& pool_conf_code){
-   require_auth(_gstate.reward_contract);
-   if(pool_conf_code == 0)
-      refuelreward_to_all(token_bank, total_rewards, seconds);
-   else
-      refuelreward_to_pool(token_bank, total_rewards, seconds, pool_conf_code);
-}
-
-void tyche_loan::refuelintrst( const name& token_bank, const asset& total_rewards, const uint64_t& seconds){ 
-   require_auth(_gstate.reward_contract);
-   CHECKC( token_bank == MUSDT_BANK, err::RECORD_NOT_FOUND, "bank not equal" )
-   auto now             = time_point_sec(current_time_point());
-   auto pools           = loan_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr        = pools.begin();
-   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "save plan not found" )
-
-   uint64_t total_share = 0;
-   while( pool_itr != pools.end()) {
-      if(pool_itr->on_shelf) 
-         total_share += pool_itr->share_multiplier * pool_itr->avl_principal.amount;
-      pool_itr++;
-   }
-   CHECKC( total_share > 0, err::INCORRECT_AMOUNT, "total vote is zero" )
-   pool_itr        = pools.begin();
-   while( pool_itr != pools.end() ){
-      if( !pool_itr->on_shelf ) {pool_itr++; continue;}
-
-      auto rate = pool_itr->avl_principal.amount * pool_itr->share_multiplier * PCT_BOOST / total_share;
-      CHECKC(rate <= PCT_BOOST, err::OVERSIZED, "rate must < PCT_BOOST" )
-      auto rewards = asset(total_rewards.amount * rate / PCT_BOOST, total_rewards.symbol);
-      auto new_reward_id = _global_state->new_reward_id();
-      if( rewards.amount > 0) {
-         auto last_reward = pool_itr->interest_reward;
-         
-         pools.modify( pool_itr, _self, [&]( auto& c ) {
-            last_reward.reward_id                     = new_reward_id;
-            last_reward.total_rewards                 += rewards;
-            last_reward.last_rewards                  = rewards;
-            last_reward.unalloted_rewards             += rewards;
-            last_reward.last_reward_per_share         = last_reward.reward_per_share;
-            last_reward.reward_per_share              = last_reward.reward_per_share + calc_reward_per_share_delta(rewards, pool_itr->avl_principal);
-            last_reward.prev_reward_added_at          = last_reward.reward_added_at;
-            last_reward.reward_added_at               = now;
-            c.interest_reward                         = last_reward;
-         });
-      }
-      pool_itr++;
-   }
+//赎回抵押物，用户打入MUSDT
+//internal call
+void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, const asset& quant ){
    
-}
+   loaner_t::tbl_t loaners(_self, _get_lower(collateral_sym).value);
+   auto itr = loaners.find(from.value);
+   CHECKC(itr != loaners.end(),           err::RECORD_NOT_FOUND,  "account not existed")
+   CHECKC(itr->avl_principal.amount > 0,  err::OVERSIZED,         "avl_principal must positive")
+   //结算利息
+   auto total_unpaid_interest = _get_dynamic_interest(itr->avl_principal, itr->term_settled_at, eosio::current_time_point());
 
-void tyche_loan::refuelreward_to_pool( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code ){
-   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
-   auto reward_symbol      = reward_symbols.find( total_rewards.symbol.code().raw() );
-   CHECKC( total_rewards.amount > 0,                        err::INCORRECT_AMOUNT, "total_rewards must be positive: "+ total_rewards.to_string() )
-   CHECKC( reward_symbol != reward_symbols.end(),           err::RECORD_NOT_FOUND, "reward symbol not found:" + total_rewards.to_string()  )
-   CHECKC( token_bank == reward_symbol->sym.get_contract(), err::RECORD_NOT_FOUND, "bank not equal" )
-   CHECKC( reward_symbol->on_shelf,                         err::RECORD_NOT_FOUND, "reward_symbol not on_shelf" )
-   auto pools              = loan_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr           = pools.find( pool_conf_code );
-   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "save plan not found" )
-   CHECKC( pool_itr->on_shelf, err::RECORD_NOT_FOUND, "save plan not on_shelf" )
-
-   pools.modify( pool_itr, _self, [&]( auto& c ) {
-   
-         
-         auto count =  c.airdrop_rewards.count(total_rewards.symbol);
-         if(count == 0 ){
-            auto reward =   loan_pool_reward_st();
-            reward.reward_id                       = _global_state->new_reward_id();
-            reward.total_rewards                   = total_rewards;
-            reward.last_rewards                    = total_rewards;
-            reward.unalloted_rewards               = total_rewards;
-            reward.unclaimed_rewards               = asset(0, total_rewards.symbol);
-            reward.claimed_rewards                 = asset(0, total_rewards.symbol);
-            reward.last_reward_per_share           = 0; 
-            reward.reward_per_share                = calc_reward_per_share_delta(total_rewards, pool_itr->avl_principal);
-            reward.prev_reward_added_at            = current_time_point();
-            reward.reward_added_at                 = current_time_point();
-            c.airdrop_rewards[ total_rewards.symbol ] = reward;
-         } else {
-            auto  reward                           =  c.airdrop_rewards[ total_rewards.symbol ];
-            reward.reward_id                       = _global_state->new_reward_id();
-            reward.total_rewards                   += total_rewards;
-            reward.last_rewards                    = total_rewards;
-            reward.unalloted_rewards               += total_rewards;
-            reward.last_reward_per_share           = reward.reward_per_share;
-            reward.reward_per_share                = reward.reward_per_share + calc_reward_per_share_delta(total_rewards, pool_itr->avl_principal);
-            reward.prev_reward_added_at            = reward.reward_added_at;
-            reward.reward_added_at                 = current_time_point();
-            c.airdrop_rewards[ total_rewards.symbol ] = reward;
-            
-         }
-   });
-}
-
-void tyche_loan::refuelreward_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds){
-   
-   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
-   auto reward_symbol      = reward_symbols.find( total_rewards.symbol.code().raw() );
-   CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "reward symbol not found:" + total_rewards.to_string()  )
-   CHECKC( token_bank == reward_symbol->sym.get_contract(), err::RECORD_NOT_FOUND, "bank not equal" )
-   CHECKC( reward_symbol->on_shelf, err::RECORD_NOT_FOUND, "reward_symbol not on_shelf" )
-
-   auto now             = time_point_sec(current_time_point());
-   uint64_t total_share = 0;
-   auto pools           = loan_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr        = pools.begin();
-   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "save plan not found" )
-   while( pool_itr != pools.end() ) {
-      if( pool_itr->on_shelf ) {
-          total_share += pool_itr->share_multiplier * pool_itr->avl_principal.amount;
-      }
-      pool_itr++;
-   }
-   CHECKC( total_share > 0, err::INCORRECT_AMOUNT, "total share is not positive: " + to_string(total_share) )
-   
-   pool_itr             = pools.begin();
-   while( pool_itr      != pools.end() ){
-      if( !pool_itr->on_shelf ) { pool_itr++; continue; }
-
-      auto rate         = pool_itr->avl_principal.amount * pool_itr->share_multiplier * PCT_BOOST / total_share;
-      auto rewards      = asset(total_rewards.amount * rate / PCT_BOOST, total_rewards.symbol);
-      
-      auto new_reward_id                      = _global_state->new_reward_id();
-      if(pool_itr->airdrop_rewards.count(total_rewards.symbol) == 0) {
-         pools.modify( pool_itr, _self, [&]( auto& c ) {
-            auto reward = loan_pool_reward_st();
-            reward.reward_id                  = new_reward_id;
-            reward.total_rewards              = rewards;
-            reward.last_rewards               = rewards;
-            reward.unalloted_rewards          = rewards;
-            reward.unclaimed_rewards          = asset(0, total_rewards.symbol);
-            reward.claimed_rewards            = asset(0, total_rewards.symbol);
-            reward.last_reward_per_share      = 0; 
-            reward.reward_per_share           = calc_reward_per_share_delta(rewards, pool_itr->avl_principal);
-            reward.reward_added_at            = now;
-            
-            c.airdrop_rewards[total_rewards.symbol] = reward;
-         });
-         
-      } else if( rewards.amount > 0) {
-         pools.modify( pool_itr, _self, [&]( auto& c ) {
-            auto reward                         = pool_itr->airdrop_rewards.at(rewards.symbol);
-            reward.reward_id                    = new_reward_id;
-            reward.total_rewards                += rewards;
-            reward.last_rewards                 = rewards;
-            reward.unalloted_rewards            += rewards;
-            reward.last_reward_per_share        = reward.reward_per_share;
-            reward.reward_per_share             = reward.reward_per_share + calc_reward_per_share_delta(rewards, pool_itr->avl_principal);
-            reward.prev_reward_added_at         = reward.reward_added_at;
-            reward.reward_added_at              = now;
-
-            c.airdrop_rewards[total_rewards.symbol] = reward;
-         });
-      }
-      pool_itr++;
-   }
-}
-
-void tyche_loan::ondeposit( const name& from, const uint64_t& term_code, const asset& quant ){
-   CHECKC( quant.symbol == _gstate.principal_token.get_symbol(), err::SYMBOL_MISMATCH, "symbol mismatch" )
-   CHECKC( _gstate.min_deposit_amount <= quant, err::INCORRECT_AMOUNT, "deposit amount too small" )
-   auto now = time_point_sec(current_time_point());
-   CHECKC( _gstate.enabled, err::PAUSED, "not effective yet" )
-
-   auto pools              = loan_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr           = pools.find( term_code );
-   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "loan pool not found" )
-
-   auto accts              = loaner_t::tbl_t(_self, term_code);
-   auto acct               = accts.find( from.value );
-   if( acct == accts.end() ) {
-      pools.modify( pool_itr, _self, [&]( auto& c ) {
-         c.cum_principal            += quant;
-         c.avl_principal            += quant;
-      });
-
-      acct = accts.emplace( _self, [&]( auto& a ) {
-         a.owner                 = from;
-         a.avl_principal         = quant;
-         a.cum_principal         = quant;
-         a.interest_reward       = _get_new_shared_loaner_reward( pool_itr->interest_reward);
-         a.airdrop_rewards       = _get_new_shared_loaner_reward_map( pool_itr->airdrop_rewards);
-         a.term_started_at       = now;
-         a.term_ended_at         = now + pool_itr->term_interval_sec;
-         a.created_at            = now;
-      });
-
+   total_unpaid_interest      += itr->unpaid_interest;
+   CHECKC(total_unpaid_interest<= quant, err::OVERSIZED, "must pay more than interest")
+   auto principal_repay_quant = quant - total_unpaid_interest;
+   auto avl_principal = itr->avl_principal;
+   if(principal_repay_quant > avl_principal) {
+      //打USDT给用户
+      auto  return_quant = principal_repay_quant - avl_principal;
+      TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, "tyche loan return principal" );
+      //TODO
+      avl_principal        = asset(0, avl_principal.symbol);
    } else {
-      //当用户充入本金, 要结算充入池子的用户之前的利息，同时要修改充入池子的基本信息
-      //循环结算每一种利息代币
-      loan_pool_reward_map pool_airdrop_rewards       = pool_itr->airdrop_rewards;
-      loaner_reward_map    loaner_airdrop_rewards     = acct->airdrop_rewards;
-      auto older_deposit_quant                        = acct->avl_principal;
-      //结算奖励
-      for (auto& pool_airdrop_rewards_kv : pool_itr->airdrop_rewards) { //for循环每一个token
-         auto pool_airdrop_reward   = pool_airdrop_rewards_kv.second;
-         auto code                  = pool_airdrop_rewards_kv.first;
-         auto loaner_airdrop_reward = loaner_reward_st();
-         auto new_rewards           = asset(0, pool_airdrop_reward.total_rewards.symbol);
-         //初始化loaner_reward 信息
-         if(acct->airdrop_rewards.count(code)) {
-            loaner_airdrop_reward   = acct->airdrop_rewards.at(code);
-         } else {
-            loaner_airdrop_reward.unclaimed_rewards         = asset(0, pool_airdrop_reward.total_rewards.symbol);
-            loaner_airdrop_reward.claimed_rewards           = asset(0, pool_airdrop_reward.total_rewards.symbol);
-            loaner_airdrop_reward.total_claimed_rewards     = asset(0, pool_airdrop_reward.total_rewards.symbol);
-            loaner_airdrop_reward.last_reward_per_share     = 0; //如果没有，说明此用户在奖励前质押的
-         }
-
-         int128_t reward_per_share_delta = pool_airdrop_reward.reward_per_share - loaner_airdrop_reward.last_reward_per_share;
-         if ( reward_per_share_delta > 0 ) {
-            new_rewards = calc_sharer_rewards(older_deposit_quant, reward_per_share_delta, pool_airdrop_reward.total_rewards.symbol);
-            // CHECKC(false, err::ACCOUNT_INVALID, "rewards error: " + new_rewards.to_string())
-            pool_airdrop_reward.unalloted_rewards          -= new_rewards;
-            pool_airdrop_reward.unclaimed_rewards          += new_rewards;
-            loaner_airdrop_reward.last_reward_per_share    = pool_airdrop_reward.reward_per_share;
-            loaner_airdrop_reward.unclaimed_rewards        += new_rewards;
-         }
-         pool_airdrop_rewards[code]                         = pool_airdrop_reward;
-         loaner_airdrop_rewards[code]                       = loaner_airdrop_reward;
-      }
-
-      auto loaner_interest_reward                           = acct->interest_reward;
-      auto pool_interest_reward                             = pool_itr->interest_reward;
-      //结算利息
-      {
-         int128_t reward_per_share_delta              = pool_interest_reward.reward_per_share - loaner_interest_reward.last_reward_per_share;
-         auto new_rewards                             = calc_sharer_rewards(older_deposit_quant, reward_per_share_delta, pool_interest_reward.total_rewards.symbol);
-         CHECKC(new_rewards.amount >= 0, err::INCORRECT_AMOUNT,  "new reward must be positive")
-         pool_interest_reward.unalloted_rewards       -= new_rewards;
-         pool_interest_reward.unclaimed_rewards       += new_rewards;
-         loaner_interest_reward.last_reward_per_share = pool_interest_reward.reward_per_share;
-         loaner_interest_reward.unclaimed_rewards     += new_rewards;
-      }
-   
-      pools.modify( pool_itr, _self, [&]( auto& c ) {
-         c.cum_principal               += quant;
-         c.avl_principal               += quant;
-         c.interest_reward             = pool_interest_reward;
-         c.airdrop_rewards             = pool_airdrop_rewards;
-      });
-
-      accts.modify( acct, _self,  [&]( auto& c ) {
-         if( c.avl_principal.amount == 0 ) {
-            c.created_at               = now;
-         }
-         c.cum_principal               += quant;
-         c.avl_principal               += quant;
-         c.airdrop_rewards             = loaner_airdrop_rewards;
-         c.interest_reward             = loaner_interest_reward;
-         c.term_started_at             = now;
-         c.term_ended_at               = now + pool_itr->term_interval_sec;
-      });
+      avl_principal         -= principal_repay_quant;
    }
-   //transfer nusdt to loaner
-   TRANSFER( _gstate.lp_token.get_contract(), from, asset(quant.amount, _gstate.lp_token.get_symbol()), "deposit credential:" + to_string(term_code)  )
-   //只有天池5号才有奖励
-   if(term_code == _gstate.tyche_reward_pool_code) {
-      //打出TYCHE
-      auto tyche_amount = quant.amount * _gstate.tyche_farm_ratio / PCT_BOOST * (get_precision(TYCHE)/get_precision(quant.symbol));
-      // CHECKC(false, err::ACCOUNT_INVALID, "test errror:" + asset(tyche_amount, TYCHE).to_string())
-      TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "tyche farm reward:" + to_string(term_code))
-      _apl_reward(from, quant,term_code);
-   }
-}
 
-//用户提款只能按全额来提款
-void tyche_loan::onredeem( const name& from, const uint64_t& term_code, const asset& quant ){
-   auto pools        = loan_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr     = pools.find( term_code );
-   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "loan pool not found" )
-
-   auto accts        = loaner_t::tbl_t(_self, term_code);
-   auto acct         = accts.find( from.value );
-   CHECKC( acct != accts.end(), err::RECORD_NOT_FOUND, "account not found" )
-
-   auto now          = current_time_point();
-   CHECKC(acct->avl_principal.amount !=0, err::PLAN_INEFFECTIVE, "already redeemed" )
-   CHECKC(acct->avl_principal.amount == quant.amount, err::INCORRECT_AMOUNT, "insufficient deposit amount" )
-   CHECKC(acct->term_ended_at <= now, err::TIME_PREMATURE, "premature to redeedm" )
-   
-   _claim_pool_rewards(from, term_code, true);
-
-   //打出本金MUSDT
-   TRANSFER( MUSDT_BANK, from, asset(quant.amount, MUSDT), "redeem:" + to_string(term_code) )
-   if(term_code == _gstate.tyche_reward_pool_code) {
-      //打出TYCHE
-      auto tyche_amount = quant.amount * _gstate.tyche_farm_lock_ratio / PCT_BOOST * (get_precision(TYCHE)/get_precision(acct->avl_principal));
-      TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "redeem:" + to_string(term_code) )
-   }
-}
-
-
-void tyche_loan::settychepct(const uint64_t& tyche_farm_ratio, const uint64_t& tyche_farm_lock_ratio){
-   require_auth(_self);
-   CHECKC(tyche_farm_ratio + tyche_farm_lock_ratio == 100, err::INCORRECT_AMOUNT, "all tyche farm ratio must be 1%")
-   _gstate.tyche_farm_ratio            = tyche_farm_ratio;
-   _gstate.tyche_farm_lock_ratio       = tyche_farm_lock_ratio;
-}
-
-void tyche_loan::addrewardsym(const extended_symbol& sym) {
-   require_auth(_self);
-   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
-   auto reward_symbol      = reward_symbols.find( sym.get_symbol().code().raw() );
-   CHECKC( reward_symbol == reward_symbols.end(), err::RECORD_EXISTING, "reward symbol already exist")
-   reward_symbols.emplace( _self, [&]( auto& s ) {
-      s.sym                         = sym;
-      s.on_shelf                    = true;
+   loaners.modify(itr, _self, [&](auto& row){
+      row.avl_principal          = avl_principal;
+      row.paid_interest          += total_unpaid_interest;
+      row.unpaid_interest        = asset(0, total_unpaid_interest.symbol);
+      row.term_settled_at        = eosio::current_time_point();
+      row.term_ended_at          = eosio::current_time_point() + eosio::days(_gstate.term_interval_days);
    });
 }
-//
 
-void tyche_loan::setmindepamt(const asset& quant) {
-   require_auth(_self);
-   CHECKC(quant.symbol== _gstate.min_deposit_amount.symbol, err::MEMO_FORMAT_ERROR, "symbol error")
-   _gstate.min_deposit_amount      = quant;
-}
-
-void tyche_loan::claimrewards(const name& from){
+//external: 获得更多的MUSDT
+void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const asset& quant){
    require_auth(from);
+   CHECKC(quant.amount > 0, err::INCORRECT_AMOUNT, "amount must positive")
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto itr = syms.find(callat_sym.code().raw());
+   CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
 
-   auto pools        = loan_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr     = pools.begin();
-   bool finalclaimed = false;
-   while( pool_itr != pools.end() ) {
-      if( !pool_itr->on_shelf ) { pool_itr++; continue; }
-      auto claimed   = _claim_pool_rewards(from, pool_itr->code, false);
-      if (!finalclaimed) 
-         finalclaimed = claimed;
+   CHECKC(_gstate.avl_principal_quant >= quant, err::OVERSIZED, "principal not enough")
+   CHECKC(itr->avl_principal + quant <= itr->max_principal, err::OVERSIZED, "symbol principal not enough")
 
-      pool_itr++;
-   }
-   CHECKC(finalclaimed, err::RECORD_NOT_FOUND, "no reward to claim for " + from.to_string() )
+   auto loaner = loaner_t::tbl_t(_self, _get_lower(callat_sym).value);
+   auto loaner_itr = loaner.find(from.value);
+   CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
+
+   asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->term_settled_at, eosio::current_time_point());
+   // CHECKC(false, err::RATE_EXCEEDED, " " +loaner_itr->avl_principal.to_string() + " " + loaner_itr->unpaid_interest.to_string() +  " " + total_interest.to_string() +  "  " + quant.to_string() );
+
+   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest + quant, itr->oracle_sym_name);
+   //TODO
+   // CHECKC( ratio >= itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
+   //打USDT给用户
+   TRANSFER( _gstate.loan_token.get_contract(), from, quant, "tyche loan" );
+
+   //更新用户的MUSDT
+   loaner.modify(loaner_itr, _self, [&](auto& row){
+      row.avl_principal    += quant;
+      row.unpaid_interest  += total_interest;
+      row.term_settled_at  = eosio::current_time_point();
+   });
+
+   syms.modify(itr, _self, [&](auto& row){
+      row.total_principal += quant;
+      row.avl_principal   += quant;
+   });
+
+   _gstate.avl_principal_quant -= quant;
 }
 
+void tyche_loan::tgetprice( const symbol& collateral_sym ){
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto sym_itr = syms.find(collateral_sym.code().raw());
+   CHECKC(sym_itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
+   auto price = get_index_price( sym_itr->oracle_sym_name );
 
-void tyche_loan::claimreward(const name& from, const std::string& sym){
+   CHECKC(false, err::SYSTEM_ERROR, "current pirce: " + asset(price, collateral_sym).to_string() );
+}
+
+void tyche_loan::tgetliqrate( const name& owner, const symbol& callat_sym )
+{
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto itr = syms.find(callat_sym.code().raw());
+   CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
+
+   auto loaner = loaner_t::tbl_t(_self, _get_lower(callat_sym).value);
+   auto loaner_itr = loaner.find(owner.value);
+   CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
+
+   asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->term_settled_at,eosio::current_time_point());
+
+   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest, itr->oracle_sym_name);
+   CHECKC( false, err::RATE_EXCEEDED, "callation ratio: "  + to_string(ratio));
+}
+
+//增加质押物
+void tyche_loan::_on_add_callateral( const name& from, const name& token_bank, const asset& quant ){
+
+   //ETH
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto sym_itr = syms.find(quant.symbol.code().raw());
+   CHECKC(sym_itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
+   CHECKC(token_bank == sym_itr->sym.get_contract(), err::CONTRACT_MISMATCH, "symbol not supported");
+
+   loaner_t::tbl_t loaners(_self, _get_lower(quant.symbol).value);
+   auto itr = loaners.find(from.value);
+   if( itr == loaners.end() ){
+      loaners.emplace(_self, [&](auto& row){
+         row.owner = from;
+         row.cum_collateral_quant   = quant;
+         row.avl_collateral_quant   = quant;
+         row.avl_principal          = asset(0, _gstate.loan_token.get_symbol());
+         row.created_at             = eosio::current_time_point();
+         row.term_started_at        = eosio::current_time_point();
+         row.term_settled_at        = eosio::current_time_point();
+         row.term_ended_at          = eosio::current_time_point() + eosio::days(_gstate.term_interval_days);
+         row.unpaid_interest        = asset(0, _gstate.loan_token.get_symbol());
+         row.paid_interest          = asset(0, _gstate.loan_token.get_symbol());
+      });
+   } else {
+      loaners.modify(itr, _self, [&](auto& row){
+         row.cum_collateral_quant += quant;
+         row.avl_collateral_quant += quant;
+      });
+   }
+
+   syms.modify(sym_itr, _self, [&](auto& row){
+      row.total_collateral_quant += quant;
+      row.avl_collateral_quant   += quant;
+   });
+
+}
+
+//赎回质押物，就是减少用户的质押物
+void tyche_loan::onsubcallat( const name& from, const asset& quant ) {
    require_auth(from);
+   loaner_t::tbl_t loaners(_self, _get_lower(quant.symbol).value);
+   auto itr = loaners.find(from.value);
+   CHECKC(itr != loaners.end(),           err::RECORD_NOT_FOUND,  "account not existed")
+   CHECKC(itr->avl_collateral_quant.amount > 0,  err::OVERSIZED,  "avl_principal must positive")
+   CHECKC(itr->avl_collateral_quant.amount >= quant.amount, err::OVERSIZED,  "too many callat sub")
 
-   auto pools        = loan_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr     = pools.begin();
-   auto sym_code     = symbol_from_string(sym);
-   bool finalclaimed = false;
-   while( pool_itr != pools.end() ) {
-      if( !pool_itr->on_shelf ) { pool_itr++; continue; }
-      auto claimed   = _claim_pool_rewards_by_symbol(from, pool_itr->code, sym_code, false);
-      if (!finalclaimed) 
-         finalclaimed = claimed;
+   auto remain_collateral_quant = itr->avl_collateral_quant - quant;
+   //算新的抵押率
 
-      pool_itr++;
-   }
-   CHECKC(finalclaimed, err::RECORD_NOT_FOUND, "no reward to claim for " + from.to_string() )
-}
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto sym_itr = syms.find(quant.symbol.code().raw());
+   CHECKC(sym_itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
+   auto ratio = get_callation_ratio(remain_collateral_quant, itr->avl_principal, sym_itr->oracle_sym_name );
 
-bool tyche_loan::_claim_pool_rewards(const name& from, const uint64_t& term_code, const bool& term_end_flag ){
-   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
-   bool existed            = false;
+   CHECKC( ratio >= sym_itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
 
-   auto now                = time_point_sec(current_time_point());
-   auto pools              = loan_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr           = pools.find( term_code );
-   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "loan pool not found" )
-
-   auto accts  = loaner_t::tbl_t(_self, term_code);
-   auto acct   = accts.find( from.value );
-   if(acct == accts.end())
-      return false;
-
-   auto reward_symbol_ptr      = reward_symbols.begin();
-   auto loaner_airdrop_rewards   = acct->airdrop_rewards;
-   auto pool_airdrop_rewards     = pool_itr->airdrop_rewards;
-   while(reward_symbol_ptr != reward_symbols.end()) {
-      if(!reward_symbol_ptr->on_shelf) {reward_symbol_ptr++; continue;}
-      auto sym    = reward_symbol_ptr->sym.get_symbol();
-      if( pool_itr->airdrop_rewards.count( sym ) == 0 ) {
-         reward_symbol_ptr++;
-         continue;
-      }
-      loaner_reward_st loaner_airdrop_reward = {0, asset(0, sym), asset(0,sym), asset(0, sym)};
-      if(acct->airdrop_rewards.count( sym ) > 0) {
-         loaner_airdrop_reward   = acct->airdrop_rewards.at(sym);
-      }
-      auto pool_airdrop_reward     = pool_itr->airdrop_rewards.at(sym);
-
-
-      auto total_rewards            = _update_reward_info(pool_airdrop_reward, loaner_airdrop_reward, acct->avl_principal, term_end_flag);
-      loaner_airdrop_rewards[sym]  = loaner_airdrop_reward;
-      pool_airdrop_rewards[sym]    = pool_airdrop_reward;
-      //内部调用发放利息
-      //发放利息
-      if(total_rewards.amount > 0) {
-         tyche_reward::claimreward_action claim_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
-         claim_reward_act.send(from, reward_symbol_ptr->sym.get_contract(), total_rewards, "reward:" + to_string(term_code));
-         existed = true;
-      }
-      reward_symbol_ptr++;
-   }
-
-   auto pool_interest_reward     = pool_itr->interest_reward;
-   auto eraner_interest_reward   = acct->interest_reward;
-   {
-      auto total_rewards         = _update_reward_info(pool_interest_reward, eraner_interest_reward, acct->avl_principal, term_end_flag);
-      //内部调用发放利息
-      //发放利息
-      if(total_rewards.amount > 0) {
-         tyche_reward::claimintr_action cliam_interest_act(_gstate.reward_contract, { {get_self(), "active"_n} });
-         cliam_interest_act.send(from, MUSDT_BANK, total_rewards, "interest:" + to_string(term_code));
-         existed = true;
-      }
-   }
-
-
-   pools.modify( pool_itr, _self, [&]( auto& c ) {
-      c.interest_reward                = pool_interest_reward;
-      if( term_end_flag )           
-         c.avl_principal.amount        -= acct->avl_principal.amount;
-      c.airdrop_rewards                = pool_airdrop_rewards;
+   loaners.modify(itr, _self, [&](auto& row){
+      row.avl_collateral_quant = remain_collateral_quant;
    });
 
-   accts.modify( acct, _self, [&]( auto& a ) {
-      a.interest_reward                = eraner_interest_reward; 
-      if( term_end_flag ) {
-         a.avl_principal.amount        = 0;
-      }
-         
-      a.airdrop_rewards                = loaner_airdrop_rewards;
+   syms.modify(sym_itr, _self, [&](auto& row){
+      row.avl_collateral_quant   -= quant;
    });
-   return existed;
+
+   TRANSFER( sym_itr->sym.get_contract(), from, quant, "tyche loan callat redeem" );
 }
 
-bool tyche_loan::_claim_pool_rewards_by_symbol(const name& from, const uint64_t& term_code, const symbol& reward_symbol, const bool& term_end_flag ){
-   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
-   bool existed            = false;
+//计算抵押率
+uint64_t tyche_loan::get_callation_ratio(const asset& collateral_quant, const asset& principal, const name& oracle_sym_name ){
+   if(principal.amount == 0)
+      return PCT_BOOST;
+   auto price           = get_index_price( oracle_sym_name );
+   auto current_price   = asset( price, principal.symbol );
+   auto total_quant     = calc_quote_quant(collateral_quant, current_price);
+   auto ratio           = total_quant.amount * PCT_BOOST / principal.amount;
 
-   auto now                = time_point_sec(current_time_point());
-   auto pools              = loan_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr           = pools.find( term_code );
-   CHECKC( pool_itr != pools.end(), err::RECORD_NOT_FOUND, "loan pool not found" )
+   return ratio;
+}
 
-   auto accts  = loaner_t::tbl_t(_self, term_code);
-   auto acct   = accts.find( from.value );
-   if(acct == accts.end())
-      return false;
+//根据用户支付的金额, 算出抵押物的数量
+asset tyche_loan::calc_collateral_quant( const asset& collateral_quant, const asset& paid_principal_quant, const name& oracle_sym_name){
+   CHECKC( collateral_quant.amount > 0, err::INCORRECT_AMOUNT, "collateral_quant must positive" )
+   CHECKC( paid_principal_quant.amount > 0, err::INCORRECT_AMOUNT, "principal_quant must positive" )
 
-   auto reward_symbol_ptr        = reward_symbols.find(reward_symbol.code().raw());
-   auto loaner_airdrop_rewards   = acct->airdrop_rewards;
-   auto pool_airdrop_rewards     = pool_itr->airdrop_rewards;
-   if(reward_symbol_ptr != reward_symbols.end() && reward_symbol_ptr->on_shelf && pool_itr->airdrop_rewards.count( reward_symbol ) != 0) {
-      loaner_reward_st loaner_airdrop_reward = {0, asset(0, reward_symbol), asset(0,reward_symbol), asset(0, reward_symbol)};
-      if(acct->airdrop_rewards.count( reward_symbol ) > 0) {
-         loaner_airdrop_reward   = acct->airdrop_rewards.at(reward_symbol);
-      }
-      auto pool_airdrop_reward     = pool_itr->airdrop_rewards.at(reward_symbol);
+   auto price                 = get_index_price( oracle_sym_name );
+   auto settle_price          = calc_quant( asset( price, paid_principal_quant.symbol ), _gstate.liquidation_price_ratio );
+   auto paid_collateral_quant = calc_base_quant( paid_principal_quant, settle_price, collateral_quant.symbol );
+   CHECKC(collateral_quant >= paid_collateral_quant, err::INCORRECT_AMOUNT, "paid_principal_quant must less than paid_collateral_quant" )
+   return paid_collateral_quant;
+}
+
+uint64_t tyche_loan::get_index_price( const name& base_code ){
+    const auto& prices = _price_conf().prices;
+    auto itr =  prices.find(base_code);
+    CHECKC(itr != prices.end(), err::RECORD_NOT_FOUND, "price not found: " + base_code.to_string()  )
+    return itr->second;
+}
+
+const price_global_t& tyche_loan::_price_conf() {
+    if(!_global_prices_ptr) {
+        CHECKC(_gstate.price_oracle_contract.value != 0,err::SYSTEM_ERROR, "Invalid price_oracle_contract");
+        _global_prices_tbl_ptr =  std::make_unique<price_global_t::idx_t>(_gstate.price_oracle_contract, _gstate.price_oracle_contract.value);
+        _global_prices_ptr = std::make_unique<price_global_t>(_global_prices_tbl_ptr->get());
+    }
+   TRACE_L("_price_conf end");
+   return *_global_prices_ptr;
+}
 
 
-      auto total_rewards                     = _update_reward_info(pool_airdrop_reward, loaner_airdrop_reward, acct->avl_principal, term_end_flag);
-      loaner_airdrop_rewards[reward_symbol]  = loaner_airdrop_reward;
-      pool_airdrop_rewards[reward_symbol]    = pool_airdrop_reward;
-      //内部调用发放利息
-      //发放利息
-      if(total_rewards.amount > 0) {
-         tyche_reward::claimreward_action claim_reward_act(_gstate.reward_contract, { {get_self(), "active"_n} });
-         claim_reward_act.send(from, reward_symbol_ptr->sym.get_contract(), total_rewards, "reward:" + to_string(term_code));
-         existed = true;
-      }
-      reward_symbol_ptr++;
-   }
+/***
+ * @brief 1. 用户打入MUSDT，获得抵押物
+ *           更具当前价格, 如果抵押率< 150%, 则按当前eth 价格87%的价格售卖,平台得到10%的利润,用户得到3%价格差奖励
+*/
+void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbol& callat_sym, const asset& quant ){
+   CHECKC(quant.amount >= 0, err::INCORRECT_AMOUNT, "amount must positive")
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto itr = syms.find(callat_sym.code().raw());
+   CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
 
-   auto pool_interest_reward     = pool_itr->interest_reward;
-   auto eraner_interest_reward   = acct->interest_reward;
+   auto loaner = loaner_t::tbl_t(_self, _get_lower(callat_sym).value);
+   auto loaner_itr = loaner.find(liqudater.value);
+   CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
+
+   asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->term_settled_at, eosio::current_time_point());
+   asset need_pay_interest = loaner_itr->unpaid_interest + total_interest;
+   asset need_settle_quant = loaner_itr->avl_principal + need_pay_interest;
+   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, need_settle_quant, itr->oracle_sym_name);
+   CHECKC( ratio <= itr->liquidation_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
    
-   if(reward_symbol == MUSDT) {
-      auto total_rewards         = _update_reward_info(pool_interest_reward, eraner_interest_reward, acct->avl_principal, term_end_flag);
-      //内部调用发放利息
-      //发放利息
-      if(total_rewards.amount > 0) {
-         tyche_reward::claimintr_action cliam_interest_act(_gstate.reward_contract, { {get_self(), "active"_n} });
-         cliam_interest_act.send(from, MUSDT_BANK, total_rewards, "interest:" + to_string(term_code));
-         existed = true;
+
+   auto price           = get_index_price( itr->oracle_sym_name );
+   auto current_price   = asset( price, quant.symbol );
+
+   if(ratio <= itr->liquidation_ratio && ratio >= itr->force_liquidate_ratio) {
+      CHECKC( need_pay_interest <= quant, err::OVERSIZED, "must pay more than interest");
+
+      auto paid_amount = divide_decimal(need_settle_quant.amount, _gstate.liquidation_penalty_ratio, PCT_BOOST );
+      auto paid_quant = asset(paid_amount, need_settle_quant.symbol);
+
+      if( paid_quant <= quant) {
+         auto return_quant = quant - paid_quant;
+         TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, "tyche loan return principal" );
       }
-   }
 
-   pools.modify( pool_itr, _self, [&]( auto& c ) {
-      c.interest_reward                = pool_interest_reward;
-      c.airdrop_rewards                = pool_airdrop_rewards;
-   });
+      auto return_collateral_quant = calc_collateral_quant(loaner_itr->avl_collateral_quant, paid_quant, itr->oracle_sym_name);
+      //把抵押物转给协议平仓的人
+      TRANSFER( itr->sym.get_contract(), from, return_collateral_quant, "tyche loan return principal" );
+      //平台内结算
+      //添加平台金额
+      auto platform_quant = paid_quant - need_settle_quant;
+      auto paid_principal = need_settle_quant - need_pay_interest;
+      CHECKC( paid_principal.amount > 0, err::INCORRECT_AMOUNT, "paid_principal must positive" )
+      CHECKC( paid_principal <= loaner_itr->avl_principal, err::INCORRECT_AMOUNT, "principal need < avl_principal" )
+      _add_fee(platform_quant);
+      // CHECKC(false, err::RATE_EXCEEDED, "test callation ratio: "  + to_string(ratio) + "return_collateral_quant: " + return_collateral_quant.to_string() + " paid_principal:" + paid_principal.to_string());
+      //结算用户质押物
+      loaner.modify(loaner_itr, _self, [&](auto& row){
+         row.avl_collateral_quant   -= return_collateral_quant;              //减少抵押物
+         row.avl_principal          -= paid_principal; 
+         row.unpaid_interest        = asset(0, _gstate.loan_token.get_symbol());
+         row.paid_interest          += need_pay_interest;
+         row.term_settled_at        = eosio::current_time_point();
+      });
 
-   accts.modify( acct, _self, [&]( auto& a ) {
-      a.interest_reward                = eraner_interest_reward;          
-      a.airdrop_rewards                = loaner_airdrop_rewards;
-   });
-   return existed;
-}
-
-
-
-//领取奖励,返回要领取的奖励
-asset tyche_loan::_update_reward_info( loan_pool_reward_st& pool_reward, loaner_reward_st& loaner_reward, const asset& loaner_avl_principal, const bool& term_end_flag) {
-   int128_t reward_per_share_delta = pool_reward.reward_per_share - loaner_reward.last_reward_per_share;
-
-   auto new_rewards        = calc_sharer_rewards(loaner_avl_principal, reward_per_share_delta, pool_reward.total_rewards.symbol);
-   auto total_rewards      = new_rewards + loaner_reward.unclaimed_rewards;
-   // CHECKC(false, err::INCORRECT_AMOUNT, "new_rewards must be greater than zero:" + new_rewards.to_string())
-
-   pool_reward.unalloted_rewards          -= new_rewards;
-   pool_reward.unclaimed_rewards          -= loaner_reward.unclaimed_rewards;
-   pool_reward.claimed_rewards            += total_rewards;
-
-   loaner_reward.unclaimed_rewards        = asset(0, total_rewards.symbol);
-   if( term_end_flag ){
-      loaner_reward.claimed_rewards       = asset(0, total_rewards.symbol);
+      liqlog_t liqlog = {_global_state->new_liqlog_id(), "liq"_n, liqudater, from,
+                   need_settle_quant, return_collateral_quant,  paid_principal, current_price,
+                   ratio, eosio::current_time_point()};
+      NOTIFY_LIQ_ACTION(liqlog);
+      return;
    } else {
-      loaner_reward.claimed_rewards       += total_rewards;
-   }
-   // CHECKC(false, err::INCORRECT_AMOUNT, "new_rewards must be greater than zero3:" + new_rewards.to_string() + "total_rewards:" + total_rewards.to_string() + ",total_claimed_rewards: " 
-   //          + loaner_reward.total_claimed_rewards.to_string() )
+      if( quant.amount > 0 ){
+         TRANSFER( _gstate.loan_token.get_contract(), from, quant, "froce liqudate return principal" );
+      }
+      syms.modify(itr, _self, [&](auto& row){
+         row.total_fore_collateral_quant  += loaner_itr->avl_collateral_quant;
+         row.total_fore_principal         += loaner_itr->avl_principal;
+         row.avl_force_collateral_quant   += loaner_itr->avl_collateral_quant;
+         row.avl_force_principal          += loaner_itr->avl_principal;
+      });
 
-   loaner_reward.total_claimed_rewards    += total_rewards;
-   loaner_reward.last_reward_per_share    = pool_reward.reward_per_share;
-   return total_rewards;
+      liqlog_t liqlog = {_global_state->new_liqlog_id(), "forceliq"_n, liqudater, from,
+         need_settle_quant, loaner_itr->avl_collateral_quant,loaner_itr->avl_principal, current_price,
+         ratio, eosio::current_time_point()};
+
+      //直接没收抵押物
+      loaner.modify(loaner_itr, _self, [&](auto& row){
+         row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
+         row.avl_principal          = asset(0, _gstate.loan_token.get_symbol()); 
+         row.unpaid_interest        = asset(0, _gstate.loan_token.get_symbol());
+         row.paid_interest          += need_pay_interest;
+         row.term_settled_at        = eosio::current_time_point();
+      });
+      NOTIFY_LIQ_ACTION(liqlog);
+   }
 }
 
-loaner_reward_map tyche_loan::_get_new_shared_loaner_reward_map(const loan_pool_reward_map& rewards) {
-   loaner_reward_map airdrop_rewards;
-   for (auto& pool_airdrop_reward : rewards) {
-      airdrop_rewards[pool_airdrop_reward.first]   = _get_new_shared_loaner_reward(pool_airdrop_reward.second);
-   }
-   return airdrop_rewards;
-}
-
-void tyche_loan::setpool(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier) {
-   require_auth(_self);
-   auto pools              = loan_pool_t::tbl_t(_self, _self.value);
-   auto pool_itr           = pools.find( code );
-   if( pool_itr == pools.end() ) {
-      pools.emplace( _self, [&]( auto& c ) {
-         c.code                  = code;
-         c.term_interval_sec     = term_interval_sec;
-         c.share_multiplier      = share_multiplier;
-         c.interest_reward       = _init_interest_conf();
-         c.on_shelf              = true;
-         c.created_at            = time_point_sec(current_time_point());
+void tyche_loan::setcallatsym(const extended_symbol& sym, const name& oracle_sym_name) {
+   require_auth(_gstate.admin);
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto itr = syms.find(sym.get_symbol().code().raw());
+   if( itr == syms.end() ) {
+      syms.emplace(_self, [&](auto& row){
+         row.sym                          = sym;
+         row.oracle_sym_name              = oracle_sym_name;
+         row.on_shelf                     = true;
+         row.max_principal                =  asset(100000000000 , _gstate.loan_token.get_symbol());
+         row.total_fore_collateral_quant  = asset(0, sym.get_symbol());
+         row.total_fore_principal         = asset(0, _gstate.loan_token.get_symbol());
+         row.avl_force_collateral_quant   = asset(0, sym.get_symbol());
+         row.avl_force_principal          = asset(0, _gstate.loan_token.get_symbol());
+         row.total_collateral_quant       = asset(0, sym.get_symbol());
+         row.avl_collateral_quant         = asset(0, sym.get_symbol());
+         row.total_principal              = asset(0, _gstate.loan_token.get_symbol());
+         row.avl_principal                = asset(0, _gstate.loan_token.get_symbol());
       });
    } else {
-      pools.modify( pool_itr, _self, [&]( auto& c ) {
-         c.term_interval_sec     = term_interval_sec;
-         c.share_multiplier      = share_multiplier;
-         c.on_shelf              = true;
+      syms.modify(itr, _self, [&](auto& row){
+         row.sym = sym;
+         row.on_shelf = true;
       });
    }
 }
 
-void tyche_loan::onshelfsym(const extended_symbol& sym, const bool& on_shelf) {
-   require_auth(_self);
-   auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
-   auto reward_symbol      = reward_symbols.find( sym.get_symbol().code().raw() );
-   CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "reward symbol not found" )
-   reward_symbols.modify( reward_symbol, _self, [&]( auto& s ) {
-      s.on_shelf               = on_shelf;
+void tyche_loan::addinteret(const uint64_t& interest_ratio) {
+   require_auth(_gstate.admin);
+   CHECKC(interest_ratio > 0, err::INCORRECT_AMOUNT, "interest_ratio must positive")
+
+   auto interests = interest_t::tbl_t(_self, _self.value);
+   auto first_itr =  interests.begin();
+   if( first_itr != interests.end() ) {
+      interests.modify(first_itr, _self, [&](auto& row){
+         row.ended_at = eosio::current_time_point();
+      });
+   } 
+   interests.emplace(_self, [&](auto& row){
+      row.interest_ratio   = interest_ratio;
+      row.begin_at         = eosio::current_time_point();
+      row.ended_at         = eosio::current_time_point() + eosio::days(365*10);
    });
+
 }
 
-loan_pool_reward_st tyche_loan::_init_interest_conf(){
-   auto conf_id = _global_state->new_reward_id();
-   loan_pool_reward_st pool_reward = {conf_id, 
-                     asset(0, MUSDT),
-                     asset(0, MUSDT),
-                     asset(0, MUSDT), 
-                     asset(0, MUSDT), 
-                     asset(0, MUSDT), 
-                     0,
-                     0, 
-                     time_point_sec(current_time_point()), 
-                     time_point_sec(current_time_point())};
-   return pool_reward;
-}
-//init loaner_reward first time 
-loaner_reward_st tyche_loan::_get_new_shared_loaner_reward(const loan_pool_reward_st& pool_reward) {
-   loaner_reward_st loaner_reward;
-   loaner_reward.last_reward_per_share = pool_reward.reward_per_share;
-   loaner_reward.unclaimed_rewards     = asset(0, pool_reward.total_rewards.symbol);
-   loaner_reward.claimed_rewards       = asset(0, pool_reward.total_rewards.symbol);
-   loaner_reward.total_claimed_rewards = asset(0, pool_reward.total_rewards.symbol);
-   return loaner_reward;
+uint64_t tyche_loan::_get_current_interest_ratio() {
+   require_auth(_gstate.admin);
+
+   auto interests = interest_t::tbl_t(_self, _self.value);
+   auto first_itr =  interests.begin();
+   CHECKC( first_itr != interests.end(), err::RECORD_NOT_FOUND, "not validate interest"); 
+   return first_itr->interest_ratio;
 }
 
-void tyche_loan::_apl_reward(const name& from, const asset& quant, const uint64_t& term_code) {
 
-   rewardglobal_t::table reward_global(_gstate.reward_contract, _gstate.reward_contract.value);
-   auto reward_gstate = reward_global.get();
+void tyche_loan::tgetinterest(const asset& principal,  const time_point_sec& started_at, const time_point_sec& ended_at) {
+   auto interest = _get_dynamic_interest(principal, started_at, ended_at);
+   CHECKC(false, err::SYSTEM_ERROR, "interest: " + interest.to_string() );
 
-   auto apls_amount = quant.amount/get_precision(quant) * 
-            reward_gstate.annual_interest_rate * _gstate.apl_farm.unit_reward.amount / PCT_BOOST;
+}
 
-   if(apls_amount > 0) {
-      ALLOT_APPLE( _gstate.apl_farm.contract, _gstate.apl_farm.lease_id, from, asset(apls_amount, APLINK_SYMBOL), "tyche loan reward:" + to_string(term_code))
+asset tyche_loan::_get_dynamic_interest( const asset& quant, 
+                                          const time_point_sec& time_start, const time_point_sec& time_end){
+   auto interests = interest_t::tbl_t(_self, _self.value);
+   auto beg_itr   = interests.begin();
+   auto begin_at  = time_start;
+   auto ended_at  = time_end;
+   auto interest = asset(0, quant.symbol);
+
+   while( beg_itr != interests.end() && beg_itr->ended_at > time_start ) {
+      interest += _get_interest(quant, beg_itr->interest_ratio, beg_itr->begin_at, ended_at);
+      ended_at = beg_itr->begin_at;
+      beg_itr++;
    }
+   return interest;
 }
 
-void tyche_loan::setaplconf( const uint64_t& lease_id, const asset& unit_reward ){
-   require_auth(_self);
-   _gstate.apl_farm.lease_id     = lease_id;
-   _gstate.apl_farm.unit_reward  = unit_reward;
+asset tyche_loan::_get_interest(const asset& quant, const uint64_t& interest_ratio, 
+                                 const time_point_sec& started_at, const time_point_sec& ended_at) {
+      auto elapsed =  (ended_at - started_at);
+      auto elapsed_seconds = elapsed.count() / 1000000;
+      CHECKC( elapsed_seconds > 0,              err::TIME_PREMATURE,       "time premature" )
+
+      auto total_unpaid_interest = quant.amount * interest_ratio / YEAR_SECONDS * elapsed_seconds / PCT_BOOST;
+      return asset( total_unpaid_interest, quant.symbol );
 }
 
+
+void tyche_loan::forceliq( const name& from, const name& liqudater, const symbol& callat_sym ){
+   require_auth(from);
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto itr = syms.find(callat_sym.code().raw());
+   CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
+
+   auto loaner = loaner_t::tbl_t(_self, _get_lower(callat_sym).value);
+   auto loaner_itr = loaner.find(liqudater.value);
+   CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
+
+   asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->term_settled_at,eosio::current_time_point() );
+   asset need_pay_interest = loaner_itr->unpaid_interest + total_interest;
+   asset need_settle_quant = loaner_itr->avl_principal + need_pay_interest;
+   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, need_settle_quant, itr->oracle_sym_name);
+   CHECKC( ratio <= itr->force_liquidate_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
+   syms.modify(itr, _self, [&](auto& row){
+      row.total_fore_collateral_quant += loaner_itr->avl_collateral_quant;
+      row.total_fore_principal        += loaner_itr->avl_principal;
+      row.avl_force_collateral_quant += loaner_itr->avl_collateral_quant;
+      row.avl_force_principal        += loaner_itr->avl_principal;
+   });
+   auto price           = get_index_price( itr->oracle_sym_name );
+   auto current_price   = asset( price, itr->avl_principal.symbol );
+
+    liqlog_t liqlog = {_global_state->new_liqlog_id(), "forceliq"_n, liqudater, from,
+               need_settle_quant, loaner_itr->avl_collateral_quant,  loaner_itr->avl_principal, current_price,
+               ratio, eosio::current_time_point()};
+
+    NOTIFY_LIQ_ACTION(liqlog);
+
+   //直接没收抵押物
+   loaner.modify(loaner_itr, _self, [&](auto& row){
+      row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
+      row.avl_principal          = asset(0, _gstate.loan_token.get_symbol()); 
+      row.unpaid_interest        = asset(0, _gstate.loan_token.get_symbol());
+      row.paid_interest          += need_pay_interest;
+      row.term_settled_at        = eosio::current_time_point();
+   });
+  
 }
+
+void tyche_loan::_add_fee(const asset& quantity) {
+    auto fees           = make_fee_table( get_self() );
+    auto it             = fees.find( quantity.symbol.code().raw() );
+    if (it != fees.end()) {
+        fees.modify(*it, _self, [&](auto &row) {
+            row.fees += quantity;
+        });
+    } else {
+        fees.emplace(_self, [&]( auto& row ) {
+            row.fees = quantity;
+        });
+    }
+}
+
+asset tyche_loan::_sub_fee(const symbol& sym) {
+   auto fee_tbl = make_fee_table( get_self() );
+   auto itr = fee_tbl.find( sym.code().raw() );
+
+   CHECKC( itr != fee_tbl.end(), err::RECORD_NOT_FOUND, "The user does not exist or has fee" )
+   CHECKC( itr->fees.amount > 0, err::PARAM_ERROR, "not enought balance" )
+   auto quant = itr->fees;
+   fee_tbl.modify( *itr, _self, [&](auto &row ) {
+      row.fees = asset( 0, sym );
+   });
+   return quant;
+}
+void tyche_loan::notifyliq( const liqlog_t& liqlog ){
+   require_auth(get_self());
+   require_recipient(get_self());
+}
+
+} //namespace tychefi

@@ -14,6 +14,7 @@
 #include <map>
 #include <set>
 #include <type_traits>
+#include <price.oracle/price.oracle.states.hpp>
 
 namespace tychefi {
 
@@ -21,11 +22,6 @@ using namespace std;
 using namespace eosio;
 
 
-static constexpr uint16_t  PCT_BOOST         = 10000;
-static constexpr uint64_t  DAY_SECONDS       = 24 * 60 * 60;
-static constexpr uint64_t  YEAR_SECONDS      = 24 * 60 * 60 * 365;
-static constexpr uint64_t  YEAR_DAYS         = 365;
-static constexpr int128_t  HIGH_PRECISION    = 1'000'000'000'000'000'000; // 10^18
 
 static constexpr name       MUSDT_BANK       = "amax.mtoken"_n;
 static constexpr symbol     MUSDT            = symbol(symbol_code("MUSDT"), 6);
@@ -38,12 +34,10 @@ static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
 // static constexpr name       INTEREST         = "interest"_n ;
 // static constexpr name       REDPACK          = "redpack"_n ;
 
-
 #define HASH256(str) sha256(const_cast<char*>(str.c_str()), str.size())
 
 #define TBL struct [[eosio::table, eosio::contract("tyche.loan")]]
 #define NTBL(name) struct [[eosio::table(name), eosio::contract("tyche.loan")]]
-
 
 struct aplink_farm {
     name contract           = "aplink.farm"_n;
@@ -54,87 +48,56 @@ struct aplink_farm {
 NTBL("global") global_t {
     name                admin                   = "tyche.admin"_n;
     name                lp_refueler             = "tyche.admin"_n;                          //LP TRUSD系统充入账户
-    name                reward_contract         = "tyche.reward"_n;
+    name                price_oracle_contract   = "price.oracle"_n;
 
-    extended_symbol     principal_token         = extended_symbol(MUSDT,  MUSDT_BANK);      //代币MUSDT,用户存入的本金
-    extended_symbol     lp_token                = extended_symbol(TRUSD,  TRUSD_BANK);      //代币TRUSD
-    asset               min_deposit_amount      = asset(10'000000, MUSDT);                  //10 MU 
- 
-    uint64_t            tyche_farm_ratio        = 10;                                       //每100MUSDT 奖励0.1TYCHE
-    uint64_t            tyche_farm_lock_ratio   = 90;                                       //每100MUSDT 锁仓0.9TYCHE
-    uint64_t            tyche_reward_pool_code  = 5;
+    extended_symbol     loan_token             = extended_symbol(MUSDT,  MUSDT_BANK);       //代币TRUSD
+    asset               min_deposit_amount      = asset(10'000000, MUSDT);                  //10 MU
+    uint64_t            term_interval_days      = 365 * 2;                                  //30天
 
     aplink_farm         apl_farm;
+
+    uint64_t            liquidation_penalty_ratio   = 9000;             //清算惩罚率: 10% = 1000
+    uint64_t            liquidation_price_ratio     = 9700 ;            //清算价格 97%
+
+    asset               total_principal_quant;                         //总本金
+    asset               avl_principal_quant;                           //可用本金
     bool                enabled                 = true; 
 
-    EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(reward_contract)
-                                (principal_token)(lp_token)(min_deposit_amount)
-                                (tyche_farm_ratio)(tyche_farm_lock_ratio)(tyche_reward_pool_code)
-                                (apl_farm)(enabled) )
+    EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(price_oracle_contract)
+                                (loan_token)(min_deposit_amount)(term_interval_days)(apl_farm)
+                                (liquidation_penalty_ratio)(liquidation_price_ratio)
+                                (total_principal_quant)(avl_principal_quant)
+                                (enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
-//E.g. MUSDT, MBTC,HSTZ,MUSDT
-struct loan_pool_reward_st {                             
-    uint64_t        reward_id;                          //increase upon every reward distribution                                 
-    asset           total_rewards;                      //总奖励 = unalloted_rewards + unclaimed_rewards + claimed_rewards
-    asset           last_rewards;                       //上一次总奖励金额
-    asset           unalloted_rewards;                  //未分配的奖励(admin)
-    asset           unclaimed_rewards;                  //已分配未领取奖励(customer)
-    asset           claimed_rewards;                    //已领取奖励
-    int128_t        reward_per_share            = 0;    //每票已分配奖励
-    int128_t        last_reward_per_share       = 0;    //奖励发放delta
-    time_point_sec  reward_added_at;                    //最近奖励发放时间(admin)
-    time_point_sec  prev_reward_added_at;               //前一次奖励发放时间间隔
-};
-using loan_pool_reward_map = std::map<eosio::symbol, loan_pool_reward_st>;
+TBL interest_t {
+    time_point_sec      begin_at;
+    time_point_sec      ended_at;
+    uint64_t            interest_ratio;
+    uint64_t primary_key()const { return UINT64_MAX - (uint64_t)begin_at.utc_seconds; }
 
-//Scope: _self
-TBL loan_pool_t {
-    uint64_t                code;                                           //PK: 1,2,3,4,5
-    uint64_t                term_interval_sec       = DAY_SECONDS;          //入池锁仓时长秒: x 1, 30, 90, 180, 360 
-    uint64_t                share_multiplier        = 1;
+    typedef multi_index<"interests"_n, interest_t> tbl_t;
 
-    asset                   cum_principal           = asset(0, MUSDT);      //历史总存款金额（本金）
-    asset                   avl_principal           = asset(0, MUSDT);      //剩余存款金额（本金）
-    loan_pool_reward_st     interest_reward;                                //利息信息, E.g. 3% APY, triggered
-    loan_pool_reward_map    airdrop_rewards;                                //manually airdropped rewards, including MUSDT etc types
-    
-    bool                    on_shelf                = true;
-    time_point_sec          created_at;
-
-    loan_pool_t() {}
-    loan_pool_t(const uint64_t& c): code(c) {}
-    uint64_t primary_key()const { return code; }
-
-    typedef multi_index<"loanpools"_n, loan_pool_t> tbl_t;
-
-    EOSLIB_SERIALIZE( loan_pool_t,  (code)(term_interval_sec)(share_multiplier)
-                                    (cum_principal)(avl_principal)(interest_reward)(airdrop_rewards)
-                                    (on_shelf)(created_at) )
+    EOSLIB_SERIALIZE( interest_t, (begin_at)(ended_at)(interest_ratio) )
 };
 
-struct loaner_reward_st {
-    int128_t            last_reward_per_share       = 0;
-    asset               unclaimed_rewards;
-    asset               claimed_rewards;            //每个池子，每一个期间领取的奖励
-    asset               total_claimed_rewards;          
-};
 
-using loaner_reward_map = std::map<eosio::symbol/*symbol code*/, loaner_reward_st>;
-
-//Scope: code
+//Scope: symbol
 //Note: record will be deleted upon withdrawal/redemption
 TBL loaner_t {
     name                owner;                          //PK
-    asset               cum_principal;                  //总存款金额
-    asset               avl_principal;                  //当前存款金额
+    asset               cum_collateral_quant;           //总存款金额 ETH
+    asset               avl_collateral_quant;           //当前存款金额 ETH
+    asset               avl_principal;                  //当前存款金额 MUSDT
 
-    loaner_reward_st    interest_reward;                //利息信息
-    loaner_reward_map   airdrop_rewards;                //每票已分配奖励
-   
-    time_point_sec      term_started_at;                //利息周期开始时间一旦有钱充入进来，周期从当前时间开始
-    time_point_sec      term_ended_at;                  //利息周期结束时间
+    time_point_sec      term_started_at;                //入池时间
+    time_point_sec      term_settled_at;                //利息结算时间
+    time_point_sec      term_ended_at;                  //还款最后时间
+
+    asset               unpaid_interest;                //未支付利息
+    asset               paid_interest;                  //已支付利息
+
     time_point_sec      created_at;
 
     loaner_t() {}
@@ -144,29 +107,60 @@ TBL loaner_t {
 
     typedef multi_index<"loaners"_n, loaner_t> tbl_t;
 
-    EOSLIB_SERIALIZE( loaner_t,     (owner)(cum_principal)(avl_principal)
-                                    (interest_reward)(airdrop_rewards)
-                                    (term_started_at)(term_ended_at)(created_at) )
+    EOSLIB_SERIALIZE( loaner_t, (owner)(cum_collateral_quant)(avl_collateral_quant)(avl_principal)
+                                (term_started_at)(term_settled_at)(term_ended_at)
+                                (unpaid_interest)(paid_interest)(created_at) )
 };
 
 //Scope: _self
-TBL reward_symbol_t {
+TBL collateral_symbol_t {
     extended_symbol sym;                                    //PK, sym.code MUSDT,8@amax.mtoken
-    bool            on_shelf;
+    name        oracle_sym_name;                            //价格预言机
+    uint64_t    init_collateral_ratio       = 20000;        //初始抵押率 200%
+    uint64_t    liquidation_ratio           = 15000;        //抵押率: 150%
+    uint64_t    force_liquidate_ratio       = 12000;        //率: 120%
 
-    reward_symbol_t() {}
+    asset       max_principal;                              //最大可用本金 
+    asset       total_collateral_quant;                     //抵押物总量    
+    asset       avl_collateral_quant;                       //可用抵押物总量
+    asset       total_principal;                            //总本金
+    asset       avl_principal;                              //可用本金
+
+    asset       total_fore_collateral_quant;                 //强平抵押物总量
+    asset       total_fore_principal;                        //强平总本金
+    asset       avl_force_collateral_quant;                  //强平抵押物总量
+    asset       avl_force_principal;                         //强平需要总本金
+
+    bool        on_shelf;
+
+    collateral_symbol_t() {}
 
     uint64_t primary_key() const { return sym.get_symbol().code().raw(); }
 
-    typedef eosio::multi_index< "rewardsymbol"_n, reward_symbol_t > idx_t;
+    typedef eosio::multi_index< "collsyms"_n, collateral_symbol_t > idx_t;
 
-    EOSLIB_SERIALIZE( reward_symbol_t, (sym)(on_shelf) )
+    EOSLIB_SERIALIZE( collateral_symbol_t, (sym)(oracle_sym_name)(init_collateral_ratio)(liquidation_ratio)(force_liquidate_ratio)
+                                            (max_principal)(total_collateral_quant)(avl_collateral_quant)(total_principal)(avl_principal)
+                                            (total_fore_collateral_quant)(total_fore_principal)
+                                            (avl_force_collateral_quant)(avl_force_principal)(on_shelf) )
 };
 
+TBL fee_pool_t {
+    asset fees;      //PK
+
+    uint64_t primary_key() const { return fees.symbol.code().raw(); }
+
+    fee_pool_t() {}
+
+    EOSLIB_SERIALIZE(fee_pool_t, (fees))
+
+};
+
+typedef eosio::multi_index<"feepool"_n, fee_pool_t> feepool_tbl;
+inline static feepool_tbl make_fee_table( const name& self ) { return feepool_tbl(self, self.value); }
+
 TBL globalidx {
-    uint64_t        reward_id                   = 0;               // the auto-increament reward id
-    uint64_t        deposit_id                  = 0;               // 本金提取后再存入，id变化
-    uint64_t        interest_withdraw_id        = 0;               // the auto-increament id of deal item
+    uint64_t        liqlog_id                   = 0;               // the auto-increament reward id
 };
 typedef eosio::singleton< "globalidx"_n, globalidx > global_table;
 
@@ -197,15 +191,8 @@ struct global_state: public globalidx {
             return id;
         }
 
-        inline uint64_t new_reward_id() {
-            return new_auto_inc_id(reward_id);
-        }
-
-        inline uint64_t new_deposit_id() {
-            return new_auto_inc_id(deposit_id);
-        }
-        inline uint64_t new_interest_withdraw_id() {
-            return new_auto_inc_id(interest_withdraw_id);
+        inline uint64_t new_liqlog_id() {
+            return new_auto_inc_id(liqlog_id);
         }
         inline void change() {
             changed = true;
@@ -221,5 +208,20 @@ struct global_state: public globalidx {
     private:
         std::unique_ptr<global_table> _global_tbl;  
 };
+
+ struct liqlog_t {
+        uint64_t    id;                     //PK
+        name        liqtype;                //清算类型: liq: 清算 | forceliq:强平 
+        name        owner;
+        name        liqdater;
+        asset       paid_principal_quant;   //支付的金额
+        asset       collateral_quant;    
+        asset       principal_quant;        //本金
+        asset       price;
+        uint64_t    collateral_ratio;   
+        time_point  deal_time;
+        uint64_t primary_key() const    { return id; }
+ };
+
 
 } //namespace tychefi

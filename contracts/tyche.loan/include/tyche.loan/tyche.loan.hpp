@@ -38,7 +38,10 @@ enum class err: uint8_t {
    PLAN_INEFFECTIVE     = 17,
    STATUS_ERROR         = 18,
    INCORRECT_AMOUNT     = 19,
-   UNAVAILABLE_PURCHASE = 20
+   UNAVAILABLE_PURCHASE = 20,
+   RATE_EXCEEDED        = 21,
+   PARAMETER_INVALID    = 22,
+   SYSTEM_ERROR         = 200
 
 };
 
@@ -51,6 +54,7 @@ enum class err: uint8_t {
  *
  * Similarly, the `stats` multi-index table, holds instances of `currency_stats` objects for each row, which contains information about current supply, maximum supply, and the creator account for a symbol token. The `stats` table is scoped to the token symbol.  Therefore, when one queries the `stats` table for a token symbol the result is one single entry/row corresponding to the queried symbol token if it was previously created, or nothing, otherwise.
  */
+
 class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    public:
       using contract::contract;
@@ -69,54 +73,65 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    [[eosio::on_notify("*::transfer")]]
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
    
-   //inline action call by tyche.reward
-   ACTION refuelreward( const name& token_bank, const asset& total_rewards, const uint64_t& seconds, const uint64_t& pool_conf_code );
-   ACTION refuelintrst( const name& token_bank, const asset& total_rewards, const uint64_t& seconds );
-
-   //USER
-   ACTION claimrewards( const name& from );
-
-   ACTION claimreward( const name& from, const std::string& sym);
+   ACTION init(const name& admin, const name& lp_refueler, const name& price_oracle_contract, const bool& enabled);
    
+   ACTION onsubcallat( const name& from, const asset& quant );
+
+   ACTION getmoreusdt( const name& from, const symbol& callat_sym, const asset& quant );
+
+   ACTION forceliq( const name& from, const name& liqudater, const symbol& callat_sym );
+
+   ACTION addinteret(const uint64_t& interest_ratio);
+   
+   ACTION setcallatsym( const extended_symbol& sym, const name& oracle_sym_name );
+
    //admin
-   ACTION addrewardsym(const extended_symbol& sym);
-   ACTION setmindepamt(const asset& quant);
+   ACTION tgetprice( const symbol& collateral_sym );
+   ACTION tgetliqrate( const name& owner, const symbol& collateral_sym );
+   ACTION tgetinterest(const asset& principal, const time_point_sec& started_at, const time_point_sec& ended_at );
 
-   ACTION setpool(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier);
-   
-   ACTION init(const name& admin, const name& reward_contract, const name& lp_refueler, const bool& enabled);
-   
-   ACTION onshelfsym(const extended_symbol& sym, const bool& on_shelf);
-
-   ACTION setaplconf(const uint64_t& lease_id, const asset& unit_reward);
-
-   ACTION settychepct(const uint64_t& tyche_farm_ratio, const uint64_t& tyche_farm_lock_ratio);
+   ACTION notifyliq( const liqlog_t& liqlog );
+   using notifyliq_action   = action_wrapper<"notifyliq"_n,  &tyche_loan::notifyliq>;
 
    private:
-      void _apl_reward(const name& from, const asset& quant, const uint64_t& term_code);
-      bool _claim_pool_rewards(const name& from, const uint64_t& term_code, const bool& term_end_flag );
-      bool _claim_pool_rewards_by_symbol(const name& from, const uint64_t& term_code, const symbol& reward_symbol, const bool& term_end_flag );
 
-      void onredeem( const name& from, const uint64_t& term_code, const asset& quant );
+      //清算
+      void _liqudate( const name& from, const name& liqudater, const symbol& callat_sym, const asset& quant );
 
-      //初始化全局利息的配置
-      loan_pool_reward_st _init_interest_conf();
+      asset calc_collateral_quant( const asset& collateral_quant, const asset& paid_principal_quant, const name& oracle_sym_name );
 
-      loaner_reward_map _get_new_shared_loaner_reward_map(const loan_pool_reward_map& rewards);
-      loaner_reward_st   _get_new_shared_loaner_reward(const loan_pool_reward_st& pool_reward);
-      //更新奖励信息
-      asset _update_reward_info( loan_pool_reward_st& reward_conf, loaner_reward_st& loaner_reward, const asset& loaner_avl_principal, const bool& term_end_flag);
+      void _on_pay_musdt( const name& from, const symbol& collateral_sym, const asset& quant );
 
-      void ondeposit( const name& from, const uint64_t& term_code, const asset& quant );
+      void _on_add_callateral( const name& from, const name& token_bank, const asset& quant );
 
-      void refuelreward_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds);
-         
-      void refuelreward_to_pool( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code );
+      uint64_t get_callation_ratio(const asset& collateral_quant, const asset& principal, const name& oracle_sym_name);
+
+      uint64_t get_index_price( const name& base_code );
+
+      void _add_fee(const asset& quantity);
+
+      asset _sub_fee(const symbol& sym);
+
+      uint64_t _get_current_interest_ratio();
+      asset _get_dynamic_interest( const asset& quant, const time_point_sec& time_start, const time_point_sec& time_end);
+
+      const price_global_t& _price_conf();
+
+      asset _get_interest( const asset& principal, const uint64_t& interest_ratio, const time_point_sec& started_at, const time_point_sec& term_settled_at );
+
+      name _get_lower( const symbol& base_symbol) {
+         auto str = ( base_symbol.code().to_string() );
+         std::transform(str.begin(), str.end(),str.begin(), ::tolower);
+         return name(str);
+      }
 
       global_singleton     _global;
       global_t             _gstate;
       dbc                  _db;
       global_state::ptr_t   _global_state;
+
+      std::unique_ptr<price_global_t::idx_t>    _global_prices_tbl_ptr;
+      std::unique_ptr<price_global_t>     _global_prices_ptr;
 
 };
 } //namespace tychefi
