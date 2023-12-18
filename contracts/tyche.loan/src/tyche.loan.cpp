@@ -156,7 +156,7 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
 
    CHECKC(_gstate.avl_principal_quant >= quant, err::OVERSIZED, "principal not enough")
-   CHECKC(itr->avl_principal + quant >= itr->max_principal, err::OVERSIZED, "principal not enough")
+   CHECKC(itr->avl_principal + quant <= itr->max_principal, err::OVERSIZED, "symbol principal not enough")
 
    auto loaner = loaner_t::tbl_t(_self, _get_lower(callat_sym).value);
    auto loaner_itr = loaner.find(from.value);
@@ -568,6 +568,5 @@ void tyche_loan::notifyliq( const liqlog_t& liqlog ){
    require_auth(get_self());
    require_recipient(get_self());
 }
-
 
 } //namespace tychefi
