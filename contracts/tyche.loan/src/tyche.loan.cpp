@@ -156,6 +156,7 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
 
    CHECKC(_gstate.avl_principal_quant >= quant, err::OVERSIZED, "principal not enough")
+   CHECKC(itr->avl_principal + quant >= itr->max_principal, err::OVERSIZED, "principal not enough")
 
    auto loaner = loaner_t::tbl_t(_self, _get_lower(callat_sym).value);
    auto loaner_itr = loaner.find(from.value);
@@ -413,17 +414,18 @@ void tyche_loan::setcallatsym(const extended_symbol& sym, const name& oracle_sym
    auto itr = syms.find(sym.get_symbol().code().raw());
    if( itr == syms.end() ) {
       syms.emplace(_self, [&](auto& row){
-         row.sym = sym;
-         row.oracle_sym_name = oracle_sym_name;
-         row.on_shelf = true;
-         row.total_fore_collateral_quant = asset(0, sym.get_symbol());
-         row.total_fore_principal = asset(0, _gstate.loan_token.get_symbol());
-         row.avl_force_collateral_quant = asset(0, sym.get_symbol());
-         row.avl_force_principal = asset(0, _gstate.loan_token.get_symbol());
-         row.total_collateral_quant = asset(0, sym.get_symbol());
-         row.avl_collateral_quant = asset(0, sym.get_symbol());
-         row.total_principal = asset(0, _gstate.loan_token.get_symbol());
-         row.avl_principal = asset(0, _gstate.loan_token.get_symbol());
+         row.sym                          = sym;
+         row.oracle_sym_name              = oracle_sym_name;
+         row.on_shelf                     = true;
+         row.max_principal                =  asset(100000000000 , _gstate.loan_token.get_symbol());
+         row.total_fore_collateral_quant  = asset(0, sym.get_symbol());
+         row.total_fore_principal         = asset(0, _gstate.loan_token.get_symbol());
+         row.avl_force_collateral_quant   = asset(0, sym.get_symbol());
+         row.avl_force_principal          = asset(0, _gstate.loan_token.get_symbol());
+         row.total_collateral_quant       = asset(0, sym.get_symbol());
+         row.avl_collateral_quant         = asset(0, sym.get_symbol());
+         row.total_principal              = asset(0, _gstate.loan_token.get_symbol());
+         row.avl_principal                = asset(0, _gstate.loan_token.get_symbol());
       });
    } else {
       syms.modify(itr, _self, [&](auto& row){
