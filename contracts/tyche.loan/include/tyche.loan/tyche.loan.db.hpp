@@ -223,5 +223,4 @@ struct global_state: public globalidx {
         uint64_t primary_key() const    { return id; }
  };
 
-
 } //namespace tychefi
