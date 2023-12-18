@@ -45,4 +45,8 @@ tcli push action $loan tgetinterest '["100.000000 MUSDT", 800, "2023-12-14T06:41
 tcli push action $loan tgetinterest '["10000.000000 MUSDT", 800, "2033-12-11T06:44:06", "2023-12-14T06:45:06"]' -p $user1
 
 
+tcli push action $loan forceliq '["'$user1'", "'$user1'", "6,METH"]' -p $user1
+
+
+
 146/86400*8+30/86400*6
