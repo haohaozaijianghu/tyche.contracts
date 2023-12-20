@@ -34,6 +34,13 @@ static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
 // static constexpr name       INTEREST         = "interest"_n ;
 // static constexpr name       REDPACK          = "redpack"_n ;
 
+const static string     TYPE_SEND_BACK  = "sendback";       //归还
+const static string     TYPE_FORCECLOSE = "forceclose";     //强平
+const static string     TYPE_REDEEM     = "redeem";         //赎回
+const static string     TYPE_LIQUDATE   = "liqudate";       //清算
+const static string     TYPE_LEND       = "lend";           //借出
+const static string     TYPE_RUTURN_BACK= "returnback";     //归还清算人的U
+
 #define HASH256(str) sha256(const_cast<char*>(str.c_str()), str.size())
 
 #define TBL struct [[eosio::table, eosio::contract("tyche.loan")]]
@@ -126,8 +133,8 @@ TBL collateral_symbol_t {
     asset       total_principal;                            //总本金
     asset       avl_principal;                              //可用本金
 
-    asset       total_fore_collateral_quant;                 //强平抵押物总量
-    asset       total_fore_principal;                        //强平总本金
+    asset       total_force_collateral_quant;                 //强平抵押物总量
+    asset       total_force_principal;                        //强平总本金
     asset       avl_force_collateral_quant;                  //强平抵押物总量
     asset       avl_force_principal;                         //强平需要总本金
 
@@ -141,7 +148,7 @@ TBL collateral_symbol_t {
 
     EOSLIB_SERIALIZE( collateral_symbol_t, (sym)(oracle_sym_name)(init_collateral_ratio)(liquidation_ratio)(force_liquidate_ratio)
                                             (max_principal)(total_collateral_quant)(avl_collateral_quant)(total_principal)(avl_principal)
-                                            (total_fore_collateral_quant)(total_fore_principal)
+                                            (total_force_collateral_quant)(total_force_principal)
                                             (avl_force_collateral_quant)(avl_force_principal)(on_shelf) )
 };
 

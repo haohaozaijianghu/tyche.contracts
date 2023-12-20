@@ -131,7 +131,7 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
    if(principal_repay_quant > avl_principal) {
       //打USDT给用户
       auto  return_quant = principal_repay_quant - avl_principal;
-      TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, "tyche loan return principal" );
+      TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_LEND );
       //TODO
       avl_principal        = asset(0, avl_principal.symbol);
    } else {
@@ -169,7 +169,7 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    //TODO
    // CHECKC( ratio >= itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
    //打USDT给用户
-   TRANSFER( _gstate.loan_token.get_contract(), from, quant, "tyche loan" );
+   TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_LEND );
 
    //更新用户的MUSDT
    loaner.modify(loaner_itr, _self, [&](auto& row){
@@ -276,7 +276,7 @@ void tyche_loan::onsubcallat( const name& from, const asset& quant ) {
       row.avl_collateral_quant   -= quant;
    });
 
-   TRANSFER( sym_itr->sym.get_contract(), from, quant, "tyche loan callat redeem" );
+   TRANSFER( sym_itr->sym.get_contract(), from, quant,TYPE_REDEEM );
 }
 
 //计算抵押率
@@ -353,12 +353,12 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
 
       if( paid_quant <= quant) {
          auto return_quant = quant - paid_quant;
-         TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, "tyche loan return principal" );
+         TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_RUTURN_BACK );
       }
 
       auto return_collateral_quant = calc_collateral_quant(loaner_itr->avl_collateral_quant, paid_quant, itr->oracle_sym_name);
       //把抵押物转给协议平仓的人
-      TRANSFER( itr->sym.get_contract(), from, return_collateral_quant, "tyche loan return principal" );
+      TRANSFER( itr->sym.get_contract(), from, return_collateral_quant, TYPE_RUTURN_BACK);
       //平台内结算
       //添加平台金额
       auto platform_quant = paid_quant - need_settle_quant;
@@ -383,11 +383,11 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
       return;
    } else {
       if( quant.amount > 0 ){
-         TRANSFER( _gstate.loan_token.get_contract(), from, quant, "froce liqudate return principal" );
+         TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_RUTURN_BACK );
       }
       syms.modify(itr, _self, [&](auto& row){
-         row.total_fore_collateral_quant  += loaner_itr->avl_collateral_quant;
-         row.total_fore_principal         += loaner_itr->avl_principal;
+         row.total_force_collateral_quant  += loaner_itr->avl_collateral_quant;
+         row.total_force_principal         += loaner_itr->avl_principal;
          row.avl_force_collateral_quant   += loaner_itr->avl_collateral_quant;
          row.avl_force_principal          += loaner_itr->avl_principal;
       });
@@ -418,8 +418,8 @@ void tyche_loan::setcallatsym(const extended_symbol& sym, const name& oracle_sym
          row.oracle_sym_name              = oracle_sym_name;
          row.on_shelf                     = true;
          row.max_principal                =  asset(100000000000 , _gstate.loan_token.get_symbol());
-         row.total_fore_collateral_quant  = asset(0, sym.get_symbol());
-         row.total_fore_principal         = asset(0, _gstate.loan_token.get_symbol());
+         row.total_force_collateral_quant  = asset(0, sym.get_symbol());
+         row.total_force_principal         = asset(0, _gstate.loan_token.get_symbol());
          row.avl_force_collateral_quant   = asset(0, sym.get_symbol());
          row.avl_force_principal          = asset(0, _gstate.loan_token.get_symbol());
          row.total_collateral_quant       = asset(0, sym.get_symbol());
@@ -513,8 +513,8 @@ void tyche_loan::forceliq( const name& from, const name& liqudater, const symbol
    auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, need_settle_quant, itr->oracle_sym_name);
    CHECKC( ratio <= itr->force_liquidate_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
    syms.modify(itr, _self, [&](auto& row){
-      row.total_fore_collateral_quant += loaner_itr->avl_collateral_quant;
-      row.total_fore_principal        += loaner_itr->avl_principal;
+      row.total_force_collateral_quant += loaner_itr->avl_collateral_quant;
+      row.total_force_principal        += loaner_itr->avl_principal;
       row.avl_force_collateral_quant += loaner_itr->avl_collateral_quant;
       row.avl_force_principal        += loaner_itr->avl_principal;
    });
