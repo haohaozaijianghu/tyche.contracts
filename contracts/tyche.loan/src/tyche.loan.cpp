@@ -373,7 +373,7 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
       //结算用户质押物
       NOTIFY_TRANSFER_ACTION(liqudater, _self, paid_principal, TYPE_FORCECLOSE);
       //通知转账消息用户MUSDT -> 平台
-      NOTIFY_TRANSFER_ACTION(liqudater, _self, need_settle_quant, TYPE_FORCECLOSE); 
+      NOTIFY_TRANSFER_ACTION(liqudater, _self, need_settle_quant, TYPE_FORCECLOSE + ":" + TYPE_SEND_BACK); 
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_collateral_quant   -= return_collateral_quant;              //减少抵押物
          row.avl_principal          -= paid_principal; 
@@ -404,7 +404,7 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
          //通知转账消息用户METH -> 平台
       NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE);
       //通知转账消息用户MUSDT -> 平台
-      NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE); 
+      NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE+ ":" + TYPE_SEND_BACK); 
       //直接没收抵押物
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
@@ -538,7 +538,7 @@ void tyche_loan::forceliq( const name& from, const name& liqudater, const symbol
    //通知转账消息用户METH -> 平台
    NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE);
    //通知转账消息用户MUSDT -> 平台
-   NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE); 
+   NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE+ ":" + TYPE_SEND_BACK); 
    //直接没收抵押物
    loaner.modify(loaner_itr, _self, [&](auto& row){
       row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
