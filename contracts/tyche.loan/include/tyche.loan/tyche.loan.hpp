@@ -92,6 +92,9 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
 
    ACTION notifyliq( const liqlog_t& liqlog );
    using notifyliq_action   = action_wrapper<"notifyliq"_n,  &tyche_loan::notifyliq>;
+   ACTION notifytran(const name& from, const name& to, const asset& quants, const string& memo);
+   using notifytranfer_action   = action_wrapper<"notifytran"_n,  &tyche_loan::notifytran>;
+
 
    private:
 

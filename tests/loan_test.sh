@@ -5,6 +5,7 @@ or=oracle3
 user1=josstest
 user2=josstest2
 tnew $loan
+tnew $loan
 tset $loan tyche.loan
 tcli set account permission $loan active --add-code
 
