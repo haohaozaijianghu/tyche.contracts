@@ -100,11 +100,11 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
          return;
       }
       auto parts  = split( memo, ":" );
-      if (parts[0] == "repay" ) {
+      if (parts[0] == TYPE_SEND_BACK ) {
          CHECKC( parts.size() == 2, err::PARAMETER_INVALID, "memo format error" );
          auto sym = symbol_from_string(parts[1]);
          _on_pay_musdt(from, sym, quant);
-      } else if( parts[0] == "liqudate" ) {
+      } else if( parts[0] == TYPE_LIQUDATE ) {
          CHECKC( parts.size() == 3, err::PARAMETER_INVALID, "memo format error" );
          auto sym = symbol_from_string(parts[2]);
          _liqudate(from, name(parts[1]), sym, quant);
