@@ -280,7 +280,7 @@ void tyche_loan::onsubcallat( const name& from, const asset& quant ) {
       row.avl_collateral_quant   -= quant;
    });
 
-   TRANSFER( sym_itr->sym.get_contract(), from, quant,TYPE_REDEEM );
+   TRANSFER( sym_itr->sym.get_contract(), from, quant,TYPE_REDEEM + ":" + quant.symbol.code().to_string());
 }
 
 //计算抵押率
@@ -371,9 +371,9 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
       _add_fee(platform_quant);
       // CHECKC(false, err::RATE_EXCEEDED, "test callation ratio: "  + to_string(ratio) + "return_collateral_quant: " + return_collateral_quant.to_string() + " paid_principal:" + paid_principal.to_string());
       //结算用户质押物
-      NOTIFY_TRANSFER_ACTION(liqudater, _self, paid_principal, TYPE_FORCECLOSE);
+      NOTIFY_TRANSFER_ACTION(liqudater, _self, paid_principal, TYPE_LIQUDATE +":" + itr->sym.get_symbol().code().to_string());
       //通知转账消息用户MUSDT -> 平台
-      NOTIFY_TRANSFER_ACTION(liqudater, _self, need_settle_quant, TYPE_FORCECLOSE + ":" + TYPE_SEND_BACK); 
+      NOTIFY_TRANSFER_ACTION(liqudater, _self, need_settle_quant, TYPE_LIQUDATE + ":"+ itr->sym.get_symbol().code().to_string() + ":" + TYPE_SEND_BACK); 
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_collateral_quant   -= return_collateral_quant;              //减少抵押物
          row.avl_principal          -= paid_principal; 
@@ -402,9 +402,9 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
          need_settle_quant, loaner_itr->avl_collateral_quant,loaner_itr->avl_principal, current_price,
          ratio, eosio::current_time_point()};
          //通知转账消息用户METH -> 平台
-      NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE);
+      NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE + ":" +itr->sym.get_symbol().code().to_string());
       //通知转账消息用户MUSDT -> 平台
-      NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE+ ":" + TYPE_SEND_BACK); 
+      NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE+ ":" + itr->sym.get_symbol().code().to_string()+ ":" + TYPE_SEND_BACK); 
       //直接没收抵押物
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
@@ -536,9 +536,9 @@ void tyche_loan::forceliq( const name& from, const name& liqudater, const symbol
 
    NOTIFY_LIQ_ACTION(liqlog);
    //通知转账消息用户METH -> 平台
-   NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE);
+   NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE + ":" + itr->sym.get_symbol().code().to_string());
    //通知转账消息用户MUSDT -> 平台
-   NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE+ ":" + TYPE_SEND_BACK); 
+   NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE + ":" + itr->sym.get_symbol().code().to_string() + ":" + TYPE_SEND_BACK); 
    //直接没收抵押物
    loaner.modify(loaner_itr, _self, [&](auto& row){
       row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物

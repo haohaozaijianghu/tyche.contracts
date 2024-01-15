@@ -20,7 +20,7 @@ tcli push action $loan setcallatsym '[["8,MBTC", "amax.mtoken"], "btc"]' -p $adm
 tcli push action $loan setcallatsym '[["8,AMAX", "amax.token"], "amax"]' -p $admin
 tcli get table $loan $loan collsyms
 
-tcli push action amax.mtoken transfer '{"from": "ad", "to": "'$loan'", "quantity": "10000.000000 MUSDT", "memo": "deposit"}' -p ad
+tcli push action amax.mtoken transfer '{"from": "ad", "to": "'$loan'", "quantity": "20000.000000 MUSDT", "memo": "deposit"}' -p ad
 
 
 # tcli push action amax.mtoken transfer '{"from": "ad", "to": "'$user1'", "quantity": "10.00000000 METH", "memo": "deposit"}' -p ad
