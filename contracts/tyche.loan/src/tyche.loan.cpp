@@ -141,6 +141,13 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
    } else {
       avl_principal         -= principal_repay_quant;
    }
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto collateral_itr = syms.find(collateral_sym.code().raw());
+   CHECKC(collateral_itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
+   syms.modify(collateral_itr, _self, [&](auto& row){
+      row.avl_principal   -= avl_principal;
+   });
+
 
    loaners.modify(itr, _self, [&](auto& row){
       row.avl_principal          = avl_principal;
