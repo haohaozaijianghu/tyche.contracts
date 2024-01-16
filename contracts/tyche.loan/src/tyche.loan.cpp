@@ -82,7 +82,7 @@ void tyche_loan::init(const name& admin, const name& lp_refueler, const name& pr
  * @param quantity
  * @param memo: two formats:
  *       1) musdt: "repay:6,ETH"  //降低抵押率，获得更多的MUSDT
- *                 "liqudate:name:6,ETH"  //降低抵押率，获得更多的MUSDT
+ *                 "liquidate:name:6,ETH"  //降低抵押率，获得更多的MUSDT
  *       2) meth:
  */
 void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant, const string& memo) {
@@ -107,7 +107,7 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
       } else if( parts[0] == TYPE_LIQUDATE ) {
          CHECKC( parts.size() == 3, err::PARAMETER_INVALID, "memo format error" );
          auto sym = symbol_from_string(parts[2]);
-         _liqudate(from, name(parts[1]), sym, quant);
+         _liquidate(from, name(parts[1]), sym, quant);
       } else {
          //CHECKC( false, err::PARAMETER_INVALID, "memo format error" );
       }
@@ -339,14 +339,14 @@ const price_global_t& tyche_loan::_price_conf() {
  * @brief 1. 用户打入MUSDT，获得抵押物
  *           更具当前价格, 如果抵押率< 150%, 则按当前eth 价格87%的价格售卖,平台得到10%的利润,用户得到3%价格差奖励
 */
-void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbol& callat_sym, const asset& quant ){
+void tyche_loan::_liquidate( const name& from, const name& liquidater, const symbol& callat_sym, const asset& quant ){
    CHECKC(quant.amount >= 0, err::INCORRECT_AMOUNT, "amount must positive")
    auto syms = collateral_symbol_t::idx_t(_self, _self.value);
    auto itr = syms.find(callat_sym.code().raw());
    CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
 
    auto loaner = loaner_t::tbl_t(_self, _get_lower(callat_sym).value);
-   auto loaner_itr = loaner.find(liqudater.value);
+   auto loaner_itr = loaner.find(liquidater.value);
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 
    asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->term_settled_at, eosio::current_time_point());
@@ -383,9 +383,9 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
       _add_fee(platform_quant);
       // CHECKC(false, err::RATE_EXCEEDED, "test callation ratio: "  + to_string(ratio) + "return_collateral_quant: " + return_collateral_quant.to_string() + " paid_principal:" + paid_principal.to_string());
       //结算用户质押物
-      NOTIFY_TRANSFER_ACTION(liqudater, _self, paid_principal, TYPE_LIQUDATE +":" + itr->sym.get_symbol().code().to_string());
+      NOTIFY_TRANSFER_ACTION(liquidater, _self, paid_principal, TYPE_LIQUDATE +":" + itr->sym.get_symbol().code().to_string());
       //通知转账消息用户MUSDT -> 平台
-      NOTIFY_TRANSFER_ACTION(liqudater, _self, need_settle_quant, TYPE_LIQUDATE + ":"+ itr->sym.get_symbol().code().to_string() + ":" + TYPE_SEND_BACK); 
+      NOTIFY_TRANSFER_ACTION(liquidater, _self, need_settle_quant, TYPE_LIQUDATE + ":"+ itr->sym.get_symbol().code().to_string() + ":" + TYPE_SEND_BACK); 
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_collateral_quant   -= return_collateral_quant;              //减少抵押物
          row.avl_principal          -= paid_principal; 
@@ -394,7 +394,7 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
          row.term_settled_at        = eosio::current_time_point();
       });
 
-      liqlog_t liqlog = {_global_state->new_liqlog_id(), "liq"_n, liqudater, from,
+      liqlog_t liqlog = {_global_state->new_liqlog_id(), "liq"_n, liquidater, from,
                   need_settle_quant, return_collateral_quant,  paid_principal, current_price,
                   ratio, eosio::current_time_point()};
       NOTIFY_LIQ_ACTION(liqlog);
@@ -410,13 +410,13 @@ void tyche_loan::_liqudate( const name& from, const name& liqudater, const symbo
          row.avl_force_principal          += loaner_itr->avl_principal;
       });
 
-      liqlog_t liqlog = {_global_state->new_liqlog_id(), "forceliq"_n, liqudater, from,
+      liqlog_t liqlog = {_global_state->new_liqlog_id(), "forceliq"_n, liquidater, from,
          need_settle_quant, loaner_itr->avl_collateral_quant,loaner_itr->avl_principal, current_price,
          ratio, eosio::current_time_point()};
          //通知转账消息用户METH -> 平台
-      NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE + ":" +itr->sym.get_symbol().code().to_string());
+      NOTIFY_TRANSFER_ACTION(liquidater, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE + ":" +itr->sym.get_symbol().code().to_string());
       //通知转账消息用户MUSDT -> 平台
-      NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE+ ":" + itr->sym.get_symbol().code().to_string()+ ":" + TYPE_SEND_BACK); 
+      NOTIFY_TRANSFER_ACTION(liquidater, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE+ ":" + itr->sym.get_symbol().code().to_string()+ ":" + TYPE_SEND_BACK); 
       //直接没收抵押物
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
@@ -518,14 +518,14 @@ asset tyche_loan::_get_interest(const asset& quant, const uint64_t& interest_rat
 }
 
 
-void tyche_loan::forceliq( const name& from, const name& liqudater, const symbol& callat_sym ){
+void tyche_loan::forceliq( const name& from, const name& liquidater, const symbol& callat_sym ){
    require_auth(from);
    auto syms = collateral_symbol_t::idx_t(_self, _self.value);
    auto itr = syms.find(callat_sym.code().raw());
    CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
 
    auto loaner = loaner_t::tbl_t(_self, _get_lower(callat_sym).value);
-   auto loaner_itr = loaner.find(liqudater.value);
+   auto loaner_itr = loaner.find(liquidater.value);
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 
    asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->term_settled_at,eosio::current_time_point() );
@@ -542,15 +542,15 @@ void tyche_loan::forceliq( const name& from, const name& liqudater, const symbol
    auto price           = get_index_price( itr->oracle_sym_name );
    auto current_price   = asset( price, itr->avl_principal.symbol );
 
-   liqlog_t liqlog = {_global_state->new_liqlog_id(), "forceliq"_n, liqudater, from,
+   liqlog_t liqlog = {_global_state->new_liqlog_id(), "forceliq"_n, liquidater, from,
                need_settle_quant, loaner_itr->avl_collateral_quant,  loaner_itr->avl_principal, current_price,
                ratio, eosio::current_time_point()};
 
    NOTIFY_LIQ_ACTION(liqlog);
    //通知转账消息用户METH -> 平台
-   NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE + ":" + itr->sym.get_symbol().code().to_string());
+   NOTIFY_TRANSFER_ACTION(liquidater, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE + ":" + itr->sym.get_symbol().code().to_string());
    //通知转账消息用户MUSDT -> 平台
-   NOTIFY_TRANSFER_ACTION(liqudater, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE + ":" + itr->sym.get_symbol().code().to_string() + ":" + TYPE_SEND_BACK); 
+   NOTIFY_TRANSFER_ACTION(liquidater, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE + ":" + itr->sym.get_symbol().code().to_string() + ":" + TYPE_SEND_BACK); 
    //直接没收抵押物
    loaner.modify(loaner_itr, _self, [&](auto& row){
       row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物

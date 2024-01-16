@@ -37,7 +37,7 @@ static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
 const static string     TYPE_SEND_BACK  = "sendback";       //归还
 const static string     TYPE_FORCECLOSE = "forceclose";     //强平
 const static string     TYPE_REDEEM     = "redeem";         //赎回
-const static string     TYPE_LIQUDATE   = "liqudate";       //清算
+const static string     TYPE_LIQUDATE   = "liquidate";       //清算
 const static string     TYPE_LEND       = "lend";           //借出
 const static string     TYPE_RUTURN_BACK= "returnback";     //归还清算人的U
 
