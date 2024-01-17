@@ -79,7 +79,7 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
 
    ACTION getmoreusdt( const name& from, const symbol& callat_sym, const asset& quant );
 
-   ACTION forceliq( const name& from, const name& liquidater, const symbol& callat_sym );
+   ACTION forceliq( const name& from, const name& liquidator, const symbol& callat_sym );
 
    ACTION addinteret(const uint64_t& interest_ratio);
    
@@ -99,9 +99,9 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    private:
 
       //清算
-      void _liquidate( const name& from, const name& liquidater, const symbol& callat_sym, const asset& quant );
+      void _liquidate( const name& from, const name& liquidator, const symbol& callat_sym, const asset& quant );
 
-      asset calc_collateral_quant( const asset& collateral_quant, const asset& paid_principal_quant, const name& oracle_sym_name );
+      asset calc_collateral_quant( const asset& collateral_quant, const asset& paid_principal_quant, const name& oracle_sym_name, asset& settle_price);
 
       void _on_pay_musdt( const name& from, const symbol& collateral_sym, const asset& quant );
 

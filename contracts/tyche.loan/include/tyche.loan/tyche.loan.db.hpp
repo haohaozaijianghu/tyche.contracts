@@ -34,10 +34,11 @@ static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
 // static constexpr name       INTEREST         = "interest"_n ;
 // static constexpr name       REDPACK          = "redpack"_n ;
 
+const static string     DEPOSIT         = "deposit";        //用户发起
 const static string     TYPE_SEND_BACK  = "sendback";       //归还
 const static string     TYPE_FORCECLOSE = "forceclose";     //强平
 const static string     TYPE_REDEEM     = "redeem";         //赎回
-const static string     TYPE_LIQUDATE   = "liquidate";       //清算
+const static string     TYPE_LIQUIDATE  = "liquidate";      //清算
 const static string     TYPE_LEND       = "lend";           //借出
 const static string     TYPE_RUTURN_BACK= "returnback";     //归还清算人的U
 
@@ -220,13 +221,18 @@ struct global_state: public globalidx {
         uint64_t    id;                     //PK
         name        liqtype;                //清算类型: liq: 清算 | forceliq:强平 
         name        owner;
-        name        liqdater;
-        asset       paid_principal_quant;   //支付的金额
-        asset       collateral_quant;    
+        name        liquidator;
+        asset       collateral_quant;       //抵押物总额
+        asset       paid_collateral_quant;  //支付抵押物的个数
         asset       principal_quant;        //本金
-        asset       price;
+        asset       paid_principal_quant;   //支付的金额
+        asset       price;                  //结算的当时价格
+        asset       settle_price;           //结算价格
+        asset       interest;               //支付的利息
+        asset       platform_fee;           //手续费-罚金
         uint64_t    collateral_ratio;   
         time_point  deal_time;
+
         uint64_t primary_key() const    { return id; }
  };
 
