@@ -141,6 +141,12 @@ static symbol symbol_from_string(string_view from)
     return symbol(name_part, p);
 }
 
+static string symbol_to_string(symbol sym)
+{
+    return to_string(sym.precision()) + "," + sym.code().to_string();
+}
+
+
 asset asset_from_string(string_view from)
 {
     string_view s = trim(from);

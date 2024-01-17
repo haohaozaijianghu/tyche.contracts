@@ -141,7 +141,7 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
    if(principal_repay_quant > avl_principal) {
       //打USDT给用户
       auto  return_quant = principal_repay_quant - avl_principal;
-      TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_LEND + ":"+ collateral_itr->sym.get_symbol().code().to_string() );
+      TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_LEND + ":"+ symbol_to_string(collateral_itr->sym.get_symbol()) );
       //TODO
       avl_principal        = asset(0, avl_principal.symbol);
    } else {
@@ -184,7 +184,7 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    //TODO
    // CHECKC( ratio >= itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
    //打USDT给用户
-   TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_LEND + ":" + itr->sym.get_symbol().code().to_string() );
+   TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_LEND + ":" + symbol_to_string(itr->sym.get_symbol()));
 
    //更新用户的MUSDT
    loaner.modify(loaner_itr, _self, [&](auto& row){
@@ -291,7 +291,7 @@ void tyche_loan::onsubcallat( const name& from, const asset& quant ) {
       row.avl_collateral_quant   -= quant;
    });
 
-   TRANSFER( sym_itr->sym.get_contract(), from, quant,TYPE_REDEEM + ":" + sym_itr->sym.get_symbol().code().to_string());
+   TRANSFER( sym_itr->sym.get_contract(), from, quant,TYPE_REDEEM + ":" + symbol_to_string(sym_itr->sym.get_symbol()));
 }
 
 //计算抵押率
@@ -311,8 +311,8 @@ asset tyche_loan::calc_collateral_quant( const asset& collateral_quant, const as
    CHECKC( collateral_quant.amount > 0, err::INCORRECT_AMOUNT, "collateral_quant must positive" )
    CHECKC( paid_principal_quant.amount > 0, err::INCORRECT_AMOUNT, "principal_quant must positive" )
 
-   auto price                 = get_index_price( oracle_sym_name );
-   settle_price          = calc_quant( asset( price, paid_principal_quant.symbol ), _gstate.liquidation_price_ratio );
+   auto price              = get_index_price( oracle_sym_name );
+   settle_price            = calc_quant( asset( price, paid_principal_quant.symbol ), _gstate.liquidation_price_ratio );
    auto paid_collateral_quant = calc_base_quant( paid_principal_quant, settle_price, collateral_quant.symbol );
    CHECKC(collateral_quant >= paid_collateral_quant, err::INCORRECT_AMOUNT, "paid_principal_quant must less than paid_collateral_quant" )
    return paid_collateral_quant;
@@ -361,37 +361,39 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
    asset need_settle_quant = loaner_itr->avl_principal + need_pay_interest;
    auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, need_settle_quant, itr->oracle_sym_name);
    CHECKC( ratio <= itr->liquidation_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
-   
+
 
    auto price           = get_index_price( itr->oracle_sym_name );
    auto current_price   = asset( price, quant.symbol );
+   asset liquidator_pay_usdt_quant = quant;
 
    if(ratio <= itr->liquidation_ratio && ratio >= itr->force_liquidate_ratio) {
       CHECKC( need_pay_interest <= quant, err::OVERSIZED, "must pay more than interest");
-
-      auto paid_amount = divide_decimal(need_settle_quant.amount, _gstate.liquidation_penalty_ratio, PCT_BOOST );
-      auto paid_quant = asset(paid_amount, need_settle_quant.symbol);
-
-      if( paid_quant <= quant) {
-         auto return_quant = quant - paid_quant;
-         TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_RUTURN_BACK + ":" + itr->sym.get_symbol().code().to_string() );
+      //计算最多可以支付多少USDT
+      auto max_paid_amount = divide_decimal(need_settle_quant.amount, _gstate.liquidation_penalty_ratio, PCT_BOOST );
+      auto max_paid_quant = asset(max_paid_amount, need_settle_quant.symbol);
+      if( max_paid_quant <= quant) {
+         auto return_quant = quant - max_paid_quant;
+         TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_RUTURN_BACK + ":" + symbol_to_string(itr->sym.get_symbol()) );
+         liquidator_pay_usdt_quant = max_paid_quant;
       }
 
-      auto return_collateral_quant = calc_collateral_quant(loaner_itr->avl_collateral_quant, paid_quant, itr->oracle_sym_name, settle_price);
+      //按当前价格的97% 结算给用户 
+      auto return_collateral_quant = calc_collateral_quant(loaner_itr->avl_collateral_quant, liquidator_pay_usdt_quant, itr->oracle_sym_name, settle_price);
       //把抵押物转给协议平仓的人
-      TRANSFER( itr->sym.get_contract(), from, return_collateral_quant, TYPE_RUTURN_BACK + ":" + itr->sym.get_symbol().code().to_string());
+      TRANSFER( itr->sym.get_contract(), from, return_collateral_quant, TYPE_BUY + ":" + symbol_to_string(itr->sym.get_symbol()));
       //平台内结算
       //添加平台金额
-      auto platform_quant = paid_quant - need_settle_quant;
-      auto paid_principal = need_settle_quant - need_pay_interest;
+      auto platform_quant_amount = multiply_decimal64(liquidator_pay_usdt_quant.amount, _gstate.liquidation_penalty_ratio, PCT_BOOST );
+      auto platform_quant =  asset(platform_quant_amount, liquidator_pay_usdt_quant.symbol);
+      auto paid_principal = liquidator_pay_usdt_quant - platform_quant - need_pay_interest;
       CHECKC( paid_principal.amount > 0, err::INCORRECT_AMOUNT, "paid_principal must positive" )
       CHECKC( paid_principal <= loaner_itr->avl_principal, err::INCORRECT_AMOUNT, "principal need < avl_principal" )
       _add_fee(platform_quant);
-      // CHECKC(false, err::RATE_EXCEEDED, "test callation ratio: "  + to_string(ratio) + "return_collateral_quant: " + return_collateral_quant.to_string() + " paid_principal:" + paid_principal.to_string());
       //结算用户质押物
-      NOTIFY_TRANSFER_ACTION(liquidator, _self, paid_principal, TYPE_LIQUIDATE +":" + itr->sym.get_symbol().code().to_string());
+      NOTIFY_TRANSFER_ACTION(liquidator, _self, paid_principal, TYPE_LIQUIDATE +":" + symbol_to_string(itr->sym.get_symbol()));
       //通知转账消息用户MUSDT -> 平台
-      NOTIFY_TRANSFER_ACTION(liquidator, _self, need_settle_quant, TYPE_LIQUIDATE + ":"+ itr->sym.get_symbol().code().to_string() + ":" + TYPE_SEND_BACK); 
+      NOTIFY_TRANSFER_ACTION(liquidator, _self, need_settle_quant, TYPE_LIQUIDATE + ":"+ symbol_to_string(itr->sym.get_symbol()) + ":" + TYPE_SEND_BACK); 
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_collateral_quant   -= return_collateral_quant;              //减少抵押物
          row.avl_principal          -= paid_principal; 
@@ -416,7 +418,7 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
       return;
    } else {
       if( quant.amount > 0 ){
-         TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_RUTURN_BACK + ":"+ itr->sym.get_symbol().code().to_string() );
+         TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_RUTURN_BACK + ":"+ symbol_to_string(itr->sym.get_symbol()) );
       }
       syms.modify(itr, _self, [&](auto& row){
          row.total_force_collateral_quant  += loaner_itr->avl_collateral_quant;
@@ -435,9 +437,9 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
          need_pay_interest, asset(0, quant.symbol),
          ratio, eosio::current_time_point()};
          //通知转账消息用户METH -> 平台
-      NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE + ":" +itr->sym.get_symbol().code().to_string());
+      NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE + ":" + symbol_to_string(itr->sym.get_symbol()));
       //通知转账消息用户MUSDT -> 平台
-      NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE+ ":" + itr->sym.get_symbol().code().to_string()+ ":" + TYPE_SEND_BACK); 
+      NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE+ ":" + symbol_to_string(itr->sym.get_symbol())+ ":" + TYPE_SEND_BACK); 
       //直接没收抵押物
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
@@ -577,9 +579,9 @@ void tyche_loan::forceliq( const name& from, const name& liquidator, const symbo
       ratio, eosio::current_time_point()};
    NOTIFY_LIQ_ACTION(liqlog);
    //通知转账消息用户METH -> 平台
-   NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE + ":" + itr->sym.get_symbol().code().to_string());
+   NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE + ":" + symbol_to_string(itr->sym.get_symbol()));
    //通知转账消息用户MUSDT -> 平台
-   NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE + ":" + itr->sym.get_symbol().code().to_string() + ":" + TYPE_SEND_BACK); 
+   NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE + ":" + symbol_to_string(itr->sym.get_symbol()) + ":" + TYPE_SEND_BACK); 
    //直接没收抵押物
    loaner.modify(loaner_itr, _self, [&](auto& row){
       row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
