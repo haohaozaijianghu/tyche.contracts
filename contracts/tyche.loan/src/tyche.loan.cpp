@@ -384,7 +384,7 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
       TRANSFER( itr->sym.get_contract(), from, return_collateral_quant, TYPE_BUY + ":" + symbol_to_string(itr->sym.get_symbol()));
       //平台内结算
       //添加平台金额
-      auto platform_quant_amount = multiply_decimal64(liquidator_pay_usdt_quant.amount, _gstate.liquidation_penalty_ratio, PCT_BOOST );
+      auto platform_quant_amount = multiply_decimal64(liquidator_pay_usdt_quant.amount, (PCT_BOOST - _gstate.liquidation_penalty_ratio), PCT_BOOST );
       auto platform_quant =  asset(platform_quant_amount, liquidator_pay_usdt_quant.symbol);
       auto paid_principal = liquidator_pay_usdt_quant - platform_quant - need_pay_interest;
       CHECKC( paid_principal.amount > 0, err::INCORRECT_AMOUNT, "paid_principal must positive" )
@@ -496,6 +496,11 @@ void tyche_loan::addinteret(const uint64_t& interest_ratio) {
       row.ended_at         = eosio::current_time_point() + eosio::days(365*10);
    });
 
+}
+
+void tyche_loan::setliqpratio(const uint64_t& liquidation_price_ratio){
+   require_auth(_gstate.admin);
+   _gstate.liquidation_price_ratio =  liquidation_price_ratio;
 }
 
 uint64_t tyche_loan::_get_current_interest_ratio() {
