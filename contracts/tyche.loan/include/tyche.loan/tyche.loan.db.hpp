@@ -59,7 +59,7 @@ NTBL("global") global_t {
     name                lp_refueler             = "tyche.admin"_n;                          //LP TRUSD系统充入账户
     name                price_oracle_contract   = "price.oracle"_n;
 
-    extended_symbol     loan_token             = extended_symbol(MUSDT,  MUSDT_BANK);       //代币TRUSD
+    extended_symbol     loan_token              = extended_symbol(MUSDT,  MUSDT_BANK);       //代币TRUSD
     asset               min_deposit_amount      = asset(10'000000, MUSDT);                  //10 MU
     uint64_t            term_interval_days      = 365 * 2;                                  //30天
 
