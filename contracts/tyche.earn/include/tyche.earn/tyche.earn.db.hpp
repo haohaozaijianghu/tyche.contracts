@@ -74,6 +74,14 @@ NTBL("global") global_t {
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
+NTBL("globalloan_t") globalloan_t {
+    name      tyche_proxy_contract     = "tyche.proxy"_n;
+    asset     loan_amount              = asset(0, MUSDT);
+
+    EOSLIB_SERIALIZE( globalloan_t, (tyche_proxy_contract)(loan_amount))
+};
+typedef eosio::singleton< "globalloan"_n, globalloan_t > globalloan_singleton;
+
 //E.g. MUSDT, MBTC,HSTZ,MUSDT
 struct earn_pool_reward_st {                             
     uint64_t        reward_id;                          //increase upon every reward distribution                                 

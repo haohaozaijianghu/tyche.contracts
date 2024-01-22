@@ -57,9 +57,11 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
 
    tyche_earn(eosio::name receiver, eosio::name code, datastream<const char*> ds): contract(receiver, code, ds),
         _global(get_self(), get_self().value), _db(_self),
+        _globalloan(get_self(), get_self().value),
         _global_state(global_state::make_global(get_self()))
     {
       _gstate = _global.exists() ? _global.get() : global_t{};
+      _gloan = _globalloan.exists()? _globalloan.get() : globalloan_t{};
     }
 
     ~tyche_earn() { _global.set( _gstate, get_self() );
@@ -115,10 +117,13 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
          
       void refuelreward_to_pool( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code );
 
-      global_singleton     _global;
-      global_t             _gstate;
-      dbc                  _db;
-      global_state::ptr_t   _global_state;
+      global_singleton           _global;
+      global_t                   _gstate;
+      globalloan_singleton       _globalloan;
+      globalloan_t               _gloan;
+
+      dbc                        _db;
+      global_state::ptr_t        _global_state;
 
 };
 } //namespace tychefi

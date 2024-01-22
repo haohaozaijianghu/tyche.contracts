@@ -73,12 +73,13 @@ NTBL("global") global_t {
 
     asset               total_principal_quant;                         //总本金
     asset               avl_principal_quant;                           //可用本金
+    asset               total_interest_quant;                          //总利息
     bool                enabled                 = true; 
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(price_oracle_contract)
                                 (loan_token)(min_deposit_amount)(term_interval_days)(apl_farm)
                                 (liquidation_penalty_ratio)(liquidation_price_ratio)
-                                (total_principal_quant)(avl_principal_quant)
+                                (total_principal_quant)(avl_principal_quant)(total_interest_quant)
                                 (enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;

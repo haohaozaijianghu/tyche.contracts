@@ -273,6 +273,13 @@ void tyche_stake::withdraw(const name& earner){
    _check_point(earner, old_locked, _locked);
 }
 
+
+void tyche_stake::sendtoloan(const asset& quant) {
+   require_auth( _self );
+
+}
+
+
 void tyche_stake::balance(const name & earner) {
    auto now = current_time_point().sec_since_epoch();
 
