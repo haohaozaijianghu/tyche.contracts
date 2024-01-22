@@ -74,7 +74,7 @@ NTBL("global") global_t {
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
-NTBL("globalloan_t") globalloan_t {
+NTBL("globalloan") globalloan_t {
     name      tyche_proxy_contract      = "tyche.proxy"_n;
     asset     loan_quant                = asset(0, MUSDT);
 

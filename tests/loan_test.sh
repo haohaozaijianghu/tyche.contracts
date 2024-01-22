@@ -9,14 +9,17 @@ tnew $loan
 tset $loan tyche.loan
 tcli set account permission $loan active --add-code
 
-
 proxy=proxy1
 tnew $proxy
 tset $proxy tyche.proxy
 tcli set account permission $proxy active --add-code
 
 
-tcli push action $loan init '["'$admin'", "'$proxy'","'$or'", true]' -p $loan
+earn=tyche.s312
+tset $earn tyche.earn
+tcli push action $earn init '["'$proxy'"]' -p $earn
+
+tcli push action $loan init '["'$admin'", "'$lp'","'$or'", "'$proxy'",true]' -p $loan
 tcli get table $loan $loan global
 
 tcli push action $loan addinteret '[800]' -p $admin

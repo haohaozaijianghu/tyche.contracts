@@ -286,10 +286,12 @@ void tyche_loan::onsubcallat( const name& from, const asset& quant ) {
    auto syms = collateral_symbol_t::idx_t(_self, _self.value);
    auto sym_itr = syms.find(quant.symbol.code().raw());
    CHECKC(sym_itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
-   auto ratio = get_callation_ratio(remain_collateral_quant, itr->avl_principal, sym_itr->oracle_sym_name );
-
-   CHECKC( ratio >= sym_itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
-
+    auto ratio = 10000;
+   if( itr->avl_principal.amount > 0) {
+      ratio = get_callation_ratio(remain_collateral_quant, itr->avl_principal, sym_itr->oracle_sym_name );
+      CHECKC( ratio >= sym_itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
+   }
+   
    loaners.modify(itr, _self, [&](auto& row){
       row.avl_collateral_quant = remain_collateral_quant;
    });
@@ -368,7 +370,6 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
    asset need_settle_quant = loaner_itr->avl_principal + need_pay_interest;
    auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, need_settle_quant, itr->oracle_sym_name);
    CHECKC( ratio <= itr->liquidation_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
-
 
    auto price           = get_index_price( itr->oracle_sym_name );
    auto current_price   = asset( price, quant.symbol );
