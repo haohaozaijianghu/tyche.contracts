@@ -34,18 +34,18 @@ static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
 // static constexpr name       INTEREST         = "interest"_n ;
 // static constexpr name       REDPACK          = "redpack"_n ;
 
-const static string     DEPOSIT                         = "deposit";        //用户发起
-const static string     TYPE_SEND_BACK                  = "sendback";       //归还
-const static string     TYPE_SEND_BACK_INTERNAL_LIQ     = "sendbacki_liq";       //归还
-const static string     TYPE_SEND_BACK_INTERNAL_CLOSE   = "sendbacki_close";       //归还
-const static string     TYPE_FORCECLOSE_INTRENAL        = "forceclosei";     //强平
-const static string     TYPE_REDEEM                     = "redeem";         //赎回
-const static string     TYPE_LIQUIDATE                  = "liquidate";      //清算
-const static string     TYPE_LIQUIDATE_INTERNAL         = "liquidatei";     //清算
-const static string     TYPE_LEND                       = "lend";           //借出
+const static string     DEPOSIT                         = "deposit";            //用户发起
+const static string     TYPE_SEND_BACK                  = "sendback";           //归还
+const static string     TYPE_SEND_BACK_INTERNAL_LIQ     = "sendbacki_liq";      //归还
+const static string     TYPE_SEND_BACK_INTERNAL_CLOSE   = "sendbacki_close";    //归还
+const static string     TYPE_FORCECLOSE_INTRENAL        = "forceclosei";        //强平
+const static string     TYPE_REDEEM                     = "redeem";             //赎回
+const static string     TYPE_LIQUIDATE                  = "liquidate";          //清算
+const static string     TYPE_LIQUIDATE_INTERNAL         = "liquidatei";         //清算
+const static string     TYPE_LEND                       = "lend";               //借出
 const static string     TYPE_GIVE_CHANGE                = "givechange";         //找零
-const static string     TYPE_RUTURN_BACK                = "returnback";     //归还清算人的U
-const static string     TYPE_BUY                        = "liqbuy";     //归还清算人的U
+const static string     TYPE_RUTURN_BACK                = "returnback";         //归还清算人的U
+const static string     TYPE_BUY                        = "liqbuy";             //归还清算人的U
 
 #define HASH256(str) sha256(const_cast<char*>(str.c_str()), str.size())
 
@@ -74,13 +74,15 @@ NTBL("global") global_t {
 
     asset               total_principal_quant;                         //总本金
     asset               avl_principal_quant;                           //可用本金
+    name                tyche_proxy_contract;                          //tyche.proxy
     asset               total_interest_quant;                          //总利息
     bool                enabled                 = true; 
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(price_oracle_contract)
                                 (loan_token)(min_deposit_amount)(term_interval_days)(apl_farm)
                                 (liquidation_penalty_ratio)(liquidation_price_ratio)
-                                (total_principal_quant)(avl_principal_quant)(total_interest_quant)
+                                (total_principal_quant)(avl_principal_quant)
+                                (tyche_proxy_contract)(total_interest_quant)
                                 (enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
@@ -140,10 +142,10 @@ TBL collateral_symbol_t {
     asset       total_principal;                            //总本金
     asset       avl_principal;                              //可用本金
 
-    asset       total_force_collateral_quant;                 //强平抵押物总量
-    asset       total_force_principal;                        //强平总本金
-    asset       avl_force_collateral_quant;                  //强平抵押物总量
-    asset       avl_force_principal;                         //强平需要总本金
+    asset       total_force_collateral_quant;               //强平抵押物总量
+    asset       total_force_principal;                      //强平总本金
+    asset       avl_force_collateral_quant;                 //强平抵押物总量
+    asset       avl_force_principal;                        //强平需要总本金
 
     bool        on_shelf;
 

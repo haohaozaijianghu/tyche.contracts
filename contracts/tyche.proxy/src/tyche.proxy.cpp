@@ -20,10 +20,12 @@ using namespace wasm::safemath;
 #define CHECKC(exp, code, msg) \
    { if (!(exp)) eosio::check(false, string("[[") + to_string((int)code) + string("]] ") + msg); }
 
-void tyche_proxy::init(const name& tyche_loan_contract, const name& tyche_stake_contract, const bool& enabled) {
+void tyche_proxy::init(const name& tyche_loan_contract,
+             const name& tyche_earn_contract) {
    require_auth( _self );
    _gstate.tyche_loan_contract         = tyche_loan_contract;
-   _gstate.tyche_stake_contract        = tyche_stake_contract;
+   _gstate.tyche_earn_contract        = tyche_earn_contract;
+   _gstate.enabled                     =true;
 }
 
 /**
@@ -50,11 +52,10 @@ void tyche_proxy::ontransfer(const name& from, const name& to, const asset& quan
    if(from == _gstate.tyche_loan_contract) {
       CHECKC(quant < _gstate.loan_quant, err::NOT_POSITIVE, "must transfer positive quantity")
       _gstate.loan_quant += quant;
-      TRANSFER(token_bank, _gstate.tyche_stake_contract, quant, "tyche_stake add" );
-
+      TRANSFER(token_bank, _gstate.tyche_earn_contract, quant, "tyche_stake add" );
    }
    
-   if(from == _gstate.tyche_stake_contract) {
+   if(from == _gstate.tyche_earn_contract) {
       _gstate.loan_quant += quant;
       TRANSFER(token_bank, _gstate.tyche_loan_contract, quant, "tyche_proxy add" );
    }

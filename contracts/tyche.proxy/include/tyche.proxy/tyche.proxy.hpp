@@ -74,7 +74,7 @@ class [[eosio::contract("tyche.proxy")]] tyche_proxy : public contract {
    [[eosio::on_notify("*::transfer")]]
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
    
-   ACTION init(const name& tyche_loan_contract, const name& tyche_stake_contract, const bool& enabled);
+   ACTION init(const name& tyche_loan_contract, const name& tyche_earn_contract);
 
    private:
       global_singleton     _global;

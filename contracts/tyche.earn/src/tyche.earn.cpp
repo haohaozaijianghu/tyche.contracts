@@ -731,4 +731,20 @@ void tyche_earn::setaplconf( const uint64_t& lease_id, const asset& unit_reward 
    _gstate.apl_farm.unit_reward  = unit_reward;
 }
 
+void tyche_earn::sendtoloan( const asset& quant ){
+   require_auth( _self );
+   CHECKC( quant.amount > 0, err::NOT_POSITIVE, "must transfer positive quantity" );
+   CHECKC( quant.symbol == _gstate.principal_token.get_symbol(), err::SYMBOL_MISMATCH, "invalid symbol" );
+   _gloan.loan_quant += quant;
+   TRANSFER( _gstate.principal_token.get_contract(), _gloan.tyche_proxy_contract, quant, "tyche_loan add" );
+}
+void tyche_earn::initloaninfo(const name& tyche_proxy_contract ){
+   require_auth( _self );
+   _gloan.tyche_proxy_contract   = tyche_proxy_contract;
+    _gloan.loan_quant            = asset(0, _gstate.principal_token.get_symbol());
+}
+
+
+
+
 }

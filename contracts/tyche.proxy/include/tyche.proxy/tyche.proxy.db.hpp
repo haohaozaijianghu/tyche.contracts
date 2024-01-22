@@ -29,13 +29,13 @@ static constexpr uint64_t  YEAR_SECONDS      = 24 * 60 * 60 * 365;
 
 NTBL("global") global_t {
     name        tyche_loan_contract     = "tyche.proxy"_n;                          //LP TRUSD系统充入账户
-    name        tyche_stake_contract    = "tyche.stake"_n;
+    name        tyche_earn_contract    = "tyche.stake"_n;
 
     name        token_bank              = "amax.mtoken"_n;
     asset       loan_quant              = asset(0, symbol("MUSDT", 6));
     bool        enabled                 = true; 
 
-    EOSLIB_SERIALIZE( global_t, (tyche_loan_contract)(tyche_stake_contract)
+    EOSLIB_SERIALIZE( global_t, (tyche_loan_contract)(tyche_earn_contract)
                                 (token_bank)(loan_quant)(enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;

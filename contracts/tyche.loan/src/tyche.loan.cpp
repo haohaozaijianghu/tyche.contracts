@@ -64,7 +64,10 @@ inline static asset calc_sharer_rewards(const asset& loaner_shares, const int128
    return asset( (int64_t)rewards, rewards_symbol );
 }
 
-void tyche_loan::init(const name& admin, const name& lp_refueler, const name& price_oracle_contract, const bool& enabled) {
+void tyche_loan::init(const name& admin, const name& lp_refueler,
+                     const name& price_oracle_contract,
+                     const name& tyche_proxy_contract,
+                     const bool& enabled) {
    require_auth( _self );
    _gstate.admin                    = admin;
    _gstate.lp_refueler              = lp_refueler;
@@ -72,7 +75,11 @@ void tyche_loan::init(const name& admin, const name& lp_refueler, const name& pr
    _gstate.price_oracle_contract    = price_oracle_contract;
    _gstate.total_principal_quant    = asset(0, _gstate.loan_token.get_symbol());
    _gstate.avl_principal_quant      = asset(0, _gstate.loan_token.get_symbol());
+   _gstate.total_interest_quant     = asset(0, _gstate.loan_token.get_symbol());
+   _gstate.tyche_proxy_contract     =tyche_proxy_contract;
 }
+
+
 
 /**
  * @brief send nasset tokens into nftone marketplace
@@ -94,7 +101,7 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
 
    //MUSDT
    if( quant.symbol == _gstate.loan_token.get_symbol() && token_bank == _gstate.loan_token.get_contract() ) { 
-      if( from == _gstate.lp_refueler ){
+      if( from == _gstate.lp_refueler || from == _gstate.tyche_proxy_contract ){
          _gstate.total_principal_quant += quant;
          _gstate.avl_principal_quant   += quant;
          return;
@@ -130,7 +137,6 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
    auto collateral_itr = syms.find(collateral_sym.code().raw());
    CHECKC(collateral_itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
 
-
    //结算利息
    auto total_unpaid_interest = _get_dynamic_interest(itr->avl_principal, itr->term_settled_at, eosio::current_time_point());
 
@@ -141,7 +147,7 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
    if(principal_repay_quant > avl_principal) {
       //打USDT给用户
       auto  return_quant = principal_repay_quant - avl_principal;
-      TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_RUTURN_BACK + ":"+ symbol_to_string(collateral_itr->sym.get_symbol()) );
+      TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_GIVE_CHANGE + ":"+ symbol_to_string(collateral_itr->sym.get_symbol()) );
       //TODO
       avl_principal        = asset(0, avl_principal.symbol);
    } else {
@@ -160,6 +166,7 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
       row.term_settled_at        = eosio::current_time_point();
       row.term_ended_at          = eosio::current_time_point() + eosio::days(_gstate.term_interval_days);
    });
+   _gstate.total_interest_quant += total_unpaid_interest;
 }
 
 //external: 获得更多的MUSDT
@@ -184,7 +191,7 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    //TODO
    // CHECKC( ratio >= itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
    //打USDT给用户
-   TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_GIVE_CHANGE + ":" + symbol_to_string(itr->sym.get_symbol()));
+   TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_LEND + ":" + symbol_to_string(itr->sym.get_symbol()));
 
    //更新用户的MUSDT
    loaner.modify(loaner_itr, _self, [&](auto& row){
@@ -403,6 +410,8 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
          row.term_settled_at        = eosio::current_time_point();
       });
 
+      _gstate.total_interest_quant += need_pay_interest;
+
       name        liqtype                    = "liq"_n;                //清算类型: liq: 清算 | forceliq:强平 
       name        owner                      = from;
       asset       paid_collateral_quant      = return_collateral_quant;  //支付抵押物的个数
@@ -419,7 +428,7 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
       return;
    } else {
       if( quant.amount > 0 ){
-         TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_RUTURN_BACK + ":"+ symbol_to_string(itr->sym.get_symbol()) );
+         TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_GIVE_CHANGE + ":"+ symbol_to_string(itr->sym.get_symbol()) );
       }
       syms.modify(itr, _self, [&](auto& row){
          row.total_force_collateral_quant  += loaner_itr->avl_collateral_quant;
@@ -450,6 +459,8 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
          row.term_settled_at        = eosio::current_time_point();
       });
       NOTIFY_LIQ_ACTION(liqlog);
+      _gstate.total_interest_quant += need_pay_interest;
+
    }
 }
 
@@ -596,20 +607,21 @@ void tyche_loan::forceliq( const name& from, const name& liquidator, const symbo
       row.paid_interest          += need_pay_interest;
       row.term_settled_at        = eosio::current_time_point();
    });
+   _gstate.total_interest_quant += need_pay_interest;
 }
 
 void tyche_loan::_add_fee(const asset& quantity) {
-    auto fees           = make_fee_table( get_self() );
-    auto it             = fees.find( quantity.symbol.code().raw() );
-    if (it != fees.end()) {
-        fees.modify(*it, _self, [&](auto &row) {
-            row.fees += quantity;
-        });
-    } else {
-        fees.emplace(_self, [&]( auto& row ) {
-            row.fees = quantity;
-        });
-    }
+   auto fees           = make_fee_table( get_self() );
+   auto it             = fees.find( quantity.symbol.code().raw() );
+   if (it != fees.end()) {
+      fees.modify(*it, _self, [&](auto &row) {
+         row.fees += quantity;
+      });
+   } else {
+      fees.emplace(_self, [&]( auto& row ) {
+         row.fees = quantity;
+      });
+   }
 }
 
 asset tyche_loan::_sub_fee(const symbol& sym) {
@@ -633,6 +645,5 @@ void tyche_loan::notifytran(const name& from, const name& to, const asset& quant
    require_auth(get_self());
    require_recipient(get_self());
 }
-
 
 } //namespace tychefi

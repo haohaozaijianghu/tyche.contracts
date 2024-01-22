@@ -1,21 +1,30 @@
-loan=tyche.l21
+loan=tyche.l23
 admin=ad
 lp=ad
 or=oracle3
 user1=josstest
 user2=josstest2
+
 tnew $loan
 tset $loan tyche.loan
 tcli set account permission $loan active --add-code
 
-tcli push action $loan init '["'$admin'", "'$lp'","'$or'", true]' -p $loan
+
+proxy=proxy1
+tnew $proxy
+tset $proxy tyche.proxy
+tcli set account permission $proxy active --add-code
+
+
+tcli push action $loan init '["'$admin'", "'$proxy'","'$or'", true]' -p $loan
 tcli get table $loan $loan global
 
 tcli push action $loan addinteret '[800]' -p $admin
 
+tcli push action $loan initinterest '[]' -p $loan
 
-tcli push action $loan setcallatsym '[["8,METH", "amax.mtoken"], "eth"]' -p $admin
 tcli push action $loan setcallatsym '[["8,MBTC", "amax.mtoken"], "btc"]' -p $admin
+tcli push action $loan setcallatsym '[["8,METH", "amax.mtoken"], "eth"]' -p $admin
 tcli push action $loan setcallatsym '[["8,AMAX", "amax.token"], "amax"]' -p $admin
 tcli get table $loan $loan collsyms
 
@@ -61,4 +70,4 @@ tcli push action $loan forceliq '["'$user1'", "'$user1'", "6,METH"]' -p $user1
 
 
 
-tcli push action amax.mtoken transfer '{"from": "terry", "to": "'$loan'", "quantity": "3.040000 MUSDT", "memo": "sendback:6,METH"}' -p terry
+tcli push action amax.mtoken transfer '{"from": "terry", "to": "'$loan'", "quantity": "3.040000 MUSDT", "memo": "sendback:8,AMAX"}' -p terry

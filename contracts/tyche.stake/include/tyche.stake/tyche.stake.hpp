@@ -72,9 +72,6 @@ class [[eosio::contract("tyche.stake")]] tyche_stake : public contract {
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
    
    ACTION withdraw(const name& earner);
-
-   ACTION sendtoloan(const asset& quant);
-
    ACTION balance(const name & earner);
    ACTION balanceof(const name & earner, const uint64_t& ts);
    ACTION createlock(const name& earner, const asset& quant, const uint64_t& _unlock_time);

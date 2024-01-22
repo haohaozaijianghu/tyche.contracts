@@ -75,10 +75,10 @@ NTBL("global") global_t {
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
 NTBL("globalloan_t") globalloan_t {
-    name      tyche_proxy_contract     = "tyche.proxy"_n;
-    asset     loan_amount              = asset(0, MUSDT);
+    name      tyche_proxy_contract      = "tyche.proxy"_n;
+    asset     loan_quant                = asset(0, MUSDT);
 
-    EOSLIB_SERIALIZE( globalloan_t, (tyche_proxy_contract)(loan_amount))
+    EOSLIB_SERIALIZE( globalloan_t, (tyche_proxy_contract)(loan_quant))
 };
 typedef eosio::singleton< "globalloan"_n, globalloan_t > globalloan_singleton;
 

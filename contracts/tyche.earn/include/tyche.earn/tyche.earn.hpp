@@ -89,12 +89,15 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
    ACTION updateexpiry(const uint64_t& code, const name& owner);
    
    ACTION init(const name& admin, const name& reward_contract, const name& lp_refueler, const bool& enabled);
+   ACTION initloaninfo(const name& tyche_proxy_contract);
    
    ACTION onshelfsym(const extended_symbol& sym, const bool& on_shelf);
 
    ACTION setaplconf(const uint64_t& lease_id, const asset& unit_reward);
 
    ACTION settychepct(const uint64_t& tyche_farm_ratio, const uint64_t& tyche_farm_lock_ratio);
+
+   ACTION sendtoloan(const asset& quant);
 
    private:
       void _apl_reward(const name& from, const asset& quant, const uint64_t& term_code);

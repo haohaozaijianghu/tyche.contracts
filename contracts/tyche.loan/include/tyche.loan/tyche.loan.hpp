@@ -72,18 +72,21 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
 
    [[eosio::on_notify("*::transfer")]]
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
-   
-   ACTION init(const name& admin, const name& lp_refueler, const name& price_oracle_contract, const bool& enabled);
-   
+   //user
    ACTION onsubcallat( const name& from, const asset& quant );
 
    ACTION getmoreusdt( const name& from, const symbol& callat_sym, const asset& quant );
 
    ACTION forceliq( const name& from, const name& liquidator, const symbol& callat_sym );
 
+   //admin
+   ACTION init(const name& admin, const name& lp_refueler, 
+               const name& price_oracle_contract,
+               const name& tyche_proxy_contract,
+               const bool& enabled);
+               
    ACTION addinteret(const uint64_t& interest_ratio);
    ACTION setliqpratio(const uint64_t& liquidation_price_ratio);
-   
    ACTION setcallatsym( const extended_symbol& sym, const name& oracle_sym_name );
 
    //admin
@@ -95,7 +98,6 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    using notifyliq_action   = action_wrapper<"notifyliq"_n,  &tyche_loan::notifyliq>;
    ACTION notifytran(const name& from, const name& to, const asset& quants, const string& memo);
    using notifytranfer_action   = action_wrapper<"notifytran"_n,  &tyche_loan::notifytran>;
-
 
    private:
 
