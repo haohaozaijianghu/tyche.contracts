@@ -104,10 +104,10 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
          CHECKC( parts.size() == 2, err::PARAMETER_INVALID, "memo format error" );
          auto sym = symbol_from_string(parts[1]);
          _on_pay_musdt(from, sym, quant);
-      } else if( parts[0] == TYPE_LIQUIDATE ) {
+      } else if( parts[0] == TYPE_BUY ) {
          CHECKC( parts.size() == 3, err::PARAMETER_INVALID, "memo format error" );
-         auto sym = symbol_from_string(parts[2]);
-         _liquidate(from, name(parts[1]), sym, quant);
+         auto sym = symbol_from_string(parts[1]);
+         _liquidate(from, name(parts[2]), sym, quant);
       } else {
          //CHECKC( false, err::PARAMETER_INVALID, "memo format error" );
       }
@@ -385,15 +385,16 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
       //平台内结算
       //添加平台金额
       auto platform_quant_amount = multiply_decimal64(liquidator_pay_usdt_quant.amount, (PCT_BOOST - _gstate.liquidation_penalty_ratio), PCT_BOOST );
-      auto platform_quant =  asset(platform_quant_amount, liquidator_pay_usdt_quant.symbol);
+      auto platform_quant = asset(platform_quant_amount, liquidator_pay_usdt_quant.symbol);
       auto paid_principal = liquidator_pay_usdt_quant - platform_quant - need_pay_interest;
       CHECKC( paid_principal.amount > 0, err::INCORRECT_AMOUNT, "paid_principal must positive" )
       CHECKC( paid_principal <= loaner_itr->avl_principal, err::INCORRECT_AMOUNT, "principal need < avl_principal" )
       _add_fee(platform_quant);
       //结算用户质押物
-      NOTIFY_TRANSFER_ACTION(liquidator, _self, paid_principal, TYPE_LIQUIDATE +":" + symbol_to_string(itr->sym.get_symbol()));
+      NOTIFY_TRANSFER_ACTION(liquidator, _self, paid_principal, TYPE_LIQUIDATE_INTERNAL  +":" + symbol_to_string(itr->sym.get_symbol()) );
+
       //通知转账消息用户MUSDT -> 平台
-      NOTIFY_TRANSFER_ACTION(liquidator, _self, need_settle_quant, TYPE_LIQUIDATE + ":"+ symbol_to_string(itr->sym.get_symbol()) + ":" + TYPE_SEND_BACK); 
+      NOTIFY_TRANSFER_ACTION(liquidator, _self, return_collateral_quant, TYPE_LIQUIDATE_INTERNAL + ":"+ symbol_to_string(itr->sym.get_symbol())); 
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_collateral_quant   -= return_collateral_quant;              //减少抵押物
          row.avl_principal          -= paid_principal; 
@@ -586,7 +587,7 @@ void tyche_loan::forceliq( const name& from, const name& liquidator, const symbo
    //通知转账消息用户METH -> 平台
    NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE + ":" + symbol_to_string(itr->sym.get_symbol()));
    //通知转账消息用户MUSDT -> 平台
-   NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE + ":" + symbol_to_string(itr->sym.get_symbol()) + ":" + TYPE_SEND_BACK); 
+   NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE + ":" + symbol_to_string(itr->sym.get_symbol())); 
    //直接没收抵押物
    loaner.modify(loaner_itr, _self, [&](auto& row){
       row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
