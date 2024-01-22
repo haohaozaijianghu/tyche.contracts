@@ -58,3 +58,7 @@ tcli push action $loan forceliq '["'$user1'", "'$user1'", "6,METH"]' -p $user1
 
 
 146/86400*8+30/86400*6
+
+
+
+tcli push action amax.mtoken transfer '{"from": "terry", "to": "'$loan'", "quantity": "3.040000 MUSDT", "memo": "sendback:6,METH"}' -p terry
