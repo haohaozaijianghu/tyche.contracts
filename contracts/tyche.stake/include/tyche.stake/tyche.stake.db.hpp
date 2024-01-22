@@ -95,14 +95,6 @@ NTBL("global") global_t {
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
 
-NTBL("globalloan_t") global_loan_t {
-    name      tyche_proxy_contract     = "tyche.proxy"_n;
-    asset     loan_amount              = asset(0, MUSDT);
-
-    EOSLIB_SERIALIZE( global_loan_t, (tyche_proxy_contract)(loan_amount))
-};
-typedef eosio::singleton< "globalloan"_n, global_loan_t > globalloan_singleton;
-
 //scope: _self
 TBL earn_stake_locked {
     name                owner;                          //用户  PK

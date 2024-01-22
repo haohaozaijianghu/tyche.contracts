@@ -141,7 +141,7 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
    if(principal_repay_quant > avl_principal) {
       //打USDT给用户
       auto  return_quant = principal_repay_quant - avl_principal;
-      TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_LEND + ":"+ symbol_to_string(collateral_itr->sym.get_symbol()) );
+      TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_RUTURN_BACK + ":"+ symbol_to_string(collateral_itr->sym.get_symbol()) );
       //TODO
       avl_principal        = asset(0, avl_principal.symbol);
    } else {
@@ -184,7 +184,7 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    //TODO
    // CHECKC( ratio >= itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
    //打USDT给用户
-   TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_LEND + ":" + symbol_to_string(itr->sym.get_symbol()));
+   TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_GIVE_CHANGE + ":" + symbol_to_string(itr->sym.get_symbol()));
 
    //更新用户的MUSDT
    loaner.modify(loaner_itr, _self, [&](auto& row){
@@ -374,7 +374,7 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
       auto max_paid_quant = asset(max_paid_amount, need_settle_quant.symbol);
       if( max_paid_quant <= quant) {
          auto return_quant = quant - max_paid_quant;
-         TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_RUTURN_BACK + ":" + symbol_to_string(itr->sym.get_symbol()) );
+         TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_GIVE_CHANGE + ":" + symbol_to_string(itr->sym.get_symbol()) );
          liquidator_pay_usdt_quant = max_paid_quant;
       }
 

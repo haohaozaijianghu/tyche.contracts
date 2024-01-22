@@ -98,6 +98,8 @@ class [[eosio::contract("tyche.stake")]] tyche_stake : public contract {
       }
       global_singleton     _global;
       global_t             _gstate;
+
+
       dbc                  _db;
       global_state::ptr_t   _global_state;
 

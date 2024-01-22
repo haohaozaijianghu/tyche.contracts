@@ -276,6 +276,7 @@ void tyche_stake::withdraw(const name& earner){
 
 void tyche_stake::sendtoloan(const asset& quant) {
    require_auth( _self );
+   CHECKC(quant.symbol == _gstate.principal_token.get_symbol(), err::SYMBOL_MISMATCH, "symbol mismatch");
 
 }
 
