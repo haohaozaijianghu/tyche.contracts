@@ -391,7 +391,7 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
       CHECKC( paid_principal <= loaner_itr->avl_principal, err::INCORRECT_AMOUNT, "principal need < avl_principal" )
       _add_fee(platform_quant);
       //结算用户质押物
-      NOTIFY_TRANSFER_ACTION(liquidator, _self, paid_principal, TYPE_LIQUIDATE_INTERNAL  +":" + symbol_to_string(itr->sym.get_symbol()) );
+      NOTIFY_TRANSFER_ACTION(liquidator, _self, paid_principal, TYPE_SEND_BACK_INTERNAL  +":" + symbol_to_string(itr->sym.get_symbol()) );
 
       //通知转账消息用户MUSDT -> 平台
       NOTIFY_TRANSFER_ACTION(liquidator, _self, return_collateral_quant, TYPE_LIQUIDATE_INTERNAL + ":"+ symbol_to_string(itr->sym.get_symbol())); 
@@ -438,9 +438,9 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
          need_pay_interest, asset(0, quant.symbol),
          ratio, eosio::current_time_point()};
          //通知转账消息用户METH -> 平台
-      NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE + ":" + symbol_to_string(itr->sym.get_symbol()));
+      NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE_INTRENAL + ":" + symbol_to_string(itr->sym.get_symbol()));
       //通知转账消息用户MUSDT -> 平台
-      NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE+ ":" + symbol_to_string(itr->sym.get_symbol())+ ":" + TYPE_SEND_BACK); 
+      NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_principal, TYPE_SEND_BACK_INTERNAL+ ":" + symbol_to_string(itr->sym.get_symbol())+ ":" + TYPE_SEND_BACK); 
       //直接没收抵押物
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
@@ -585,9 +585,9 @@ void tyche_loan::forceliq( const name& from, const name& liquidator, const symbo
       ratio, eosio::current_time_point()};
    NOTIFY_LIQ_ACTION(liqlog);
    //通知转账消息用户METH -> 平台
-   NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE + ":" + symbol_to_string(itr->sym.get_symbol()));
+   NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE_INTRENAL + ":" + symbol_to_string(itr->sym.get_symbol()));
    //通知转账消息用户MUSDT -> 平台
-   NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_principal, TYPE_FORCECLOSE + ":" + symbol_to_string(itr->sym.get_symbol())); 
+   NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_principal, TYPE_SEND_BACK_INTERNAL + ":" + symbol_to_string(itr->sym.get_symbol())); 
    //直接没收抵押物
    loaner.modify(loaner_itr, _self, [&](auto& row){
       row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
