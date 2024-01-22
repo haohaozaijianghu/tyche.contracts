@@ -1,4 +1,4 @@
-loan=tyche.l15
+loan=tyche.l21
 admin=ad
 lp=ad
 or=oracle3
@@ -31,8 +31,6 @@ tcli push action $loan addinteret '[600]' -p $admin
 
 
 tcli push action $loan onsubcallat '[ "'$user1'","0.10000000 METH"]' -p $user1
-
-
 
 tcli push action $loan getmoreusdt '[ "'$user1'", "6,METH", "1000.000000 MUSDT"]' -p $user1
 tcli push action $loan tgetprice '[ "6,METH"]' -p $user1
