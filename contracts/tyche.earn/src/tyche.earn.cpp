@@ -83,10 +83,6 @@ void tyche_earn::ontransfer(const name& from, const name& to, const asset& quant
       CHECKC( _gstate.lp_token.get_contract() == token_bank, err::CONTRACT_MISMATCH, "LP token contract mismatches" )
       if(from == _gstate.lp_refueler) //充入TRUSD到合约
          return;
-      if(from == _gloan.tyche_proxy_contract) {
-         _gloan.loan_quant -= quant;
-         return;
-      }
 
       vector<string_view> params = split(memo, ":");
       CHECKC( params.size() == 2 && params[0] == "redeem", err::MEMO_FORMAT_ERROR, "redeem memo format error" )
@@ -94,6 +90,12 @@ void tyche_earn::ontransfer(const name& from, const name& to, const asset& quant
       //用户提取奖励和本金
       auto term_code = (uint64_t) stoi(string(params[1]));
       onredeem(from, term_code, quant );
+      return;
+   }
+
+   if(from == _gloan.tyche_proxy_contract && quant.symbol == _gstate.principal_token.get_symbol() && token_bank == _gstate.principal_token.get_contract() ) {
+      CHECKC(quant <= _gloan.loan_quant, err::NOT_POSITIVE, "transfer quantity must less than loan_quant: "+  _gloan.loan_quant.to_string() );
+      _gloan.loan_quant -= quant;
       return;
    }
 
@@ -108,7 +110,7 @@ void tyche_earn::ontransfer(const name& from, const name& to, const asset& quant
    if(quant.symbol == TYCHE && token_bank == TYCHE_BANK && from == _gstate.lp_refueler) {
       return;
    }
-   CHECKC(false, err::PARAM_ERROR, "invalid memo format")
+   CHECKC(false, err::PARAM_ERROR, "invalid memo format: " + from.to_string() + " to: " + to.to_string() + " quant: " + quant.to_string() + " memo: " + memo);
 }
 
 //管理员打入奖励

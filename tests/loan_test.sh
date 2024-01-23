@@ -80,11 +80,11 @@ tcli push action amax.mtoken transfer '{"from": "terry", "to": "'$loan'", "quant
 tcli push action amax.token transfer '{"from": "ad", "to": "1111", "quantity": "100.00000000 AMAX", "memo": "deposit"}' -p ad
 
 
-
+tcli push action $earn sendtoloan '["100.000000 MUSDT"]' -p $earn
 tcli push action $loan sendtoearn '["100.000000 MUSDT"]' -p $loan
 tcli get table $loan $loan global
 tcli get table $proxy $proxy global
-tcli get table $earn $earn global
+tcli get table $earn $earn globalloan
 
 
 
