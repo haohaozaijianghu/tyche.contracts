@@ -88,6 +88,7 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    ACTION addinteret(const uint64_t& interest_ratio);
    ACTION setliqpratio(const uint64_t& liquidation_price_ratio);
    ACTION setcallatsym( const extended_symbol& sym, const name& oracle_sym_name );
+   ACTION setinitratio(const symbol& sym, const uint64_t& ratio);
 
    //admin
    ACTION tgetprice( const symbol& collateral_sym );

@@ -23,6 +23,8 @@ tcli push action $loan init '["'$admin'", "'$lp'","'$or'", "'$proxy'",true]' -p 
 tcli get table $loan $loan global
 
 tcli push action $loan addinteret '[800]' -p $admin
+tcli push action $loan setinitratio '["8,AMAX",30000]' -p $admin
+
 
 tcli push action $loan initinterest '[]' -p $loan
 

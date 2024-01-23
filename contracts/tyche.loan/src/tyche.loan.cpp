@@ -492,6 +492,17 @@ void tyche_loan::setcallatsym(const extended_symbol& sym, const name& oracle_sym
    }
 }
 
+void tyche_loan::setinitratio(const symbol& sym, const uint64_t& ratio){
+   require_auth(_gstate.admin);
+
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto itr = syms.find(sym.code().raw());
+    syms.modify(itr, _self, [&](auto& row){
+         row.init_collateral_ratio = ratio;
+   });
+
+}
+
 void tyche_loan::addinteret(const uint64_t& interest_ratio) {
    require_auth(_gstate.admin);
    CHECKC(interest_ratio > 0, err::INCORRECT_AMOUNT, "interest_ratio must positive")
@@ -554,7 +565,7 @@ asset tyche_loan::_get_interest(const asset& quant, const uint64_t& interest_rat
       auto elapsed_seconds = elapsed.count() / 1000000;
       CHECKC( elapsed_seconds > 0,              err::TIME_PREMATURE,       "time premature" )
 
-      auto total_unpaid_interest = quant.amount * interest_ratio / YEAR_SECONDS * elapsed_seconds / PCT_BOOST;
+      auto total_unpaid_interest = quant.amount * interest_ratio / PCT_BOOST * elapsed_seconds / YEAR_SECONDS  ;
       return asset( total_unpaid_interest, quant.symbol );
 }
 
@@ -571,7 +582,7 @@ void tyche_loan::forceliq( const name& from, const name& liquidator, const symbo
    auto collateral_quant = loaner_itr->avl_collateral_quant;
    auto principal_quant  = loaner_itr->avl_principal;
       
-   asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->term_settled_at,eosio::current_time_point() );
+   asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->term_settled_at, eosio::current_time_point() );
    asset need_pay_interest = loaner_itr->unpaid_interest + total_interest;
    asset need_settle_quant = loaner_itr->avl_principal + need_pay_interest;
    auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, need_settle_quant, itr->oracle_sym_name);
