@@ -44,6 +44,7 @@ tcli push action $loan addinteret '[600]' -p $admin
 
 tcli push action $loan onsubcallat '[ "'$user1'","0.10000000 METH"]' -p $user1
 
+tcli push action $loan onsubcallat '[ "'$user2'","0.10000000 METH"]' -p $user2
 tcli push action $loan getmoreusdt '[ "'$user1'", "6,METH", "1000.000000 MUSDT"]' -p $user1
 tcli push action $loan tgetprice '[ "6,METH"]' -p $user1
 tcli push action $loan tgetliqrate '["'$user1'", "6,METH"]' -p $user1
@@ -52,7 +53,7 @@ tcli push action $loan tgetliqrate '["'$user1'", "6,METH"]' -p $user1
 
 tcli push action amax.mtoken transfer '{"from": "'$user1'", "to": "'$loan'", "quantity": "500.000000 MUSDT", "memo": "repay:6,METH"}' -p $user1
 
-
+tcli push action amax.mtoken transfer '{"from": "'$user2'", "to": "'$loan'", "quantity": "1.00000000 METH", "memo": "deposit"}' -p $user2
 #清算
 tcli push action amax.mtoken transfer '{"from": "'$user1'", "to": "'$loan'", "quantity": "500.000000 MUSDT", "memo": "liqudate:aabbccddee:6,METH"}' -p $user1
 
