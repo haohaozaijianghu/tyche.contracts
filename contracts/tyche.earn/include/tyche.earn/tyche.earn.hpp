@@ -64,8 +64,11 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
       _gloan = _globalloan.exists()? _globalloan.get() : globalloan_t{};
     }
 
-    ~tyche_earn() { _global.set( _gstate, get_self() );
+    ~tyche_earn() { 
+      _global.set( _gstate, get_self() );
       _global_state->save(get_self());
+      _globalloan.set( _gloan, get_self() );
+      
    }
 
    [[eosio::on_notify("*::transfer")]]

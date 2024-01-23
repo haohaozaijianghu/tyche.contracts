@@ -647,4 +647,15 @@ void tyche_loan::notifytran(const name& from, const name& to, const asset& quant
    require_recipient(get_self());
 }
 
+
+void tyche_loan::sendtoearn( const asset& quant ){
+   require_auth(get_self());
+   auto remain_principal = _gstate.avl_principal_quant;
+   CHECKC(remain_principal >= quant, err::OVERSIZED, "principal not enough");
+   _gstate.avl_principal_quant -= quant;
+   _gstate.total_principal_quant -= quant;
+   TRANSFER( _gstate.loan_token.get_contract(), _gstate.tyche_proxy_contract, quant, "tyche loan sendback");
+}
+
+
 } //namespace tychefi

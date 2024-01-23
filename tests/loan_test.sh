@@ -1,4 +1,4 @@
-loan=tyche.l23
+loan=tyche.l33
 admin=ad
 lp=ad
 or=oracle3
@@ -14,10 +14,10 @@ tnew $proxy
 tset $proxy tyche.proxy
 tcli set account permission $proxy active --add-code
 
-
 earn=tyche.s312
 tset $earn tyche.earn
-tcli push action $earn init '["'$proxy'"]' -p $earn
+tcli push action $earn initloaninfo '["'$proxy'"]' -p $earn
+tcli push action $proxy init '["'$loan'", "'$earn'"]' -p $proxy
 
 tcli push action $loan init '["'$admin'", "'$lp'","'$or'", "'$proxy'",true]' -p $loan
 tcli get table $loan $loan global
@@ -74,3 +74,17 @@ tcli push action $loan forceliq '["'$user1'", "'$user1'", "6,METH"]' -p $user1
 
 
 tcli push action amax.mtoken transfer '{"from": "terry", "to": "'$loan'", "quantity": "3.040000 MUSDT", "memo": "sendback:8,AMAX"}' -p terry
+
+
+
+tcli push action amax.token transfer '{"from": "ad", "to": "1111", "quantity": "100.00000000 AMAX", "memo": "deposit"}' -p ad
+
+
+
+tcli push action $loan sendtoearn '["100.000000 MUSDT"]' -p $loan
+tcli get table $loan $loan global
+tcli get table $proxy $proxy global
+tcli get table $earn $earn global
+
+
+
