@@ -47,9 +47,9 @@ void tyche_proxy::ontransfer(const name& from, const name& to, const asset& quan
    auto token_bank = get_first_receiver();
    CHECKC( token_bank == _gstate.token_bank, err::CONTRACT_MISMATCH, "invalid token contract" );
    CHECKC( quant.symbol == _gstate.loan_quant.symbol, err::SYMBOL_MISMATCH, "invalid symbol" );
-   CHECKC( quant.amount > 0, err::NOT_POSITIVE, "must transfer positive quantity" );
+   CHECKC( quant.amount > 0, err::NOT_POSITIVE, "must transfer positive quantity: "+  quant.to_string() );
    if(from == _gstate.tyche_loan_contract) {
-      CHECKC(quant < _gstate.loan_quant, err::NOT_POSITIVE, "must transfer positive quantity")
+      CHECKC(quant <= _gstate.loan_quant, err::NOT_POSITIVE, "transfer quantity must less than loan_quant: "+  _gstate.loan_quant.to_string() );
       _gstate.loan_quant += quant;
       TRANSFER(token_bank, _gstate.tyche_earn_contract, quant, "tyche_stake add" );
       return;

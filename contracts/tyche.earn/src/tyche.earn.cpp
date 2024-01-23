@@ -83,6 +83,10 @@ void tyche_earn::ontransfer(const name& from, const name& to, const asset& quant
       CHECKC( _gstate.lp_token.get_contract() == token_bank, err::CONTRACT_MISMATCH, "LP token contract mismatches" )
       if(from == _gstate.lp_refueler) //充入TRUSD到合约
          return;
+      if(from == _gloan.tyche_proxy_contract) {
+         _gloan.loan_quant -= quant;
+         return;
+      }
 
       vector<string_view> params = split(memo, ":");
       CHECKC( params.size() == 2 && params[0] == "redeem", err::MEMO_FORMAT_ERROR, "redeem memo format error" )
@@ -733,7 +737,7 @@ void tyche_earn::setaplconf( const uint64_t& lease_id, const asset& unit_reward 
 
 void tyche_earn::sendtoloan( const asset& quant ){
    require_auth( _self );
-   CHECKC( quant.amount > 0, err::NOT_POSITIVE, "must transfer positive quantity" );
+   CHECKC( quant.amount > 0, err::NOT_POSITIVE, "must transfer positive quantity:" + quant.to_string() );
    CHECKC( quant.symbol == _gstate.principal_token.get_symbol(), err::SYMBOL_MISMATCH, "invalid symbol" );
    _gloan.loan_quant += quant;
    TRANSFER( _gstate.principal_token.get_contract(), _gloan.tyche_proxy_contract, quant, "tyche_loan add" );
