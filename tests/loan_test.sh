@@ -1,4 +1,4 @@
-loan=tyche.l34
+loan=tyche.l41
 admin=ad
 lp=ad
 or=oracle3
@@ -10,7 +10,7 @@ tset $loan tyche.loan
 tcli set account permission $loan active --add-code
 
 proxy=proxy1
-tnew $proxy
+# tnew $proxy
 tset $proxy tyche.proxy
 tcli set account permission $proxy active --add-code
 
@@ -23,11 +23,6 @@ tcli push action $loan init '["'$admin'", "'$lp'","'$or'", "'$proxy'",true]' -p 
 tcli get table $loan $loan global
 
 tcli push action $loan addinteret '[800]' -p $admin
-tcli push action $loan setinitratio '["8,AMAX",30000]' -p $admin
-tcli push action $loan setcollquant '["8,AMAX","1.00000000 AMAX", "10000.00000000 AMAX"]' -p $admin
-tcli push action $loan setcollquant '["8,MBTC","1.000000 MBTC", "10000.000000 MBTC"]' -p $admin
-tcli push action $loan setcollquant '["8,METH","1.000000 METH", "10000.000000 METH"]' -p $admin
-
 
 tcli push action $loan initinterest '[]' -p $loan
 
@@ -35,6 +30,12 @@ tcli push action $loan setcallatsym '[["8,MBTC", "amax.mtoken"], "btc"]' -p $adm
 tcli push action $loan setcallatsym '[["8,METH", "amax.mtoken"], "eth"]' -p $admin
 tcli push action $loan setcallatsym '[["8,AMAX", "amax.token"], "amax"]' -p $admin
 tcli get table $loan $loan collsyms
+
+tcli push action $loan setinitratio '["8,AMAX",30000]' -p $admin
+tcli push action $loan setcollquant '["8,AMAX","1.00000000 AMAX", "10000.00000000 AMAX"]' -p $admin
+tcli push action $loan setcollquant '["8,MBTC","0.00100000 MBTC", "10.00000000 MBTC"]' -p $admin
+tcli push action $loan setcollquant '["8,METH","0.10000000 METH", "100.00000000 METH"]' -p $admin
+
 
 tcli push action amax.mtoken transfer '{"from": "ad", "to": "'$loan'", "quantity": "20000.000000 MUSDT", "memo": "deposit"}' -p ad
 

@@ -66,8 +66,6 @@ NTBL("global") global_t {
     asset               min_deposit_amount      = asset(10'000000, MUSDT);                  //10 MU
     uint64_t            term_interval_days      = 365 * 2;                                  //30天
 
-    aplink_farm         apl_farm;
-
     uint64_t            liquidation_penalty_ratio   = 9000;             //清算惩罚率: 10% = 1000
     uint64_t            liquidation_price_ratio     = 9700 ;            //清算价格 97%
 
@@ -75,10 +73,11 @@ NTBL("global") global_t {
     asset               avl_principal_quant;                           //可用本金
     name                tyche_proxy_contract;                          //tyche.proxy
     asset               total_interest_quant;                          //总利息
+
     bool                enabled                 = true; 
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(price_oracle_contract)
-                                (loan_token)(min_deposit_amount)(term_interval_days)(apl_farm)
+                                (loan_token)(min_deposit_amount)(term_interval_days)
                                 (liquidation_penalty_ratio)(liquidation_price_ratio)
                                 (total_principal_quant)(avl_principal_quant)
                                 (tyche_proxy_contract)(total_interest_quant)
