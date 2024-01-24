@@ -20,9 +20,6 @@ tcli push action $stake balance '["test"]' -p $stake
 tcli push action $stake totalsupply '[]' -p $stake
 tcli push action $stake totalsupply2 '[1701506586]' -p $stake
 
-
-
-
 tcli  get table $stake  $stake global
 tcli  get table $stake  $stake earnslocked
 tcli  get table $stake  test  olduserpoint

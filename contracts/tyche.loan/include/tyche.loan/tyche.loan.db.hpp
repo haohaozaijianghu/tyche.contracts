@@ -67,7 +67,7 @@ NTBL("global") global_t {
     uint64_t            term_interval_days      = 365 * 2;                                  //30天
 
     uint64_t            liquidation_penalty_ratio   = 9000;             //清算惩罚率: 10% = 1000
-    uint64_t            liquidation_price_ratio     = 9700 ;            //清算价格 97%
+    uint64_t            liquidation_price_ratio     = 9500 ;            //清算价格 97%
 
     asset               total_principal_quant;                         //总本金
     asset               avl_principal_quant;                           //可用本金
