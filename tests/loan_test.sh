@@ -1,4 +1,4 @@
-loan=tyche.l33
+loan=tyche.l34
 admin=ad
 lp=ad
 or=oracle3
@@ -24,6 +24,9 @@ tcli get table $loan $loan global
 
 tcli push action $loan addinteret '[800]' -p $admin
 tcli push action $loan setinitratio '["8,AMAX",30000]' -p $admin
+tcli push action $loan setcollquant '["8,AMAX","1.00000000 AMAX", "10000.00000000 AMAX"]' -p $admin
+tcli push action $loan setcollquant '["8,MBTC","1.000000 MBTC", "10000.000000 MBTC"]' -p $admin
+tcli push action $loan setcollquant '["8,METH","1.000000 METH", "10000.000000 METH"]' -p $admin
 
 
 tcli push action $loan initinterest '[]' -p $loan
@@ -76,6 +79,7 @@ tcli push action $loan forceliq '["'$user1'", "'$user1'", "6,METH"]' -p $user1
 
 
 
+
 tcli push action amax.mtoken transfer '{"from": "terry", "to": "'$loan'", "quantity": "3.040000 MUSDT", "memo": "sendback:8,AMAX"}' -p terry
 
 
@@ -89,5 +93,22 @@ tcli get table $loan $loan global
 tcli get table $proxy $proxy global
 tcli get table $earn $earn globalloan
 
+
+
+
+
+
+loan=tyche.l33
+admin=ad
+lp=ad
+or=oracle3
+user1=josstest
+user2=josstest2
+
+tcli push action amax.token transfer '{"from": "'$user1'", "to": "'$loan'", "quantity": "1.00000000 AMAX", "memo": "deposit"}' -p $user1
+
+tcli push action $loan getmoreusdt '[ "'$user1'", "8,AMAX", "1.000000 MUSDT"]' -p $user1
+
+echo tcli push action amax.mtoken transfer '{"from": "'$user1'", "to": "'$loan'", "quantity": "2.000000 MUSDT", "memo": "sendback:8,AMAX"}' -p $user1
 
 

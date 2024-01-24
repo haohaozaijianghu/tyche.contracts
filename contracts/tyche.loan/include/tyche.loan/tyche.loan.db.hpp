@@ -145,6 +145,8 @@ TBL collateral_symbol_t {
     asset       total_force_principal;                      //强平总本金
     asset       avl_force_collateral_quant;                 //强平抵押物总量
     asset       avl_force_principal;                        //强平需要总本金
+    asset       min_collateral_quant;                      //最小抵押物数量
+    asset       max_collateral_quant;                      //最大抵押物数量
 
     bool        on_shelf;
 
@@ -157,7 +159,9 @@ TBL collateral_symbol_t {
     EOSLIB_SERIALIZE( collateral_symbol_t, (sym)(oracle_sym_name)(init_collateral_ratio)(liquidation_ratio)(force_liquidate_ratio)
                                             (max_principal)(total_collateral_quant)(avl_collateral_quant)(total_principal)(avl_principal)
                                             (total_force_collateral_quant)(total_force_principal)
-                                            (avl_force_collateral_quant)(avl_force_principal)(on_shelf) )
+                                            (avl_force_collateral_quant)(avl_force_principal)
+                                            (min_collateral_quant)(max_collateral_quant)
+                                            (on_shelf) )
 };
 
 TBL fee_pool_t {

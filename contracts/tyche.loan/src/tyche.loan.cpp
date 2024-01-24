@@ -178,7 +178,7 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
 
    CHECKC(_gstate.avl_principal_quant >= quant, err::OVERSIZED, "principal not enough")
-   CHECKC(itr->avl_principal + quant <= itr->max_principal, err::OVERSIZED, "symbol principal not enough")
+   // CHECKC(itr->avl_principal + quant <= itr->max_principal, err::OVERSIZED, "symbol principal not enough")
 
    auto loaner = loaner_t::tbl_t(_self, _get_lower(callat_sym).value);
    auto loaner_itr = loaner.find(from.value);
@@ -191,9 +191,12 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    //TODO
    // CHECKC( ratio >= itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
    //打USDT给用户
-   TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_LEND + ":" + symbol_to_string(itr->sym.get_symbol()));
-
-   //更新用户的MUSDT
+   TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_LEND + ":" + symbol_to_string(itr->sym.get_symbol()) + 
+                     ":" + "principal," +loaner_itr->avl_principal.to_string() + "," + "interest," + total_interest.to_string() + "," 
+                  + "unpaid_interest," + loaner_itr->unpaid_interest.to_string() +  ", "
+                     "term_settled_at:" + to_string(loaner_itr->term_settled_at.sec_since_epoch()) + 
+                     ",end_at:" + to_string(time_point_sec(eosio::current_time_point()).sec_since_epoch()))
+   //更新用户的MUSDT + )
    loaner.modify(loaner_itr, _self, [&](auto& row){
       row.avl_principal    += quant;
       row.unpaid_interest  += total_interest;
@@ -241,6 +244,9 @@ void tyche_loan::_on_add_callateral( const name& from, const name& token_bank, c
    auto sym_itr = syms.find(quant.symbol.code().raw());
    CHECKC(sym_itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
    CHECKC(token_bank == sym_itr->sym.get_contract(), err::CONTRACT_MISMATCH, "symbol not supported");
+
+   CHECKC(quant > sym_itr->min_collateral_quant && quant < sym_itr->max_collateral_quant,
+            err::INCORRECT_AMOUNT, "collateral quant not support")
 
    loaner_t::tbl_t loaners(_self, _get_lower(quant.symbol).value);
    auto itr = loaners.find(from.value);
@@ -389,7 +395,10 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
       //按当前价格的97% 结算给用户 
       auto return_collateral_quant = calc_collateral_quant(loaner_itr->avl_collateral_quant, liquidator_pay_usdt_quant, itr->oracle_sym_name, settle_price);
       //把抵押物转给协议平仓的人
-      TRANSFER( itr->sym.get_contract(), from, return_collateral_quant, TYPE_BUY + ":" + symbol_to_string(itr->sym.get_symbol()));
+      TRANSFER( itr->sym.get_contract(), from, return_collateral_quant, TYPE_BUY + ":" + symbol_to_string(itr->sym.get_symbol()) + ":" + "principal," +loaner_itr->avl_principal.to_string() + "," + "interest," + total_interest.to_string() + "," 
+                  + "unpaid_interest," + loaner_itr->unpaid_interest.to_string() +  ", "
+                     "term_settled_at:" + to_string(loaner_itr->term_settled_at.sec_since_epoch()) + 
+                     ",end_at:" + to_string(time_point_sec(eosio::current_time_point()).sec_since_epoch()));
       //平台内结算
       //添加平台金额
       auto platform_quant_amount = multiply_decimal64(liquidator_pay_usdt_quant.amount, (PCT_BOOST - _gstate.liquidation_penalty_ratio), PCT_BOOST );
@@ -483,6 +492,8 @@ void tyche_loan::setcallatsym(const extended_symbol& sym, const name& oracle_sym
          row.avl_collateral_quant         = asset(0, sym.get_symbol());
          row.total_principal              = asset(0, _gstate.loan_token.get_symbol());
          row.avl_principal                = asset(0, _gstate.loan_token.get_symbol());
+         row.min_collateral_quant         = asset(0, sym.get_symbol());
+         row.max_collateral_quant         = asset(1000, sym.get_symbol());
       });
    } else {
       syms.modify(itr, _self, [&](auto& row){
@@ -500,7 +511,17 @@ void tyche_loan::setinitratio(const symbol& sym, const uint64_t& ratio){
     syms.modify(itr, _self, [&](auto& row){
          row.init_collateral_ratio = ratio;
    });
+}
 
+void tyche_loan::setcollquant(const symbol& sym, const asset& min_collateral_quant, const asset& max_collateral_quant){
+   require_auth(_gstate.admin);
+
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto itr = syms.find(sym.code().raw());
+   syms.modify(itr, _self, [&](auto& row){
+      row.min_collateral_quant = min_collateral_quant;
+      row.max_collateral_quant = max_collateral_quant;
+   });
 }
 
 void tyche_loan::addinteret(const uint64_t& interest_ratio) {
