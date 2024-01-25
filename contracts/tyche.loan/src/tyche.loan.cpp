@@ -211,30 +211,30 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    _gstate.avl_principal_quant -= quant;
 }
 
-void tyche_loan::tgetprice( const symbol& collateral_sym ){
-   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
-   auto sym_itr = syms.find(collateral_sym.code().raw());
-   CHECKC(sym_itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
-   auto price = get_index_price( sym_itr->oracle_sym_name );
+// void tyche_loan::tgetprice( const symbol& collateral_sym ){
+//    auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+//    auto sym_itr = syms.find(collateral_sym.code().raw());
+//    CHECKC(sym_itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
+//    auto price = get_index_price( sym_itr->oracle_sym_name );
 
-   CHECKC(false, err::SYSTEM_ERROR, "current pirce: " + asset(price, collateral_sym).to_string() );
-}
+//    CHECKC(false, err::SYSTEM_ERROR, "current pirce: " + asset(price, collateral_sym).to_string() );
+// }
 
-void tyche_loan::tgetliqrate( const name& owner, const symbol& callat_sym )
-{
-   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
-   auto itr = syms.find(callat_sym.code().raw());
-   CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
+// void tyche_loan::tgetliqrate( const name& owner, const symbol& callat_sym )
+// {
+//    auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+//    auto itr = syms.find(callat_sym.code().raw());
+//    CHECKC(itr != syms.end(), err::SYMBOL_MISMATCH, "symbol not supported");
 
-   auto loaner = loaner_t::tbl_t(_self, _get_lower(callat_sym).value);
-   auto loaner_itr = loaner.find(owner.value);
-   CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
+//    auto loaner = loaner_t::tbl_t(_self, _get_lower(callat_sym).value);
+//    auto loaner_itr = loaner.find(owner.value);
+//    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 
-   asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->term_settled_at,eosio::current_time_point());
+//    asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->term_settled_at,eosio::current_time_point());
 
-   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest, itr->oracle_sym_name);
-   CHECKC( false, err::RATE_EXCEEDED, "callation ratio: "  + to_string(ratio));
-}
+//    auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest, itr->oracle_sym_name);
+//    CHECKC( false, err::RATE_EXCEEDED, "callation ratio: "  + to_string(ratio));
+// }
 
 //增加质押物
 void tyche_loan::_on_add_callateral( const name& from, const name& token_bank, const asset& quant ){
@@ -557,11 +557,10 @@ uint64_t tyche_loan::_get_current_interest_ratio() {
    return first_itr->interest_ratio;
 }
 
-void tyche_loan::tgetinterest(const asset& principal,  const time_point_sec& started_at, const time_point_sec& ended_at) {
-   auto interest = _get_dynamic_interest(principal, started_at, ended_at);
-   CHECKC(false, err::SYSTEM_ERROR, "interest: " + interest.to_string() );
-
-}
+// void tyche_loan::tgetinterest(const asset& principal,  const time_point_sec& started_at, const time_point_sec& ended_at) {
+//    auto interest = _get_dynamic_interest(principal, started_at, ended_at);
+//    CHECKC(false, err::SYSTEM_ERROR, "interest: " + interest.to_string() );
+// }
 
 asset tyche_loan::_get_dynamic_interest( const asset& quant, 
                                           const time_point_sec& time_start, const time_point_sec& time_end){

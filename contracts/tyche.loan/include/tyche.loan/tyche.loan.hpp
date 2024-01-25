@@ -92,9 +92,9 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    ACTION setcollquant(const symbol& sym, const asset& min_collateral_quant, const asset& max_collateral_quant);
 
    //admin
-   ACTION tgetprice( const symbol& collateral_sym );
-   ACTION tgetliqrate( const name& owner, const symbol& collateral_sym );
-   ACTION tgetinterest(const asset& principal, const time_point_sec& started_at, const time_point_sec& ended_at );
+   // ACTION tgetprice( const symbol& collateral_sym );
+   // ACTION tgetliqrate( const name& owner, const symbol& collateral_sym );
+   // ACTION tgetinterest(const asset& principal, const time_point_sec& started_at, const time_point_sec& ended_at );
 
    ACTION sendtoearn( const asset& quant );
 
