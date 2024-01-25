@@ -148,7 +148,6 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
       //打USDT给用户
       auto  return_quant = principal_repay_quant - avl_principal;
       TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_GIVE_CHANGE + ":"+ symbol_to_string(collateral_itr->sym.get_symbol()) );
-      //TODO
       avl_principal        = asset(0, avl_principal.symbol);
    } else {
       avl_principal         -= principal_repay_quant;
@@ -185,11 +184,9 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 
    asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->term_settled_at, eosio::current_time_point());
-   // CHECKC(false, err::RATE_EXCEEDED, " " +loaner_itr->avl_principal.to_string() + " " + loaner_itr->unpaid_interest.to_string() +  " " + total_interest.to_string() +  "  " + quant.to_string() );
 
    auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest + quant, itr->oracle_sym_name);
-   //TODO
-   // CHECKC( ratio >= itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
+   CHECKC( ratio >= itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
    //打USDT给用户
    TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_LEND + ":" + symbol_to_string(itr->sym.get_symbol()) + 
                      ":" + "principal," +loaner_itr->avl_principal.to_string() + "," + "interest," + total_interest.to_string() + "," 
