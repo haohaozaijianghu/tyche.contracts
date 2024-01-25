@@ -585,7 +585,7 @@ asset tyche_loan::_get_interest(const asset& quant, const uint64_t& interest_rat
                                  const time_point_sec& started_at, const time_point_sec& ended_at) {
       auto elapsed =  (ended_at - started_at);
       auto elapsed_seconds = elapsed.count() / 1000000;
-      CHECKC( elapsed_seconds > 0,              err::TIME_PREMATURE,       "time premature" )
+      CHECKC( elapsed_seconds >= 0,   err::TIME_PREMATURE,       "time premature" )
 
       auto total_unpaid_interest = quant.amount * interest_ratio / PCT_BOOST * elapsed_seconds / YEAR_SECONDS  ;
       return asset( total_unpaid_interest, quant.symbol );
