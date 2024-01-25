@@ -524,7 +524,7 @@ void tyche_loan::setcollquant(const symbol& sym, const asset& min_collateral_qua
    });
 }
 
-void tyche_loan::addinteret(const uint64_t& interest_ratio) {
+void tyche_loan::addinterest(const uint64_t& interest_ratio) {
    require_auth(_gstate.admin);
    CHECKC(interest_ratio > 0, err::INCORRECT_AMOUNT, "interest_ratio must positive")
 
@@ -540,7 +540,7 @@ void tyche_loan::addinteret(const uint64_t& interest_ratio) {
       row.begin_at         = eosio::current_time_point();
       row.ended_at         = eosio::current_time_point() + eosio::days(365*10);
    });
-
+ 
 }
 
 void tyche_loan::setliqpratio(const uint64_t& liquidation_price_ratio){
@@ -591,7 +591,6 @@ asset tyche_loan::_get_interest(const asset& quant, const uint64_t& interest_rat
       auto total_unpaid_interest = quant.amount * interest_ratio / PCT_BOOST * elapsed_seconds / YEAR_SECONDS  ;
       return asset( total_unpaid_interest, quant.symbol );
 }
-
 
 void tyche_loan::forceliq( const name& from, const name& liquidator, const symbol& callat_sym ){
    require_auth(from);

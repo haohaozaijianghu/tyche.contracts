@@ -1,7 +1,7 @@
 loan=tyche.l41
 admin=ad
 lp=ad
-or=oracle3
+oracle=oracle3
 user1=josstest
 user2=josstest2
 
@@ -12,14 +12,14 @@ tcli set account permission $loan active --add-code
 proxy=proxy1
 # tnew $proxy
 tset $proxy tyche.proxy
-tcli set account permission $proxy active --add-code
+c
 
 earn=tyche.s312
 tset $earn tyche.earn
 tcli push action $earn initloaninfo '["'$proxy'"]' -p $earn
 tcli push action $proxy init '["'$loan'", "'$earn'"]' -p $proxy
 
-tcli push action $loan init '["'$admin'", "'$lp'","'$or'", "'$proxy'",true]' -p $loan
+tcli push action $loan init '["'$admin'", "'$lp'","'$oracle'", "'$proxy'",true]' -p $loan
 tcli get table $loan $loan global
 
 tcli push action $loan addinteret '[800]' -p $admin
@@ -39,6 +39,9 @@ tcli push action $loan setcollquant '["8,METH","0.10000000 METH", "100.00000000 
 
 tcli push action amax.mtoken transfer '{"from": "ad", "to": "'$loan'", "quantity": "20000.000000 MUSDT", "memo": "deposit"}' -p ad
 
+tcli push action amax.mtoken transfer '{"from": "ad", "to": "'$loan'", "quantity": "1.000000 MUSDT", "memo": "deposit"}' -p ad
+
+
 
 # tcli push action amax.mtoken transfer '{"from": "ad", "to": "'$user1'", "quantity": "10.00000000 METH", "memo": "deposit"}' -p ad
 
@@ -47,6 +50,7 @@ tcli get table $loan meth loaners
 
 tcli push action $loan addinteret '[600]' -p $admin
 
+tcli push action $loan setliqpratio '[9500]' -p $admin
 
 tcli push action $loan onsubcallat '[ "'$user1'","0.10000000 METH"]' -p $user1
 
