@@ -246,7 +246,7 @@ void tyche_loan::_on_add_callateral( const name& from, const name& token_bank, c
    CHECKC(token_bank == sym_itr->sym.get_contract(), err::CONTRACT_MISMATCH, "symbol not supported");
 
    CHECKC(quant >= sym_itr->min_collateral_quant && quant < sym_itr->max_collateral_quant,
-            err::INCORRECT_AMOUNT, "collateral quant not support")
+            err::INCORRECT_AMOUNT, "collateral quantity not supported")
 
    loaner_t::tbl_t loaners(_self, _get_lower(quant.symbol).value);
    auto itr = loaners.find(from.value);
