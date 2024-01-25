@@ -84,7 +84,7 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
                const name& price_oracle_contract,
                const name& tyche_proxy_contract,
                const bool& enabled);
-               
+   ACTION initoracle(const name& price_oracle_contract);
    ACTION addinterest(const uint64_t& interest_ratio);
    ACTION setliqpratio(const uint64_t& liquidation_price_ratio);
    ACTION setcallatsym( const extended_symbol& sym, const name& oracle_sym_name );

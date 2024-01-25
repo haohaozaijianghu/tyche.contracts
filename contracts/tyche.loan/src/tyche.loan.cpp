@@ -79,7 +79,10 @@ void tyche_loan::init(const name& admin, const name& lp_refueler,
    _gstate.tyche_proxy_contract     =tyche_proxy_contract;
 }
 
-
+void tyche_loan::initoracle(const name& price_oracle_contract) {
+   require_auth( _self );
+   _gstate.price_oracle_contract     =price_oracle_contract;
+}
 
 /**
  * @brief send nasset tokens into nftone marketplace
@@ -184,10 +187,12 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
 
    asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->term_settled_at, eosio::current_time_point());
-
-   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest + quant, itr->oracle_sym_name);
-   CHECKC( ratio >= itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
-   //打USDT给用户
+   auto total_principal = loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest + quant;
+   auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, total_principal, itr->oracle_sym_name);
+   CHECKC( ratio >= itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded: "+ to_string(ratio) +
+            "loaner_itr->avl_collateral_quant: " + loaner_itr->avl_collateral_quant.to_string() + 
+            "total_principal: " + total_principal.to_string() )
+   //打USDT给用户 
    TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_LEND + ":" + symbol_to_string(itr->sym.get_symbol()) + 
                      ":" + "principal," +loaner_itr->avl_principal.to_string() + "," + "interest," + total_interest.to_string() + "," 
                   + "unpaid_interest," + loaner_itr->unpaid_interest.to_string() +  ", "
