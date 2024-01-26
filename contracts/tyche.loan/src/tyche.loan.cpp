@@ -199,7 +199,7 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->term_settled_at, eosio::current_time_point());
    auto total_principal = loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest + quant;
    auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, total_principal, itr->oracle_sym_name);
-   CHECKC( ratio >= itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded: "+ to_string(ratio) +
+   CHECKC( ratio >= itr->liquidation_ratio, err::RATE_EXCEEDED, "callation ratio exceeded: "+ to_string(ratio) +
             "loaner_itr->avl_collateral_quant: " + loaner_itr->avl_collateral_quant.to_string() + 
             "total_principal: " + total_principal.to_string() )
    //打USDT给用户 
@@ -307,7 +307,7 @@ void tyche_loan::onsubcallat( const name& from, const asset& quant ) {
     auto ratio = 10000;
    if( itr->avl_principal.amount > 0) {
       ratio = get_callation_ratio(remain_collateral_quant, itr->avl_principal, sym_itr->oracle_sym_name );
-      CHECKC( ratio >= sym_itr->init_collateral_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
+      CHECKC( ratio >= sym_itr->liquidation_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
    }
    
    loaners.modify(itr, _self, [&](auto& row){
