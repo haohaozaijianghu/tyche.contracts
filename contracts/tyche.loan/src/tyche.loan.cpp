@@ -127,6 +127,15 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
    return;
 }
 
+void tyche_loan::setavlprncpl(const asset &quant){
+   require_auth(_self);
+   CHECKC(quant.symbol == _gstate.avl_principal_quant.symbol, err::SYMBOL_MISMATCH, "symbol not supported");
+   _gstate.avl_principal_quant = quant;
+
+
+}
+
+
 //赎回抵押物，用户打入MUSDT
 //internal call
 void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, const asset& quant ){
