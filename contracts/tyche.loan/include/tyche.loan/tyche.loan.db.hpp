@@ -44,6 +44,8 @@ const static string     TYPE_LIQUIDATE                  = "liquidate";          
 const static string     TYPE_LIQUIDATE_INTERNAL         = "liquidatei";         //清算
 const static string     TYPE_LEND                       = "lend";               //借出
 const static string     TYPE_GIVE_CHANGE                = "givechange";         //找零
+const static string     TYPE_GIVE_CHANGE_LIQ            = "givechange_liq";     //找零
+const static string     TYPE_GIVE_CHANGE_CLOSE          = "givechange_close";   //找零
 const static string     TYPE_BUY                        = "liqbuy";             //归还清算人的U
 
 #define HASH256(str) sha256(const_cast<char*>(str.c_str()), str.size())

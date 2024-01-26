@@ -22,7 +22,7 @@ tcli push action $proxy init '["'$loan'", "'$earn'"]' -p $proxy
 tcli push action $loan init '["'$admin'", "'$lp'","'$oracle'", "'$proxy'",true]' -p $loan
 tcli get table $loan $loan global
 
-tcli push action $loan addinteret '[800]' -p $admin
+tcli push action $loan addinterest '[800]' -p $admin
 
 tcli push action $loan initinterest '[]' -p $loan
 
@@ -55,7 +55,7 @@ tcli push action $loan setliqpratio '[9500]' -p $admin
 tcli push action $loan onsubcallat '[ "'$user1'","0.10000000 METH"]' -p $user1
 
 tcli push action $loan onsubcallat '[ "'$user2'","0.10000000 METH"]' -p $user2
-tcli push action $loan getmoreusdt '[ "'$user1'", "6,METH", "1000.000000 MUSDT"]' -p $user1
+tcli push action $loan getmoreusdt '[ "'$user1'", "8,METH", "1000.000000 MUSDT"]' -p $user1
 tcli push action $loan tgetprice '[ "6,METH"]' -p $user1
 tcli push action $loan tgetliqrate '["'$user1'", "6,METH"]' -p $user1
 

@@ -168,7 +168,8 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
       row.term_settled_at        = eosio::current_time_point();
       row.term_ended_at          = eosio::current_time_point() + eosio::days(_gstate.term_interval_days);
    });
-   _gstate.total_interest_quant += total_unpaid_interest;
+   _gstate.total_interest_quant  += total_unpaid_interest;
+   _gstate.avl_principal_quant   += principal_repay_quant;
 }
 
 //external: 获得更多的MUSDT
@@ -390,7 +391,7 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
       auto max_paid_quant = asset(max_paid_amount, need_settle_quant.symbol);
       if( max_paid_quant <= quant) {
          auto return_quant = quant - max_paid_quant;
-         TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_GIVE_CHANGE + ":" + symbol_to_string(itr->sym.get_symbol()) );
+         TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_GIVE_CHANGE_LIQ + ":" + symbol_to_string(itr->sym.get_symbol()) );
          liquidator_pay_usdt_quant = max_paid_quant;
       }
 
@@ -440,7 +441,7 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
       return;
    } else {
       if( quant.amount > 0 ){
-         TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_GIVE_CHANGE + ":"+ symbol_to_string(itr->sym.get_symbol()) );
+         TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_GIVE_CHANGE_CLOSE + ":"+ symbol_to_string(itr->sym.get_symbol()) );
       }
       syms.modify(itr, _self, [&](auto& row){
          row.total_force_collateral_quant  += loaner_itr->avl_collateral_quant;
