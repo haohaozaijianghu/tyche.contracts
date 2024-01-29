@@ -40,7 +40,6 @@ const static string     TYPE_SEND_BACK_INTERNAL_LIQ     = "sendbacki_liq";      
 const static string     TYPE_SEND_BACK_INTERNAL_CLOSE   = "sendbacki_close";    //归还
 const static string     TYPE_FORCECLOSE_INTRENAL        = "forceclosei";        //强平
 const static string     TYPE_REDEEM                     = "redeem";             //赎回
-const static string     TYPE_LIQUIDATE                  = "liquidate";          //清算
 const static string     TYPE_LIQUIDATE_INTERNAL         = "liquidatei";         //清算
 const static string     TYPE_LEND                       = "lend";               //借出
 const static string     TYPE_GIVE_CHANGE                = "givechange";         //找零
