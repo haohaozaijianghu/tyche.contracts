@@ -29,7 +29,7 @@ static constexpr int128_t  HIGH_PRECISION    = 1'000'000'000'000'000'000; // 10^
 
 static constexpr name       MUSDT_BANK       = "amax.mtoken"_n;
 static constexpr symbol     MUSDT            = symbol(symbol_code("MUSDT"), 6);
-static constexpr symbol     FFT            = symbol(symbol_code("FFT"), 6);
+static constexpr symbol     FFT            = symbol(symbol_code("FFT"), 4);
 static constexpr name       TRUSD_BANK       = "tyche.token"_n;
 static constexpr symbol     TRUSD            = symbol(symbol_code("TRUSD"), 6);
 static constexpr name       TYCHE_BANK       = "tyche.token"_n;

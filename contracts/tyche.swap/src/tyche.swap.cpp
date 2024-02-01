@@ -73,9 +73,12 @@ void tyche_swap::ontransfer(const name& from, const name& to, const asset& quant
    if(from == _self || to != _self) return;
    if(quant.symbol == MUSDT) {
       vector<string_view> memo_params = split(memo, ":"); 
+      CHECKC(memo_params.size() == 2, err::PARAM_ERROR, "memo invalid")
       auto fft_quant = asset_from_string(memo_params[1]);
       CHECKC(fft_quant.symbol == FFT, err::SYMBOL_MISMATCH, "fft_quant must be FFT")
       CHECKC(fft_quant.amount > 0, err::NOT_POSITIVE, "fft_quant must be positive")
+      TRANSFER( MUSDT_BANK, from, fft_quant, "fft buy" )
+      return;
    } else if(quant.symbol == FFT) {
       _gstate.total_fft_quant += quant;
       return;
