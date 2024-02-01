@@ -22,3 +22,4 @@ set(TRANSFER_ICON_URI "transfer.png#5dfad0df72772ee1ccc155e670c1d124f5c5122f1d50
 
 # add_subdirectory(tyche.stake)    #collateralized loan
 add_subdirectory(tyche.swap)
+add_subdirectory(tyche.lock)
