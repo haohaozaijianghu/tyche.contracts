@@ -515,13 +515,15 @@ void tyche_loan::setcallatsym(const extended_symbol& sym, const name& oracle_sym
    }
 }
 
-void tyche_loan::setinitratio(const symbol& sym, const uint64_t& ratio){
+void tyche_loan::setsymratio(const symbol& sym, const uint64_t& init_ratio, const uint64_t liq_ratio,  const uint64_t force_ratio){
    require_auth(_gstate.admin);
 
    auto syms = collateral_symbol_t::idx_t(_self, _self.value);
    auto itr = syms.find(sym.code().raw());
     syms.modify(itr, _self, [&](auto& row){
-         row.init_collateral_ratio = ratio;
+         row.init_collateral_ratio  = init_ratio;
+         row.liquidation_ratio      = liq_ratio;
+         row.force_liquidate_ratio  = force_ratio;
    });
 }
 
