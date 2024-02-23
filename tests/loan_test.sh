@@ -31,7 +31,7 @@ tcli push action $loan setcallatsym '[["8,METH", "amax.mtoken"], "eth"]' -p $adm
 tcli push action $loan setcallatsym '[["8,AMAX", "amax.token"], "amax"]' -p $admin
 tcli get table $loan $loan collsyms
 
-tcli push action $loan setinitratio '["8,AMAX",30000]' -p $admin
+tcli push action $loan setsymratio '["8,AMAX",40000, 18000, 12000]' -p $admin
 tcli push action $loan setcollquant '["8,AMAX","1.00000000 AMAX", "10000.00000000 AMAX"]' -p $admin
 tcli push action $loan setcollquant '["8,MBTC","0.00100000 MBTC", "10.00000000 MBTC"]' -p $admin
 tcli push action $loan setcollquant '["8,METH","0.10000000 METH", "100.00000000 METH"]' -p $admin
@@ -97,11 +97,6 @@ tcli push action $loan sendtoearn '["100.000000 MUSDT"]' -p $loan
 tcli get table $loan $loan global
 tcli get table $proxy $proxy global
 tcli get table $earn $earn globalloan
-
-
-
-
-
 
 loan=tyche.l33
 admin=ad

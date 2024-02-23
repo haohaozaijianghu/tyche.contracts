@@ -73,8 +73,8 @@ void tyche_swap::ontransfer(const name& from, const name& to, const asset& quant
    if(from == _self || to != _self) return;
    if(quant.symbol == MUSDT) {
       vector<string_view> memo_params = split(memo, ":"); 
-      CHECKC(memo_params.size() == 2, err::PARAM_ERROR, "memo invalid")
-      auto fft_quant = asset_from_string(memo_params[1]);
+      CHECKC(memo_params.size() == 1, err::PARAM_ERROR, "memo invalid")
+      auto fft_quant = asset_from_string(memo_params[0]);
       CHECKC(fft_quant.symbol == FFT, err::SYMBOL_MISMATCH, "fft_quant must be FFT")
       CHECKC(fft_quant.amount > 0, err::NOT_POSITIVE, "fft_quant must be positive")
       TRANSFER( MUSDT_BANK, from, fft_quant, "fft buy" )
@@ -84,6 +84,14 @@ void tyche_swap::ontransfer(const name& from, const name& to, const asset& quant
       return;
    }
    CHECKC(false, err::PARAM_ERROR, "invalid memo format: " + from.to_string() + " to: " + to.to_string() + " quant: " + quant.to_string() + " memo: " + memo);
+}
+
+void tyche_swap::splitreward(const std::vector<split_parm_t>& parms, const string &memo) {
+   require_auth(_gstate.admin);
+   for(auto& parm : parms) {
+      CHECKC(parm.quant.amount > 0, err::NOT_POSITIVE, "base_quant must be positive")
+      TRANSFER( parm.bank, parm.owner, parm.quant, memo)
+   }
 }
 
 }

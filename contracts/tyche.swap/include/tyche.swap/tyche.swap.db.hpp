@@ -45,6 +45,12 @@ static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
 #define TBL struct [[eosio::table, eosio::contract("tyche.swap")]]
 #define NTBL(name) struct [[eosio::table(name), eosio::contract("tyche.swap")]]
 
+struct split_parm_t {
+    name        owner;
+    name        bank;
+    asset       quant;
+};
+
 NTBL("global") global_t {
     name                admin                   = "tyche.admin"_n;
     asset               lower_price             = asset(1, MUSDT);
