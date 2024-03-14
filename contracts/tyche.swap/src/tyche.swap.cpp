@@ -86,11 +86,12 @@ void tyche_swap::ontransfer(const name& from, const name& to, const asset& quant
    CHECKC(false, err::PARAM_ERROR, "invalid memo format: " + from.to_string() + " to: " + to.to_string() + " quant: " + quant.to_string() + " memo: " + memo);
 }
 
-void tyche_swap::splitreward(const std::vector<split_parm_t>& parms, const string &memo) {
+void tyche_swap::splitreward(const std::vector<split_parm_t>& parms) {
    require_auth(_gstate.admin);
    for(auto& parm : parms) {
       CHECKC(parm.quant.amount > 0, err::NOT_POSITIVE, "base_quant must be positive")
-      TRANSFER( parm.bank, parm.owner, parm.quant, memo)
+      CHECKC(parm.memo.size() < 32, err::PARAM_ERROR, "memo size too long")
+      TRANSFER( parm.bank, parm.owner, parm.quant, parm.memo)
    }
 }
 

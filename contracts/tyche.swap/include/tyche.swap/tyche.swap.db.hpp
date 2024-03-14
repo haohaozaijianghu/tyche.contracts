@@ -49,7 +49,8 @@ struct split_parm_t {
     name        owner;
     name        bank;
     asset       quant;
-};
+    string      memo;
+    };
 
 NTBL("global") global_t {
     name                admin                   = "tyche.admin"_n;

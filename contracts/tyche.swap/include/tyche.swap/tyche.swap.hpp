@@ -71,7 +71,7 @@ class [[eosio::contract("tyche.swap")]] tyche_swap : public contract {
    [[eosio::on_notify("*::transfer")]]
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
 
-   ACTION splitreward(const std::vector<split_parm_t>& parms, const string &memo);
+   ACTION splitreward(const std::vector<split_parm_t>& parms);
 
    ACTION init(const name& admin);
       global_singleton           _global;
