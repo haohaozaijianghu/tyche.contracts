@@ -155,23 +155,22 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
    total_unpaid_interest      += itr->unpaid_interest;
    CHECKC(total_unpaid_interest<= quant, err::OVERSIZED, "must pay more than interest")
    auto principal_repay_quant = quant - total_unpaid_interest;
-   auto avl_principal = itr->avl_principal;
-   if(principal_repay_quant > avl_principal) {
+   auto remain_avl_principal = itr->avl_principal;
+   if(principal_repay_quant > itr->avl_principal) {
       //打USDT给用户
-      auto  return_quant = principal_repay_quant - avl_principal;
+      auto  return_quant = principal_repay_quant - itr->avl_principal;
       TRANSFER( _gstate.loan_token.get_contract(), from, return_quant, TYPE_GIVE_CHANGE + ":"+ symbol_to_string(collateral_itr->sym.get_symbol()) );
-      avl_principal        = asset(0, avl_principal.symbol);
+      remain_avl_principal        = asset(0, remain_avl_principal.symbol);
    } else {
-      avl_principal         -= principal_repay_quant;
+      remain_avl_principal         -= principal_repay_quant;
    }
-
+   
    syms.modify(collateral_itr, _self, [&](auto& row){
-      row.avl_principal   -= avl_principal;
+      row.avl_principal   -= (itr->avl_principal - remain_avl_principal);
    });
 
-
    loaners.modify(itr, _self, [&](auto& row){
-      row.avl_principal          = avl_principal;
+      row.avl_principal          = remain_avl_principal;
       row.paid_interest          += total_unpaid_interest;
       row.unpaid_interest        = asset(0, total_unpaid_interest.symbol);
       row.term_settled_at        = eosio::current_time_point();
@@ -537,6 +536,17 @@ void tyche_loan::setcollquant(const symbol& sym, const asset& min_collateral_qua
       row.max_collateral_quant = max_collateral_quant;
    });
 }
+
+void tyche_loan::setcollavl(const symbol& sym, const asset& avl_principal){
+   require_auth(_gstate.admin);
+
+   auto syms = collateral_symbol_t::idx_t(_self, _self.value);
+   auto itr = syms.find(sym.code().raw());
+   syms.modify(itr, _self, [&](auto& row){
+      row.avl_principal = avl_principal;
+   });
+}
+
 
 void tyche_loan::addinterest(const uint64_t& interest_ratio) {
    require_auth(_gstate.admin);
