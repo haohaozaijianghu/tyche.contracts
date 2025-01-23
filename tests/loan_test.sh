@@ -9,10 +9,14 @@ tnew $loan
 tset $loan tyche.loan
 tcli set account permission $loan active --add-code
 
+tset $loan setcollavl '["8,AMAX", "10000.00000000 MUSDT"]' -p $admin
+tset $loan setcollavl '["8,METH", "404.667888 MUSDT"]' -p $admin
+
+
 proxy=proxy1
 # tnew $proxy
 tset $proxy tyche.proxy
-c
+
 
 earn=tyche.s312
 tset $earn tyche.earn

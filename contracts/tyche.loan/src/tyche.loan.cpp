@@ -183,6 +183,7 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
 //external: 获得更多的MUSDT
 void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const asset& quant){
    require_auth(from);
+   CHECKC( callat_sym != SYMBOL("AMAX",8) , err::STATUS_ERROR, "symbol not supported");
    CHECKC(quant.amount > 0, err::INCORRECT_AMOUNT, "amount must positive")
    auto syms = collateral_symbol_t::idx_t(_self, _self.value);
    auto itr = syms.find(callat_sym.code().raw());
@@ -542,6 +543,8 @@ void tyche_loan::setcollavl(const symbol& sym, const asset& avl_principal){
 
    auto syms = collateral_symbol_t::idx_t(_self, _self.value);
    auto itr = syms.find(sym.code().raw());
+   CHECKC(itr != syms.end(), err::RECORD_NOT_FOUND, "symbol not supported");
+   CHECKC(avl_principal.symbol == itr->avl_principal.symbol, err::SYMBOL_MISMATCH, "symbol not supported");
    syms.modify(itr, _self, [&](auto& row){
       row.avl_principal = avl_principal;
    });
