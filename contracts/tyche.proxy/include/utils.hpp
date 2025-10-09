@@ -7,6 +7,7 @@
 #include <eosio/asset.hpp>
 
 #include "safe.hpp"
+#include "errno.h"
 
 using namespace std;
 
@@ -85,19 +86,18 @@ string_view trim(string_view sv) {
     return sv;
 }
 
-vector<string_view> split(string_view str, string_view delims = " ")
-{
-    vector<string_view> res;
-    std::size_t current, previous = 0;
-    current = str.find_first_of(delims);
-    while (current != std::string::npos) {
-        res.push_back(trim(str.substr(previous, current - previous)));
-        previous = current + 1;
-        current = str.find_first_of(delims, previous);
+std::vector<std::string> split(const std::string& s, const std::string& delimiter) {
+    std::vector<std::string> result;
+    size_t pos_start = 0, pos_end;
+    auto delim_len = delimiter.length();
+    while ((pos_end = s.find(delimiter, pos_start)) != std::string::npos) {
+        result.emplace_back(s.substr(pos_start, pos_end - pos_start));
+        pos_start = pos_end + delim_len;
     }
-    res.push_back(trim(str.substr(previous, current - previous)));
-    return res;
+    result.emplace_back(s.substr(pos_start));
+    return result;
 }
+
 
 bool starts_with(string_view sv, string_view s) {
     return sv.size() >= s.size() && sv.compare(0, s.size(), s) == 0;

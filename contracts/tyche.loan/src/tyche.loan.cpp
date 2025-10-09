@@ -1,11 +1,10 @@
 #include <tyche.loan/tyche.loan.hpp>
 #include <tyche.reward/tyche.reward.hpp>
-#include <amax.token.hpp>
-#include <aplink.farm/aplink.farm.hpp>
+#include <flon.token.hpp>
 
 #include "safemath.hpp"
 #include <utils.hpp>
-// #include <eosiolib/time.hpp> 
+// #include <eosiolib/time.hpp>
 #include <eosio/time.hpp>
 #include<tyche.reward/tyche.reward.db.hpp>
 #include<tyche.loan.utils.hpp>
@@ -24,23 +23,14 @@ using namespace wasm::safemath;
      { tyche_loan::notifytranfer_action act{ _self, { {_self, active_perm} } };\
 	        act.send( from, to, quants, memo );}
 
-
-#define ALLOT_APPLE(farm_contract, lease_id, to, quantity, memo) \
-    {   aplink::farm::allot_action(farm_contract, { {_self, active_perm} }).send( \
-            lease_id, to, quantity, memo );}
-
-#define ADD_ISSUE(contract, receiver, ido_id, quantity) \
-    {	custody::add_issue_action act{ contract, { {_self, active_permission} } };\
-            act.send( receiver, ido_id, quantity );}
-
 #define CHECKC(exp, code, msg) \
    { if (!(exp)) eosio::check(false, string("[[") + to_string((int)code) + string("]] ") + msg); }
 
-   inline int64_t get_precision(const symbol &s) {
-      int64_t digit = s.precision();
-      CHECK(digit >= 0 && digit <= 18, "precision digit " + std::to_string(digit) + " should be in range[0,18]");
-      return calc_precision(digit);
-   }
+inline int64_t get_precision(const symbol &s) {
+   int64_t digit = s.precision();
+   CHECK(digit >= 0 && digit <= 18, "precision digit " + std::to_string(digit) + " should be in range[0,18]");
+   return calc_precision(digit);
+}
 
 inline int64_t get_precision(const asset &a) {
    return get_precision(a.symbol);
@@ -96,6 +86,7 @@ void tyche_loan::initoracle(const name& price_oracle_contract) {
  *       2) meth:
  */
 void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant, const string& memo) {
+
    CHECKC(_gstate.enabled, err::PAUSED, "not effective yet");
    CHECKC( from != to, err::ACCOUNT_INVALID, "cannot transfer to self" );
 
@@ -103,7 +94,7 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
    auto token_bank = get_first_receiver();
 
    //MUSDT
-   if( quant.symbol == _gstate.loan_token.get_symbol() && token_bank == _gstate.loan_token.get_contract() ) { 
+   if( quant.symbol == _gstate.loan_token.get_symbol() && token_bank == _gstate.loan_token.get_contract() ) {
       if( from == _gstate.lp_refueler || from == _gstate.tyche_proxy_contract ){
          _gstate.total_principal_quant += quant;
          _gstate.avl_principal_quant   += quant;
@@ -139,7 +130,7 @@ void tyche_loan::setavlprncpl(const asset &quant){
 //赎回抵押物，用户打入MUSDT
 //internal call
 void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, const asset& quant ){
-   
+
    loaner_t::tbl_t loaners(_self, _get_lower(collateral_sym).value);
    auto itr = loaners.find(from.value);
    CHECKC(itr != loaners.end(),           err::RECORD_NOT_FOUND,  "account not existed")
@@ -164,7 +155,7 @@ void tyche_loan::_on_pay_musdt( const name& from, const symbol& collateral_sym, 
    } else {
       remain_avl_principal         -= principal_repay_quant;
    }
-   
+
    syms.modify(collateral_itr, _self, [&](auto& row){
       row.avl_principal   -= (itr->avl_principal - remain_avl_principal);
    });
@@ -200,13 +191,13 @@ void tyche_loan::getmoreusdt(const name& from, const symbol& callat_sym, const a
    auto total_principal = loaner_itr->avl_principal + loaner_itr->unpaid_interest + total_interest + quant;
    auto ratio = get_callation_ratio(loaner_itr->avl_collateral_quant, total_principal, itr->oracle_sym_name);
    CHECKC( ratio >= itr->liquidation_ratio, err::RATE_EXCEEDED, "callation ratio exceeded: "+ to_string(ratio) +
-            "loaner_itr->avl_collateral_quant: " + loaner_itr->avl_collateral_quant.to_string() + 
+            "loaner_itr->avl_collateral_quant: " + loaner_itr->avl_collateral_quant.to_string() +
             "total_principal: " + total_principal.to_string() )
-   //打USDT给用户 
-   TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_LEND + ":" + symbol_to_string(itr->sym.get_symbol()) + 
-                     ":" + "principal," +loaner_itr->avl_principal.to_string() + "," + "interest," + total_interest.to_string() + "," 
+   //打USDT给用户
+   TRANSFER( _gstate.loan_token.get_contract(), from, quant, TYPE_LEND + ":" + symbol_to_string(itr->sym.get_symbol()) +
+                     ":" + "principal," +loaner_itr->avl_principal.to_string() + "," + "interest," + total_interest.to_string() + ","
                   + "unpaid_interest," + loaner_itr->unpaid_interest.to_string() +  ", "
-                     "term_settled_at:" + to_string(loaner_itr->term_settled_at.sec_since_epoch()) + 
+                     "term_settled_at:" + to_string(loaner_itr->term_settled_at.sec_since_epoch()) +
                      ",end_at:" + to_string(time_point_sec(eosio::current_time_point()).sec_since_epoch()))
    //更新用户的MUSDT + )
    loaner.modify(loaner_itr, _self, [&](auto& row){
@@ -309,7 +300,7 @@ void tyche_loan::onsubcallat( const name& from, const asset& quant ) {
       ratio = get_callation_ratio(remain_collateral_quant, itr->avl_principal, sym_itr->oracle_sym_name );
       CHECKC( ratio >= sym_itr->liquidation_ratio, err::RATE_EXCEEDED, "callation ratio exceeded" )
    }
-   
+
    loaners.modify(itr, _self, [&](auto& row){
       row.avl_collateral_quant = remain_collateral_quant;
    });
@@ -382,7 +373,7 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
 
    collateral_quant = loaner_itr->avl_collateral_quant;
    principal_quant  = loaner_itr->avl_principal;
-      
+
    asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->term_settled_at, eosio::current_time_point());
    asset need_pay_interest = loaner_itr->unpaid_interest + total_interest;
    asset need_settle_quant = loaner_itr->avl_principal + need_pay_interest;
@@ -404,12 +395,12 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
          liquidator_pay_usdt_quant = max_paid_quant;
       }
 
-      //按当前价格的97% 结算给用户 
+      //按当前价格的97% 结算给用户
       auto return_collateral_quant = calc_collateral_quant(loaner_itr->avl_collateral_quant, liquidator_pay_usdt_quant, itr->oracle_sym_name, settle_price);
       //把抵押物转给协议平仓的人
-      TRANSFER( itr->sym.get_contract(), from, return_collateral_quant, TYPE_BUY + ":" + symbol_to_string(itr->sym.get_symbol()) + ":" + "principal," +loaner_itr->avl_principal.to_string() + "," + "interest," + total_interest.to_string() + "," 
+      TRANSFER( itr->sym.get_contract(), from, return_collateral_quant, TYPE_BUY + ":" + symbol_to_string(itr->sym.get_symbol()) + ":" + "principal," +loaner_itr->avl_principal.to_string() + "," + "interest," + total_interest.to_string() + ","
                   + "unpaid_interest," + loaner_itr->unpaid_interest.to_string() +  ", "
-                     "term_settled_at:" + to_string(loaner_itr->term_settled_at.sec_since_epoch()) + 
+                     "term_settled_at:" + to_string(loaner_itr->term_settled_at.sec_since_epoch()) +
                      ",end_at:" + to_string(time_point_sec(eosio::current_time_point()).sec_since_epoch()));
       //平台内结算
       //添加平台金额
@@ -423,10 +414,10 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
       NOTIFY_TRANSFER_ACTION(liquidator, _self, paid_principal, TYPE_SEND_BACK_INTERNAL_LIQ  +":" + symbol_to_string(itr->sym.get_symbol()) );
 
       //通知转账消息用户MUSDT -> 平台
-      NOTIFY_TRANSFER_ACTION(liquidator, _self, return_collateral_quant, TYPE_LIQUIDATE_INTERNAL + ":"+ symbol_to_string(itr->sym.get_symbol())); 
+      NOTIFY_TRANSFER_ACTION(liquidator, _self, return_collateral_quant, TYPE_LIQUIDATE_INTERNAL + ":"+ symbol_to_string(itr->sym.get_symbol()));
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_collateral_quant   -= return_collateral_quant;              //减少抵押物
-         row.avl_principal          -= paid_principal; 
+         row.avl_principal          -= paid_principal;
          row.unpaid_interest        = asset(0, _gstate.loan_token.get_symbol());
          row.paid_interest          += need_pay_interest;
          row.term_settled_at        = eosio::current_time_point();
@@ -434,15 +425,15 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
 
       _gstate.total_interest_quant += need_pay_interest;
 
-      name        liqtype                    = "liq"_n;                //清算类型: liq: 清算 | forceliq:强平 
+      name        liqtype                    = "liq"_n;                //清算类型: liq: 清算 | forceliq:强平
       name        owner                      = from;
       asset       paid_collateral_quant      = return_collateral_quant;  //支付抵押物的个数
       asset       paid_principal_quant       = quant;   //支付的金额
       //支付的利息 need_pay_interest
-      liqlog_t liqlog = {_global_state->new_liqlog_id(), 
+      liqlog_t liqlog = {_global_state->new_liqlog_id(),
          liqtype, owner, liquidator,
-         collateral_quant, paid_collateral_quant, 
-         principal_quant, paid_principal_quant, 
+         collateral_quant, paid_collateral_quant,
+         principal_quant, paid_principal_quant,
          current_price, settle_price,
          need_pay_interest, platform_quant,
          ratio, eosio::current_time_point()};
@@ -459,23 +450,23 @@ void tyche_loan::_liquidate( const name& from, const name& liquidator, const sym
          row.avl_force_principal          += loaner_itr->avl_principal;
       });
 
-      name        liqtype                    = "forceliq"_n;            //清算类型: liq: 清算 | forceliq:强平 
+      name        liqtype                    = "forceliq"_n;            //清算类型: liq: 清算 | forceliq:强平
       name        owner                      = from;
-      liqlog_t liqlog = {_global_state->new_liqlog_id(),  
+      liqlog_t liqlog = {_global_state->new_liqlog_id(),
          liqtype, owner, liquidator,
-         collateral_quant, collateral_quant, 
-         principal_quant, principal_quant, 
+         collateral_quant, collateral_quant,
+         principal_quant, principal_quant,
          current_price, current_price,
          need_pay_interest, asset(0, quant.symbol),
          ratio, eosio::current_time_point()};
          //通知转账消息用户METH -> 平台
       NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE_INTRENAL + ":" + symbol_to_string(itr->sym.get_symbol()));
       //通知转账消息用户MUSDT -> 平台
-      NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_principal, TYPE_SEND_BACK_INTERNAL_CLOSE+ ":" + symbol_to_string(itr->sym.get_symbol())+ ":" + TYPE_SEND_BACK); 
+      NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_principal, TYPE_SEND_BACK_INTERNAL_CLOSE+ ":" + symbol_to_string(itr->sym.get_symbol())+ ":" + TYPE_SEND_BACK);
       //直接没收抵押物
       loaner.modify(loaner_itr, _self, [&](auto& row){
          row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
-         row.avl_principal          = asset(0, _gstate.loan_token.get_symbol()); 
+         row.avl_principal          = asset(0, _gstate.loan_token.get_symbol());
          row.unpaid_interest        = asset(0, _gstate.loan_token.get_symbol());
          row.paid_interest          += need_pay_interest;
          row.term_settled_at        = eosio::current_time_point();
@@ -510,6 +501,7 @@ void tyche_loan::setcallatsym(const extended_symbol& sym, const name& oracle_sym
    } else {
       syms.modify(itr, _self, [&](auto& row){
          row.sym = sym;
+         row.oracle_sym_name = oracle_sym_name;
          row.on_shelf = true;
       });
    }
@@ -561,13 +553,13 @@ void tyche_loan::addinterest(const uint64_t& interest_ratio) {
       interests.modify(first_itr, _self, [&](auto& row){
          row.ended_at = eosio::current_time_point();
       });
-   } 
+   }
    interests.emplace(_self, [&](auto& row){
       row.interest_ratio   = interest_ratio;
       row.begin_at         = eosio::current_time_point();
       row.ended_at         = eosio::current_time_point() + eosio::days(365*10);
    });
- 
+
 }
 
 void tyche_loan::setliqpratio(const uint64_t& liquidation_price_ratio){
@@ -580,7 +572,7 @@ uint64_t tyche_loan::_get_current_interest_ratio() {
 
    auto interests = interest_t::tbl_t(_self, _self.value);
    auto first_itr =  interests.begin();
-   CHECKC( first_itr != interests.end(), err::RECORD_NOT_FOUND, "not validate interest"); 
+   CHECKC( first_itr != interests.end(), err::RECORD_NOT_FOUND, "not validate interest");
    return first_itr->interest_ratio;
 }
 
@@ -589,7 +581,7 @@ uint64_t tyche_loan::_get_current_interest_ratio() {
 //    CHECKC(false, err::SYSTEM_ERROR, "interest: " + interest.to_string() );
 // }
 
-asset tyche_loan::_get_dynamic_interest( const asset& quant, 
+asset tyche_loan::_get_dynamic_interest( const asset& quant,
                                           const time_point_sec& time_start, const time_point_sec& time_end){
    auto interests = interest_t::tbl_t(_self, _self.value);
    auto beg_itr   = interests.begin();
@@ -608,7 +600,7 @@ asset tyche_loan::_get_dynamic_interest( const asset& quant,
    return interest;
 }
 
-asset tyche_loan::_get_interest(const asset& quant, const uint64_t& interest_ratio, 
+asset tyche_loan::_get_interest(const asset& quant, const uint64_t& interest_ratio,
                                  const time_point_sec& started_at, const time_point_sec& ended_at) {
       auto elapsed =  (ended_at - started_at);
       auto elapsed_seconds = elapsed.count() / 1000000;
@@ -629,7 +621,7 @@ void tyche_loan::forceliq( const name& from, const name& liquidator, const symbo
    CHECKC(loaner_itr != loaner.end(), err::RECORD_NOT_FOUND, "account not existed");
    auto collateral_quant = loaner_itr->avl_collateral_quant;
    auto principal_quant  = loaner_itr->avl_principal;
-      
+
    asset total_interest = _get_dynamic_interest(loaner_itr->avl_principal, loaner_itr->term_settled_at, eosio::current_time_point() );
    asset need_pay_interest = loaner_itr->unpaid_interest + total_interest;
    asset need_settle_quant = loaner_itr->avl_principal + need_pay_interest;
@@ -643,14 +635,14 @@ void tyche_loan::forceliq( const name& from, const name& liquidator, const symbo
    });
    auto price           = get_index_price( itr->oracle_sym_name );
    auto current_price   = asset( price, itr->avl_principal.symbol );
-   
-   name        liqtype                    = "forceliq"_n;                //清算类型: liq: 清算 | forceliq:强平 
+
+   name        liqtype                    = "forceliq"_n;                //清算类型: liq: 清算 | forceliq:强平
    name        owner                      = from;
 
-   liqlog_t liqlog = {_global_state->new_liqlog_id(),  
+   liqlog_t liqlog = {_global_state->new_liqlog_id(),
       liqtype, owner, liquidator,
-      collateral_quant, collateral_quant, 
-      principal_quant, principal_quant, 
+      collateral_quant, collateral_quant,
+      principal_quant, principal_quant,
       current_price, current_price,
       need_pay_interest, asset(0, itr->avl_principal.symbol),
       ratio, eosio::current_time_point()};
@@ -658,11 +650,11 @@ void tyche_loan::forceliq( const name& from, const name& liquidator, const symbo
    //通知转账消息用户METH -> 平台
    NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_collateral_quant, TYPE_FORCECLOSE_INTRENAL + ":" + symbol_to_string(itr->sym.get_symbol()));
    //通知转账消息用户MUSDT -> 平台
-   NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_principal, TYPE_SEND_BACK_INTERNAL_CLOSE + ":" + symbol_to_string(itr->sym.get_symbol())); 
+   NOTIFY_TRANSFER_ACTION(liquidator, _self, loaner_itr->avl_principal, TYPE_SEND_BACK_INTERNAL_CLOSE + ":" + symbol_to_string(itr->sym.get_symbol()));
    //直接没收抵押物
    loaner.modify(loaner_itr, _self, [&](auto& row){
       row.avl_collateral_quant   = asset(0, itr->sym.get_symbol());              //减少抵押物
-      row.avl_principal          = asset(0, _gstate.loan_token.get_symbol()); 
+      row.avl_principal          = asset(0, _gstate.loan_token.get_symbol());
       row.unpaid_interest        = asset(0, _gstate.loan_token.get_symbol());
       row.paid_interest          += need_pay_interest;
       row.term_settled_at        = eosio::current_time_point();

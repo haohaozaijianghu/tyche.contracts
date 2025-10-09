@@ -17,10 +17,6 @@ using std::vector;
 using namespace eosio;
 using namespace wasm::db;
 
-static constexpr name      SYS_BANK    = "amax.token"_n;
-static constexpr symbol    AMAX        = symbol(symbol_code("AMAX"), 8);
-static constexpr name      CNYD_BANK   = "cnyd.token"_n;
-static constexpr symbol    CNYD        = symbol(symbol_code("CNYD"), 4);
 static constexpr uint16_t  PCT_BOOST   = 10000;
 static constexpr uint64_t  DAY_SECONDS = 24 * 60 * 60;
 static constexpr uint64_t  YEAR_DAYS   = 365;
@@ -53,7 +49,7 @@ enum class err: uint8_t {
 };
 
 /**
- * The `tyche.reward` sample system contract defines the structures and actions that allow users to create, issue, and manage tokens for AMAX based blockchains. It demonstrates one way to implement a smart contract which allows for creation and management of tokens. It is possible for one to create a similar contract which suits different needs. However, it is recommended that if one only needs a token with the below listed actions, that one uses the `tyche.reward` contract instead of developing their own.
+ * The `tyche.reward` sample system contract defines the structures and actions that allow users to create, issue, and manage tokens for FLON based blockchains. It demonstrates one way to implement a smart contract which allows for creation and management of tokens. It is possible for one to create a similar contract which suits different needs. However, it is recommended that if one only needs a token with the below listed actions, that one uses the `tyche.reward` contract instead of developing their own.
  *
  * The `tyche.reward` contract class also implements two useful public static methods: `get_supply` and `get_balance`. The first allows one to check the total supply of a specified token, created by an account and the second allows one to check the balance of a token for a specified account (the token creator account has to be specified as well).
  *
@@ -82,7 +78,7 @@ class [[eosio::contract("tyche.reward")]] tyche_reward : public contract {
 
    //提取利息
    ACTION claimintr( const name& to, const name& bank, const asset& total_interest, const string& memo);
-   
+
    ACTION init(const name& refueler_account, const name& tyche_earn_contract, const bool& enabled);
 
    ACTION onpoolstart();

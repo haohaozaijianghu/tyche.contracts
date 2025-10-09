@@ -27,14 +27,13 @@ static constexpr uint64_t  YEAR_SECONDS      = 24 * 60 * 60 * 365;
 static constexpr uint64_t  YEAR_DAYS         = 365;
 static constexpr int128_t  HIGH_PRECISION    = 1'000'000'000'000'000'000; // 10^18
 
-static constexpr name       MUSDT_BANK       = "amax.mtoken"_n;
-static constexpr symbol     MUSDT            = symbol(symbol_code("MUSDT"), 6);
+static constexpr name       MUSDT_BANK       = "flon.mtoken"_n;
+static constexpr symbol     MUSDT            = symbol(symbol_code("USDT"), 6);
 static constexpr name       TRUSD_BANK       = "tyche.token"_n;
 static constexpr symbol     TRUSD            = symbol(symbol_code("TRUSD"), 6);
 static constexpr name       TYCHE_BANK       = "tyche.token"_n;
 static constexpr symbol     TYCHE            = symbol(symbol_code("TYCHE"), 8);
-static constexpr name       APLINK_BANK      = "aplink.token"_n ;
-static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
+
 // static constexpr name       INTEREST         = "interest"_n ;
 // static constexpr name       REDPACK          = "redpack"_n ;
 
@@ -44,38 +43,30 @@ static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
 #define TBL struct [[eosio::table, eosio::contract("tyche.earn")]]
 #define NTBL(name) struct [[eosio::table(name), eosio::contract("tyche.earn")]]
 
-
-struct aplink_farm {
-    name contract           = "aplink.farm"_n;
-    uint64_t lease_id       = 12;                        
-    asset unit_reward       = asset(1, symbol("APL", 4));
-};
-
 NTBL("global") global_t {
     name                admin                   = "tyche.admin"_n;
     name                lp_refueler             = "tyche.admin"_n;                          //LP TRUSD系统充入账户
-    name                reward_contract         = "tyche.reward"_n;
+    name                reward_contract         = "tycreward111"_n;
 
     extended_symbol     principal_token         = extended_symbol(MUSDT,  MUSDT_BANK);      //代币MUSDT,用户存入的本金
     extended_symbol     lp_token                = extended_symbol(TRUSD,  TRUSD_BANK);      //代币TRUSD
-    asset               min_deposit_amount      = asset(10'000000, MUSDT);                  //10 MU 
- 
+    asset               min_deposit_amount      = asset(10'000000, MUSDT);                  //10 MU
+
     uint64_t            tyche_farm_ratio        = 10;                                       //每100MUSDT 奖励0.1TYCHE
     uint64_t            tyche_farm_lock_ratio   = 90;                                       //每100MUSDT 锁仓0.9TYCHE
     uint64_t            tyche_reward_pool_code  = 5;
 
-    aplink_farm         apl_farm;
-    bool                enabled                 = true; 
+    bool                enabled                 = true;
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(reward_contract)
                                 (principal_token)(lp_token)(min_deposit_amount)
                                 (tyche_farm_ratio)(tyche_farm_lock_ratio)(tyche_reward_pool_code)
-                                (apl_farm)(enabled) )
+                                (enabled) )
 };
 typedef eosio::singleton< "global"_n, global_t > global_singleton;
 
 NTBL("globalloan") globalloan_t {
-    name      tyche_proxy_contract      = "tyche.proxy"_n;
+    name      tyche_proxy_contract      = "tycheproxy11"_n;
     asset     loan_quant                = asset(0, MUSDT);
 
     EOSLIB_SERIALIZE( globalloan_t, (tyche_proxy_contract)(loan_quant))
@@ -83,8 +74,8 @@ NTBL("globalloan") globalloan_t {
 typedef eosio::singleton< "globalloan"_n, globalloan_t > globalloan_singleton;
 
 //E.g. MUSDT, MBTC,HSTZ,MUSDT
-struct earn_pool_reward_st {                             
-    uint64_t        reward_id;                          //increase upon every reward distribution                                 
+struct earn_pool_reward_st {
+    uint64_t        reward_id;                          //increase upon every reward distribution
     asset           total_rewards;                      //总奖励 = unalloted_rewards + unclaimed_rewards + claimed_rewards
     asset           last_rewards;                       //上一次总奖励金额
     asset           unalloted_rewards;                  //未分配的奖励(admin)
@@ -100,14 +91,14 @@ using earn_pool_reward_map = std::map<eosio::symbol, earn_pool_reward_st>;
 //Scope: _self
 TBL earn_pool_t {
     uint64_t                code;                                           //PK: 1,2,3,4,5
-    uint64_t                term_interval_sec       = DAY_SECONDS;          //入池锁仓时长秒: x 1, 30, 90, 180, 360 
+    uint64_t                term_interval_sec       = DAY_SECONDS;          //入池锁仓时长秒: x 1, 30, 90, 180, 360
     uint64_t                share_multiplier        = 1;
 
     asset                   cum_principal           = asset(0, MUSDT);      //历史总存款金额（本金）
     asset                   avl_principal           = asset(0, MUSDT);      //剩余存款金额（本金）
     earn_pool_reward_st     interest_reward;                                //利息信息, E.g. 3% APY, triggered
     earn_pool_reward_map    airdrop_rewards;                                //manually airdropped rewards, including MUSDT etc types
-    
+
     bool                    on_shelf                = true;
     time_point_sec          created_at;
 
@@ -126,7 +117,7 @@ struct earner_reward_st {
     int128_t            last_reward_per_share       = 0;
     asset               unclaimed_rewards;
     asset               claimed_rewards;            //每个池子，每一个期间领取的奖励
-    asset               total_claimed_rewards;          
+    asset               total_claimed_rewards;
 };
 
 using earner_reward_map = std::map<eosio::symbol/*symbol code*/, earner_reward_st>;
@@ -140,7 +131,7 @@ TBL earner_t {
 
     earner_reward_st    interest_reward;                //利息信息
     earner_reward_map   airdrop_rewards;                //每票已分配奖励
-   
+
     time_point_sec      term_started_at;                //利息周期开始时间一旦有钱充入进来，周期从当前时间开始
     time_point_sec      term_ended_at;                  //利息周期结束时间
     time_point_sec      created_at;
@@ -227,7 +218,7 @@ struct global_state: public globalidx {
             }
         }
     private:
-        std::unique_ptr<global_table> _global_tbl;  
+        std::unique_ptr<global_table> _global_tbl;
 };
 
 } //namespace tychefi

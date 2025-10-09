@@ -64,16 +64,16 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
       _gloan = _globalloan.exists()? _globalloan.get() : globalloan_t{};
     }
 
-    ~tyche_earn() { 
+    ~tyche_earn() {
       _global.set( _gstate, get_self() );
       _global_state->save(get_self());
       _globalloan.set( _gloan, get_self() );
-      
+
    }
 
    [[eosio::on_notify("*::transfer")]]
    void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
-   
+
    //inline action call by tyche.reward
    ACTION refuelreward( const name& token_bank, const asset& total_rewards, const uint64_t& seconds, const uint64_t& pool_conf_code );
    ACTION refuelintrst( const name& token_bank, const asset& total_rewards, const uint64_t& seconds );
@@ -82,7 +82,7 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
    ACTION claimrewards( const name& from );
 
    ACTION claimreward( const name& from, const std::string& sym);
-   
+
    //admin
    ACTION addrewardsym(const extended_symbol& sym);
    ACTION setmindepamt(const asset& quant);
@@ -90,20 +90,17 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
    ACTION setpool(const uint64_t& code, const uint64_t& term_interval_sec, const uint64_t& share_multiplier);
 
    ACTION updateexpiry(const uint64_t& code, const name& owner);
-   
+
    ACTION init(const name& admin, const name& reward_contract, const name& lp_refueler, const bool& enabled);
    ACTION initloaninfo(const name& tyche_proxy_contract);
-   
-   ACTION onshelfsym(const extended_symbol& sym, const bool& on_shelf);
 
-   ACTION setaplconf(const uint64_t& lease_id, const asset& unit_reward);
+   ACTION onshelfsym(const extended_symbol& sym, const bool& on_shelf);
 
    ACTION settychepct(const uint64_t& tyche_farm_ratio, const uint64_t& tyche_farm_lock_ratio);
 
    ACTION sendtoloan(const asset& quant);
 
    private:
-      void _apl_reward(const name& from, const asset& quant, const uint64_t& term_code);
       bool _claim_pool_rewards(const name& from, const uint64_t& term_code, const bool& term_end_flag );
       bool _claim_pool_rewards_by_symbol(const name& from, const uint64_t& term_code, const symbol& reward_symbol, const bool& term_end_flag );
 
@@ -120,7 +117,7 @@ class [[eosio::contract("tyche.earn")]] tyche_earn : public contract {
       void ondeposit( const name& from, const uint64_t& term_code, const asset& quant );
 
       void refuelreward_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds);
-         
+
       void refuelreward_to_pool( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code );
 
       global_singleton           _global;

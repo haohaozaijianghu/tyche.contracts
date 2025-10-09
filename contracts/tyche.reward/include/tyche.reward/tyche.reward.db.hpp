@@ -20,10 +20,8 @@ namespace tychefi {
 using namespace std;
 using namespace eosio;
 
-static constexpr name      MUSDT_BANK       = "amax.mtoken"_n;
-static constexpr symbol    MUSDT            = symbol(symbol_code("MUSDT"), 6);
-static constexpr name      TRUSD_BANK       = "amax.mtoken"_n;
-static constexpr symbol    TRUSD            = symbol(symbol_code("TRUSD"), 6);
+static constexpr name      MUSDT_BANK       = "flon.mtoken"_n;
+static constexpr symbol    MUSDT            = symbol(symbol_code("USDT"), 6);
 #define HASH256(str) sha256(const_cast<char*>(str.c_str()), str.size())
 
 #define TBL struct [[eosio::table, eosio::contract("tyche.reward")]]
@@ -31,14 +29,14 @@ static constexpr symbol    TRUSD            = symbol(symbol_code("TRUSD"), 6);
 
 NTBL("global") global_t {
     name                refueler_account            = "tyche.admin"_n;
-    name                tyche_earn_contract         = "tyche.earn"_n;
+    name                tyche_earn_contract         = "tyche.earn11"_n;
     asset               total_interest_quant        = asset(0, MUSDT);      //已打入的利息
     asset               allocated_interest_quant    = asset(0, MUSDT);      //根据年化已分配的利息
     asset               redeemed_interest_quant     = asset(0, MUSDT);      //已领取的利息
     time_point_sec      interest_splitted_at;                               //利息周期结束时间
     uint64_t            annual_interest_rate        = 300;               // 300
     bool                enabled;
- 
+
     EOSLIB_SERIALIZE( global_t, (refueler_account)(tyche_earn_contract)
                                 (total_interest_quant)(allocated_interest_quant)(redeemed_interest_quant)
                                 (interest_splitted_at)(annual_interest_rate)
@@ -53,7 +51,7 @@ TBL reward_t {
     asset               allocated_reward_quant;     //已分配奖励
     asset               redeemed_reward_quant;      //已领取奖励
     name                bank;                       //奖励代币银行
-    string              memo;                       //奖励备注      
+    string              memo;                       //奖励备注
     time_point_sec      rewarded_at;                //创建时间
     time_point_sec      updated_at;                 //更新时间
     reward_t() {}

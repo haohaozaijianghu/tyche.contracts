@@ -1,11 +1,10 @@
 #include <tyche.earn/tyche.earn.hpp>
 #include <tyche.reward/tyche.reward.hpp>
-#include <amax.token.hpp>
-#include <aplink.farm/aplink.farm.hpp>
+#include <flon.token.hpp>
 
 #include "safemath.hpp"
 #include <utils.hpp>
-// #include <eosiolib/time.hpp> 
+// #include <eosiolib/time.hpp>
 #include <eosio/time.hpp>
 #include<tyche.reward/tyche.reward.db.hpp>
 
@@ -15,22 +14,14 @@ namespace tychefi {
 using namespace std;
 using namespace wasm::safemath;
 
-#define ALLOT_APPLE(farm_contract, lease_id, to, quantity, memo) \
-    {   aplink::farm::allot_action(farm_contract, { {_self, active_perm} }).send( \
-            lease_id, to, quantity, memo );}
-
-#define ADD_ISSUE(contract, receiver, ido_id, quantity) \
-    {	custody::add_issue_action act{ contract, { {_self, active_permission} } };\
-            act.send( receiver, ido_id, quantity );}
-
 #define CHECKC(exp, code, msg) \
    { if (!(exp)) eosio::check(false, string("[[") + to_string((int)code) + string("]] ") + msg); }
 
-   inline int64_t get_precision(const symbol &s) {
-      int64_t digit = s.precision();
-      CHECK(digit >= 0 && digit <= 18, "precision digit " + std::to_string(digit) + " should be in range[0,18]");
-      return calc_precision(digit);
-   }
+inline int64_t get_precision(const symbol &s) {
+   int64_t digit = s.precision();
+   CHECK(digit >= 0 && digit <= 18, "precision digit " + std::to_string(digit) + " should be in range[0,18]");
+   return calc_precision(digit);
+}
 
 inline int64_t get_precision(const asset &a) {
    return get_precision(a.symbol);
@@ -84,7 +75,7 @@ void tyche_earn::ontransfer(const name& from, const name& to, const asset& quant
       if(from == _gstate.lp_refueler) //充入TRUSD到合约
          return;
 
-      vector<string_view> params = split(memo, ":");
+      auto params = split(memo, ":");
       CHECKC( params.size() == 2 && params[0] == "redeem", err::MEMO_FORMAT_ERROR, "redeem memo format error" )
 
       //用户提取奖励和本金
@@ -99,7 +90,7 @@ void tyche_earn::ontransfer(const name& from, const name& to, const asset& quant
       return;
    }
 
-   vector<string_view> params = split(memo, ":");
+   auto params = split(memo, ":");
    //用户充入本金
    if(params.size() == 2 && params[0] == "deposit" && quant.symbol == _gstate.principal_token.get_symbol()) {
       auto term_code = (uint64_t) stoi(string(params[1]));
@@ -122,7 +113,7 @@ void tyche_earn::refuelreward( const name& token_bank, const asset& total_reward
       refuelreward_to_pool(token_bank, total_rewards, seconds, pool_conf_code);
 }
 
-void tyche_earn::refuelintrst( const name& token_bank, const asset& total_rewards, const uint64_t& seconds){ 
+void tyche_earn::refuelintrst( const name& token_bank, const asset& total_rewards, const uint64_t& seconds){
    require_auth(_gstate.reward_contract);
    CHECKC( token_bank == MUSDT_BANK, err::RECORD_NOT_FOUND, "bank not equal" )
    auto now             = time_point_sec(current_time_point());
@@ -132,7 +123,7 @@ void tyche_earn::refuelintrst( const name& token_bank, const asset& total_reward
 
    uint64_t total_share = 0;
    while( pool_itr != pools.end()) {
-      if(pool_itr->on_shelf) 
+      if(pool_itr->on_shelf)
          total_share += pool_itr->share_multiplier * pool_itr->avl_principal.amount;
       pool_itr++;
    }
@@ -147,7 +138,7 @@ void tyche_earn::refuelintrst( const name& token_bank, const asset& total_reward
       auto new_reward_id = _global_state->new_reward_id();
       if( rewards.amount > 0) {
          auto last_reward = pool_itr->interest_reward;
-         
+
          pools.modify( pool_itr, _self, [&]( auto& c ) {
             last_reward.reward_id                     = new_reward_id;
             last_reward.total_rewards                 += rewards;
@@ -162,7 +153,7 @@ void tyche_earn::refuelintrst( const name& token_bank, const asset& total_reward
       }
       pool_itr++;
    }
-   
+
 }
 
 void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& total_rewards, const uint64_t& seconds,const uint64_t& pool_conf_code ){
@@ -178,8 +169,8 @@ void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& tota
    CHECKC( pool_itr->on_shelf, err::RECORD_NOT_FOUND, "save plan not on_shelf" )
 
    pools.modify( pool_itr, _self, [&]( auto& c ) {
-   
-         
+
+
          auto count =  c.airdrop_rewards.count(total_rewards.symbol);
          if(count == 0 ){
             auto reward =   earn_pool_reward_st();
@@ -189,7 +180,7 @@ void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& tota
             reward.unalloted_rewards               = total_rewards;
             reward.unclaimed_rewards               = asset(0, total_rewards.symbol);
             reward.claimed_rewards                 = asset(0, total_rewards.symbol);
-            reward.last_reward_per_share           = 0; 
+            reward.last_reward_per_share           = 0;
             reward.reward_per_share                = calc_reward_per_share_delta(total_rewards, pool_itr->avl_principal);
             reward.prev_reward_added_at            = current_time_point();
             reward.reward_added_at                 = current_time_point();
@@ -205,13 +196,13 @@ void tyche_earn::refuelreward_to_pool( const name& token_bank, const asset& tota
             reward.prev_reward_added_at            = reward.reward_added_at;
             reward.reward_added_at                 = current_time_point();
             c.airdrop_rewards[ total_rewards.symbol ] = reward;
-            
+
          }
    });
 }
 
 void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total_rewards, const uint64_t& seconds){
-   
+
    auto reward_symbols     = reward_symbol_t::idx_t(_self, _self.value);
    auto reward_symbol      = reward_symbols.find( total_rewards.symbol.code().raw() );
    CHECKC( reward_symbol != reward_symbols.end(), err::RECORD_NOT_FOUND, "reward symbol not found:" + total_rewards.to_string()  )
@@ -230,14 +221,14 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
       pool_itr++;
    }
    CHECKC( total_share > 0, err::INCORRECT_AMOUNT, "total share is not positive: " + to_string(total_share) )
-   
+
    pool_itr             = pools.begin();
    while( pool_itr      != pools.end() ){
       if( !pool_itr->on_shelf ) { pool_itr++; continue; }
 
       auto rate         = pool_itr->avl_principal.amount * pool_itr->share_multiplier * PCT_BOOST / total_share;
       auto rewards      = asset(total_rewards.amount * rate / PCT_BOOST, total_rewards.symbol);
-      
+
       auto new_reward_id                      = _global_state->new_reward_id();
       if(pool_itr->airdrop_rewards.count(total_rewards.symbol) == 0) {
          pools.modify( pool_itr, _self, [&]( auto& c ) {
@@ -248,13 +239,13 @@ void tyche_earn::refuelreward_to_all( const name& token_bank, const asset& total
             reward.unalloted_rewards          = rewards;
             reward.unclaimed_rewards          = asset(0, total_rewards.symbol);
             reward.claimed_rewards            = asset(0, total_rewards.symbol);
-            reward.last_reward_per_share      = 0; 
+            reward.last_reward_per_share      = 0;
             reward.reward_per_share           = calc_reward_per_share_delta(rewards, pool_itr->avl_principal);
             reward.reward_added_at            = now;
-            
+
             c.airdrop_rewards[total_rewards.symbol] = reward;
          });
-         
+
       } else if( rewards.amount > 0) {
          pools.modify( pool_itr, _self, [&]( auto& c ) {
             auto reward                         = pool_itr->airdrop_rewards.at(rewards.symbol);
@@ -350,7 +341,7 @@ void tyche_earn::ondeposit( const name& from, const uint64_t& term_code, const a
          earner_interest_reward.last_reward_per_share = pool_interest_reward.reward_per_share;
          earner_interest_reward.unclaimed_rewards     += new_rewards;
       }
-   
+
       pools.modify( pool_itr, _self, [&]( auto& c ) {
          c.cum_principal               += quant;
          c.avl_principal               += quant;
@@ -372,14 +363,7 @@ void tyche_earn::ondeposit( const name& from, const uint64_t& term_code, const a
    }
    //transfer nusdt to earner
    TRANSFER( _gstate.lp_token.get_contract(), from, asset(quant.amount, _gstate.lp_token.get_symbol()), "deposit credential:" + to_string(term_code)  )
-   //只有天池5号才有奖励
-   if(term_code == _gstate.tyche_reward_pool_code) {
-      //打出TYCHE
-      auto tyche_amount = quant.amount * _gstate.tyche_farm_ratio / PCT_BOOST * (get_precision(TYCHE)/get_precision(quant.symbol));
-      // CHECKC(false, err::ACCOUNT_INVALID, "test errror:" + asset(tyche_amount, TYCHE).to_string())
-      TRANSFER( TYCHE_BANK, from, asset(tyche_amount, TYCHE), "tyche farm reward:" + to_string(term_code))
-      _apl_reward(from, quant,term_code);
-   }
+
 }
 
 //用户提款只能按全额来提款
@@ -396,7 +380,7 @@ void tyche_earn::onredeem( const name& from, const uint64_t& term_code, const as
    CHECKC(acct->avl_principal.amount !=0, err::PLAN_INEFFECTIVE, "already redeemed" )
    CHECKC(acct->avl_principal.amount == quant.amount, err::INCORRECT_AMOUNT, "insufficient deposit amount" )
    CHECKC(acct->term_ended_at <= now, err::TIME_PREMATURE, "premature to redeedm" )
-   
+
    _claim_pool_rewards(from, term_code, true);
 
    //打出本金MUSDT
@@ -443,7 +427,7 @@ void tyche_earn::claimrewards(const name& from){
    while( pool_itr != pools.end() ) {
       if( !pool_itr->on_shelf ) { pool_itr++; continue; }
       auto claimed   = _claim_pool_rewards(from, pool_itr->code, false);
-      if (!finalclaimed) 
+      if (!finalclaimed)
          finalclaimed = claimed;
 
       pool_itr++;
@@ -462,7 +446,7 @@ void tyche_earn::claimreward(const name& from, const std::string& sym){
    while( pool_itr != pools.end() ) {
       if( !pool_itr->on_shelf ) { pool_itr++; continue; }
       auto claimed   = _claim_pool_rewards_by_symbol(from, pool_itr->code, sym_code, false);
-      if (!finalclaimed) 
+      if (!finalclaimed)
          finalclaimed = claimed;
 
       pool_itr++;
@@ -530,17 +514,17 @@ bool tyche_earn::_claim_pool_rewards(const name& from, const uint64_t& term_code
 
    pools.modify( pool_itr, _self, [&]( auto& c ) {
       c.interest_reward                = pool_interest_reward;
-      if( term_end_flag )           
+      if( term_end_flag )
          c.avl_principal.amount        -= acct->avl_principal.amount;
       c.airdrop_rewards                = pool_airdrop_rewards;
    });
 
    accts.modify( acct, _self, [&]( auto& a ) {
-      a.interest_reward                = eraner_interest_reward; 
+      a.interest_reward                = eraner_interest_reward;
       if( term_end_flag ) {
          a.avl_principal.amount        = 0;
       }
-         
+
       a.airdrop_rewards                = earner_airdrop_rewards;
    });
    return existed;
@@ -586,7 +570,7 @@ bool tyche_earn::_claim_pool_rewards_by_symbol(const name& from, const uint64_t&
 
    auto pool_interest_reward     = pool_itr->interest_reward;
    auto eraner_interest_reward   = acct->interest_reward;
-   
+
    if(reward_symbol == MUSDT) {
       auto total_rewards         = _update_reward_info(pool_interest_reward, eraner_interest_reward, acct->avl_principal, term_end_flag);
       //内部调用发放利息
@@ -604,7 +588,7 @@ bool tyche_earn::_claim_pool_rewards_by_symbol(const name& from, const uint64_t&
    });
 
    accts.modify( acct, _self, [&]( auto& a ) {
-      a.interest_reward                = eraner_interest_reward;          
+      a.interest_reward                = eraner_interest_reward;
       a.airdrop_rewards                = earner_airdrop_rewards;
    });
    return existed;
@@ -630,7 +614,7 @@ asset tyche_earn::_update_reward_info( earn_pool_reward_st& pool_reward, earner_
    } else {
       earner_reward.claimed_rewards       += total_rewards;
    }
-   // CHECKC(false, err::INCORRECT_AMOUNT, "new_rewards must be greater than zero3:" + new_rewards.to_string() + "total_rewards:" + total_rewards.to_string() + ",total_claimed_rewards: " 
+   // CHECKC(false, err::INCORRECT_AMOUNT, "new_rewards must be greater than zero3:" + new_rewards.to_string() + "total_rewards:" + total_rewards.to_string() + ",total_claimed_rewards: "
    //          + earner_reward.total_claimed_rewards.to_string() )
 
    earner_reward.total_claimed_rewards    += total_rewards;
@@ -696,19 +680,19 @@ void tyche_earn::onshelfsym(const extended_symbol& sym, const bool& on_shelf) {
 
 earn_pool_reward_st tyche_earn::_init_interest_conf(){
    auto conf_id = _global_state->new_reward_id();
-   earn_pool_reward_st pool_reward = {conf_id, 
+   earn_pool_reward_st pool_reward = {conf_id,
                      asset(0, MUSDT),
                      asset(0, MUSDT),
-                     asset(0, MUSDT), 
-                     asset(0, MUSDT), 
-                     asset(0, MUSDT), 
+                     asset(0, MUSDT),
+                     asset(0, MUSDT),
+                     asset(0, MUSDT),
                      0,
-                     0, 
-                     time_point_sec(current_time_point()), 
+                     0,
+                     time_point_sec(current_time_point()),
                      time_point_sec(current_time_point())};
    return pool_reward;
 }
-//init earner_reward first time 
+//init earner_reward first time
 earner_reward_st tyche_earn::_get_new_shared_earner_reward(const earn_pool_reward_st& pool_reward) {
    earner_reward_st earner_reward;
    earner_reward.last_reward_per_share = pool_reward.reward_per_share;
@@ -718,24 +702,6 @@ earner_reward_st tyche_earn::_get_new_shared_earner_reward(const earn_pool_rewar
    return earner_reward;
 }
 
-void tyche_earn::_apl_reward(const name& from, const asset& quant, const uint64_t& term_code) {
-
-   rewardglobal_t::table reward_global(_gstate.reward_contract, _gstate.reward_contract.value);
-   auto reward_gstate = reward_global.get();
-
-   auto apls_amount = quant.amount/get_precision(quant) * 
-            reward_gstate.annual_interest_rate * _gstate.apl_farm.unit_reward.amount / PCT_BOOST;
-
-   if(apls_amount > 0) {
-      ALLOT_APPLE( _gstate.apl_farm.contract, _gstate.apl_farm.lease_id, from, asset(apls_amount, APLINK_SYMBOL), "tyche earn reward:" + to_string(term_code))
-   }
-}
-
-void tyche_earn::setaplconf( const uint64_t& lease_id, const asset& unit_reward ){
-   require_auth(_self);
-   _gstate.apl_farm.lease_id     = lease_id;
-   _gstate.apl_farm.unit_reward  = unit_reward;
-}
 
 void tyche_earn::sendtoloan( const asset& quant ){
    require_auth( _self );

@@ -80,7 +80,7 @@ class [[eosio::contract("tyche.loan")]] tyche_loan : public contract {
    ACTION forceliq( const name& from, const name& liquidator, const symbol& callat_sym );
 
    //admin
-   ACTION init(const name& admin, const name& lp_refueler, 
+   ACTION init(const name& admin, const name& lp_refueler,
                const name& price_oracle_contract,
                const name& tyche_proxy_contract,
                const bool& enabled);

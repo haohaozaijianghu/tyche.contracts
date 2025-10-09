@@ -1,7 +1,7 @@
 #include <tyche.earn/tyche.earn.hpp>
 #include <tyche.earn/tyche.earn.db.hpp>
 #include <tyche.reward/tyche.reward.hpp>
-#include <amax.token.hpp>
+#include <flon.token.hpp>
 
 #include "safemath.hpp"
 #include <utils.hpp>
@@ -34,7 +34,7 @@ void tyche_reward::init(const name& refueler_account, const name& tyche_earn_con
  * @param memo:1	interest	打入MUSDT,到期利息	到期前不能领取
                2	reward:(0,1,2,3,4,5)	0：按池子系数瓜分
                                        1-5：MUSDT，AMMX 指定池子空投	打入利息后就可以领取
- *             
+ *
  */
 //管理员打入奖励
 void tyche_reward::ontransfer(const name& from, const name& to, const asset& quant, const string& memo) {
@@ -45,12 +45,12 @@ void tyche_reward::ontransfer(const name& from, const name& to, const asset& qua
 
    auto token_bank = get_first_receiver();
    if(memo == "interest" && quant.symbol == _gstate.total_interest_quant.symbol) {
-      CHECKC(token_bank == MUSDT_BANK, err::CONTRACT_MISMATCH, "bank must amax.mtoken ")
+      CHECKC(token_bank == MUSDT_BANK, err::CONTRACT_MISMATCH, "bank must flon.mtoken ")
       //用户存入本金
       _gstate.total_interest_quant += quant;
 
    } else {
-      vector<string_view> memo_params = split(memo, ":"); 
+      auto memo_params = split(memo, ":");
       CHECKC(memo_params.size() == 2, err::PARAM_INVALID, "memo invalid")
       auto action = memo_params[0];
       CHECKC(action == "reward", err::PARAM_INVALID, "memo invalid")
@@ -99,7 +99,7 @@ void tyche_reward::splitintr(){
    auto total_interest = total_quant * _gstate.annual_interest_rate / YEAR_SECONDS * elapsed_seconds / PCT_BOOST;
 
 
-   CHECKC(total_interest.amount > 10, err::INCORRECT_AMOUNT,  "interest amount too small: " + total_interest.to_string() + 
+   CHECKC(total_interest.amount > 10, err::INCORRECT_AMOUNT,  "interest amount too small: " + total_interest.to_string() +
                ", elapsed_seconds: " + to_string(elapsed_seconds) + ", total_quant: " + total_quant.to_string())
    _gstate.allocated_interest_quant       += total_interest;
    _gstate.interest_splitted_at   = current_time_point();
@@ -148,7 +148,7 @@ void tyche_reward::_sub_reward(const asset& quant, const name& token_bank){
       row.total_reward_quant -= quant;
       row.updated_at = current_time_point();
    });
-}  
+}
 
 // void tyche_reward::initrwd(const asset& quant){
 //    auto rewards = reward_t::tbl_t(_self, _self.value);

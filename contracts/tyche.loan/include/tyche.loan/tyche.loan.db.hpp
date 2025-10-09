@@ -23,14 +23,13 @@ using namespace eosio;
 
 
 
-static constexpr name       MUSDT_BANK       = "amax.mtoken"_n;
-static constexpr symbol     MUSDT            = symbol(symbol_code("MUSDT"), 6);
+static constexpr name       MUSDT_BANK       = "flon.mtoken"_n;
+static constexpr symbol     MUSDT            = symbol(symbol_code("USDT"), 6);
 static constexpr name       TRUSD_BANK       = "tyche.token"_n;
 static constexpr symbol     TRUSD            = symbol(symbol_code("TRUSD"), 6);
 static constexpr name       TYCHE_BANK       = "tyche.token"_n;
 static constexpr symbol     TYCHE            = symbol(symbol_code("TYCHE"), 8);
-static constexpr name       APLINK_BANK      = "aplink.token"_n ;
-static constexpr symbol     APLINK_SYMBOL    = symbol(symbol_code("APL"), 4);
+
 // static constexpr name       INTEREST         = "interest"_n ;
 // static constexpr name       REDPACK          = "redpack"_n ;
 
@@ -52,11 +51,6 @@ const static string     TYPE_BUY                        = "liqbuy";             
 #define TBL struct [[eosio::table, eosio::contract("tyche.loan")]]
 #define NTBL(name) struct [[eosio::table(name), eosio::contract("tyche.loan")]]
 
-struct aplink_farm {
-    name contract           = "aplink.farm"_n;
-    uint64_t lease_id       = 12;                        
-    asset unit_reward       = asset(1, symbol("APL", 4));
-};
 
 NTBL("global") global_t {
     name                admin                   = "tyche.admin"_n;
@@ -75,7 +69,7 @@ NTBL("global") global_t {
     name                tyche_proxy_contract;                          //tyche.proxy
     asset               total_interest_quant;                          //总利息
 
-    bool                enabled                 = true; 
+    bool                enabled                 = true;
 
     EOSLIB_SERIALIZE( global_t, (admin)(lp_refueler)(price_oracle_contract)
                                 (loan_token)(min_deposit_amount)(term_interval_days)
@@ -135,8 +129,8 @@ TBL collateral_symbol_t {
     uint64_t    liquidation_ratio           = 15000;        //抵押率: 150%
     uint64_t    force_liquidate_ratio       = 12000;        //率: 120%
 
-    asset       max_principal;                              //最大可用本金 
-    asset       total_collateral_quant;                     //抵押物总量    
+    asset       max_principal;                              //最大可用本金
+    asset       total_collateral_quant;                     //抵押物总量
     asset       avl_collateral_quant;                       //可用抵押物总量
     asset       total_principal;                            //总本金
     asset       avl_principal;                              //可用本金
@@ -225,12 +219,12 @@ struct global_state: public globalidx {
             }
         }
     private:
-        std::unique_ptr<global_table> _global_tbl;  
+        std::unique_ptr<global_table> _global_tbl;
 };
 
  struct liqlog_t {
         uint64_t    id;                     //PK
-        name        liqtype;                //清算类型: liq: 清算 | forceliq:强平 
+        name        liqtype;                //清算类型: liq: 清算 | forceliq:强平
         name        owner;
         name        liquidator;
         asset       collateral_quant;       //抵押物总额
@@ -241,7 +235,7 @@ struct global_state: public globalidx {
         asset       settle_price;           //结算价格
         asset       interest;               //支付的利息
         asset       platform_fee;           //手续费-罚金
-        uint64_t    collateral_ratio;   
+        uint64_t    collateral_ratio;
         time_point  deal_time;
 
         uint64_t primary_key() const    { return id; }

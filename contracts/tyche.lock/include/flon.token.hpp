@@ -8,8 +8,7 @@
 namespace eosiosystem {
    class system_contract;
 }
-
-static constexpr eosio::name active_perm        {"active"_n};
+static constexpr eosio::name active_perm{"active"_n};
 
 #define ISSUE(bank, to, quantity, memo) \
     {	token::issue_action act{ bank, { {_self, active_perm} } };\
@@ -22,16 +21,17 @@ static constexpr eosio::name active_perm        {"active"_n};
 #define TRANSFER(bank, to, quantity, memo) \
     {	token::transfer_action act{ bank, { {_self, active_perm} } };\
 			act.send( _self, to, quantity , memo );}
-         
-namespace eosio {
+
+namespace flon {
+   using namespace eosio;
 
    using std::string;
 
    /**
-    * amax.token contract defines the structures and actions that allow users to create, issue, and manage
+    * flon.token contract defines the structures and actions that allow users to create, issue, and manage
     * tokens on eosio based blockchains.
     */
-   class [[eosio::contract("amax.token")]] token : public contract {
+   class [[eosio::contract("flon.token")]] token : public contract {
       public:
          using contract::contract;
 
@@ -126,7 +126,7 @@ namespace eosio {
          [[eosio::action]]
          void close( const name& owner, const symbol& symbol );
 
-         static asset get_supply( const name& token_contract_account, const symbol_code& sym_code )
+         static eosio::asset get_supply( const name& token_contract_account, const symbol_code& sym_code )
          {
             stats statstable( token_contract_account, sym_code.raw() );
             const auto& st = statstable.get( sym_code.raw() );

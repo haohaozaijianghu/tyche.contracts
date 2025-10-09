@@ -15,10 +15,10 @@ using namespace eosio;
 
 class tyche_earn {
    public:
-      [[eosio::action]] 
+      [[eosio::action]]
       void refuelreward( const name& token_bank, const asset& total_rewards, const uint64_t& days, const uint64_t& );
 
-      [[eosio::action]] 
+      [[eosio::action]]
       void refuelintrst( const name& token_bank, const asset& total_rewards, const uint64_t& seconds );
 
    public:

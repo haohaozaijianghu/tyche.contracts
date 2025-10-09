@@ -7,6 +7,7 @@
 #include <eosio/asset.hpp>
 
 #include "safe.hpp"
+#include "errno.h"
 
 using namespace std;
 
@@ -85,19 +86,18 @@ string_view trim(string_view sv) {
     return sv;
 }
 
-vector<string_view> split(string_view str, string_view delims = " ")
-{
-    vector<string_view> res;
-    std::size_t current, previous = 0;
-    current = str.find_first_of(delims);
-    while (current != std::string::npos) {
-        res.push_back(trim(str.substr(previous, current - previous)));
-        previous = current + 1;
-        current = str.find_first_of(delims, previous);
+std::vector<std::string> split(const std::string& s, const std::string& delimiter) {
+    std::vector<std::string> result;
+    size_t pos_start = 0, pos_end;
+    auto delim_len = delimiter.length();
+    while ((pos_end = s.find(delimiter, pos_start)) != std::string::npos) {
+        result.emplace_back(s.substr(pos_start, pos_end - pos_start));
+        pos_start = pos_end + delim_len;
     }
-    res.push_back(trim(str.substr(previous, current - previous)));
-    return res;
+    result.emplace_back(s.substr(pos_start));
+    return result;
 }
+
 
 bool starts_with(string_view sv, string_view s) {
     return sv.size() >= s.size() && sv.compare(0, s.size(), s) == 0;
@@ -140,12 +140,6 @@ static symbol symbol_from_string(string_view from)
     CHECK( p <= 18, "symbol precision should be <= 18");
     return symbol(name_part, p);
 }
-
-static string symbol_to_string(symbol sym)
-{
-    return to_string(sym.precision()) + "," + sym.code().to_string();
-}
-
 
 asset asset_from_string(string_view from)
 {
@@ -197,4 +191,12 @@ uint128_t make128key(uint64_t a, uint64_t b) {
 
 checksum256 make256key(uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
     return checksum256::make_from_word_sequence<uint64_t>(a,b,c,d);
+}
+
+
+
+
+inline std::string symbol_to_string(const eosio::symbol& sym) {
+    // 返回标准形式: "6,USDT"
+    return std::to_string(sym.precision()) + "," + sym.code().to_string();
 }
