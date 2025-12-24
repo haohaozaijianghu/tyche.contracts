@@ -47,10 +47,14 @@ mpush tyche.earn11 setmindepamt '["1.000000 MUSDT"]' -p tyche.earn11
 
 #设置存款池 (Pool)
 
-mpush tyche.earn11 setpool '[1, 86400, 1]'   -p tyche.earn11   # 30秒，倍率1
-mpush tyche.earn11 setpool '[2, 2592000, 2]'   -p tyche.earn11   # 60秒，倍率2
-mpush tyche.earn11 setpool '[3, 7776000, 3]'  -p tyche.earn11   # 120秒，倍率3
-mpush tyche.earn11 setpool '[4, 15552000, 4]'  -p tyche.earn11   # 120秒，倍率3
+mpush tyche.earn11 setpool '[1, 86400, 10]'   -p tyche.earn11   # 30秒，倍率1
+mpush tyche.earn11 setpool '[2, 2592000, 15]'   -p tyche.earn11   # 60秒，倍率2
+mpush tyche.earn11 setpool '[3, 7776000, 20]'  -p tyche.earn11   # 120秒，倍率3
+mpush tyche.earn11 setpool '[4, 15552000, 30]'  -p tyche.earn11   # 120秒，倍率3
+mpush tyche.earn11 setpool '[5, 31104000, 130]'  -p tyche.earn11   # 120秒，倍率3
+mpush tyche.earn11 setpool '[6, 311040000, 130]'  -p tyche.earn11   # 120秒，倍率3
+mpush tyche.earn11 setpool '[7, 311040000, 130]'  -p tyche.earn11   # 120秒，倍率3
+mpush tyche.earn11 setpool '[8, 311040000, 130]'  -p tyche.earn11   # 120秒，倍率3
 
 #初始化 loan 代理
 mpush tyche.earn11 initloaninfo '["tycheproxy11"]' -p tyche.earn11
@@ -60,7 +64,7 @@ mpush tyche.earn11 initloaninfo '["tycheproxy11"]' -p tyche.earn11
 mpush tyche.token transfer '["flonian","tyche.earn11","1000000.000000 TRUSD","1st issue"]' -p flonian
 
 #存入本金（用户操作）
-mpush flon.mtoken transfer '["flonian","tyche.earn11","100.000000 USDT","deposit:1"]' -p flonian
+mpush flon.mtoken transfer '["flonian","tyche.earn11","10.000000 USDT","deposit:1"]' -p flonian
 
 
 #打入奖励和利息（管理员操作）
@@ -82,6 +86,7 @@ mpush tyche.loan11 init '["flonian","flonian","price.oracle","tycheproxy11",true
 mpush tyche.loan11 setcallatsym '[{"sym":"6,USDT","contract":"flon.mtoken"},"usdt"]' -p flonian
 mpush tyche.loan11 setcallatsym '[{"sym":"8,ETH","contract":"flon.mtoken"},"eth"]' -p flonian
 mpush tyche.loan11 setcallatsym '[{"sym":"8,BTC","contract":"flon.mtoken"},"btc"]' -p flonian
+mpush tyche.loan11 setcallatsym '[{"sym":"8,BNB","contract":"flon.mtoken"},"bnb"]' -p flonian
 
 #设置抵押率参数
 #初始抵押率 = 150%
@@ -103,15 +108,17 @@ mpush flon.mtoken transfer '["flonian","tyche.loan11","100.000000 USDT","loan fu
 #借 USDT
 mpush tyche.loan11 getmoreusdt '["gahbnbehaskk","8,BTC","0.020000 USDT"]' -p gahbnbehaskk
 #偿还 USDT
-mpush flon.mtoken transfer '["gahbnbehaskk","tyche.loan11","0.400000 USDT","sendback:8,BTC"]' -p gahbnbehaskk
+mpush flon.mtoken transfer '["gahbnbehaskk","tyche.loan11","0.100000 USDT","sendback:8,BTC"]' -p gahbnbehaskk
 #赎回抵押物
 mpush tyche.loan11 onsubcallat '["gahbnbehaskk","0.00001000 BTC"]' -p gahbnbehaskk
 
 #清算操作
 #普通清算
-mpush flon.mtoken transfer '["liquidator","tyche.loan11","200.000000 USDT","liquidate:user1:8,ETH"]' -p liquidator
+
+mpush flon.mtoken transfer '["gahbnbehaskk","tyche.loan11","0.020000 USDT","liqbuy:8,BTC:gahbnbehaskk"]' -p gahbnbehaskk
+
 #强制清算
-mpush tyche.loan11 forceliq '["system","user1","8,ETH"]' -p system
+mpush tyche.loan11 forceliq '["system","gahbnbehaskk","8,BTC"]' -p system
 #Loan 把资金返还给 Earn
 mpush tyche.loan11 sendtoearn '["1000.000000 USDT"]' -p tyche.loan11
 

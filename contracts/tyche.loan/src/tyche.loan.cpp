@@ -81,14 +81,16 @@ void tyche_loan::initoracle(const name& price_oracle_contract) {
  * @param to
  * @param quantity
  * @param memo: two formats:
- *       1) musdt: "repay:6,ETH"  //降低抵押率，获得更多的MUSDT
- *                 "liquidate:name:6,ETH"  //降低抵押率，获得更多的MUSDT
+ *       1) musdt: "sendback:8,BTC"  //偿还 USDT
+ *                 "liqbuy:8,BTC:gahbnbehaskk"  //归还清算人的U
  *       2) meth:
  */
 void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant, const string& memo) {
 
    CHECKC(_gstate.enabled, err::PAUSED, "not effective yet");
    CHECKC( from != to, err::ACCOUNT_INVALID, "cannot transfer to self" );
+   CHECKC(quant.amount > 0, err::INCORRECT_AMOUNT, "transfer amount must be positive");
+   CHECKC(memo.size() <= 256, err::PARAMETER_INVALID, "memo too long");
 
    if (from == get_self() || to != get_self()) return;
    auto token_bank = get_first_receiver();
@@ -110,7 +112,7 @@ void tyche_loan::ontransfer(const name& from, const name& to, const asset& quant
          auto sym = symbol_from_string(parts[1]);
          _liquidate(from, name(parts[2]), sym, quant);
       } else {
-         //CHECKC( false, err::PARAMETER_INVALID, "memo format error" );
+         CHECKC( false, err::PARAMETER_INVALID, "memo format error" );
       }
       return;
    }
