@@ -1,116 +1,132 @@
 #pragma once
 
 #include <eosio/asset.hpp>
+#include <eosio/action.hpp>
 #include <eosio/eosio.hpp>
 #include <eosio/permission.hpp>
-#include <eosio/action.hpp>
+#include <eosio/singleton.hpp>
+#include <eosio/time.hpp>
 
 #include <string>
 
-#include <tyche.market/tyche.market.db.hpp>
-#include <wasm_db.hpp>
-
 namespace tychefi {
 
-using std::string;
-using std::vector;
-
 using namespace eosio;
-using namespace wasm::db;
+using std::string;
 
-enum class err: uint8_t {
-   NONE                 = 0,
-   RECORD_NOT_FOUND     = 1,
-   RECORD_EXISTING      = 2,
-   CONTRACT_MISMATCH    = 3,
-   SYMBOL_MISMATCH      = 4,
-   PARAM_ERROR          = 5,
-   MEMO_FORMAT_ERROR    = 6,
-   PAUSED               = 7,
-   NO_AUTH              = 8,
-   NOT_POSITIVE         = 9,
-   NOT_STARTED          = 10,
-   OVERSIZED            = 11,
-   TIME_EXPIRED         = 12,
-   TIME_PREMATURE       = 13,
-   ACTION_REDUNDANT     = 14,
-   ACCOUNT_INVALID      = 15,
-   FEE_INSUFFICIENT     = 16,
-   PLAN_INEFFECTIVE     = 17,
-   STATUS_ERROR         = 18,
-   INCORRECT_AMOUNT     = 19,
-   UNAVAILABLE_PURCHASE = 20,
-   RATE_EXCEEDED        = 21,
-   PARAMETER_INVALID    = 22,
-   SYSTEM_ERROR         = 200
+static constexpr uint64_t RATE_SCALE = 10'000;           // basis points precision
+static constexpr uint64_t PRICE_SCALE = 10'000;          // price precision (e.g. USD with 4 decimals)
+static constexpr uint32_t SECONDS_PER_YEAR = 31'536'000; // 365d * 24h * 60m * 60s
+
+struct [[eosio::table("global")]] global_state {
+   name        admin;
+   bool        paused          = false;
 };
 
+struct [[eosio::table("prices")]] price_feed {
+   symbol_code sym_code;
+   uint64_t    price;       // price in quote units with PRICE_SCALE precision
+   time_point  updated_at;
+
+   uint64_t primary_key()const { return sym_code.raw(); }
+};
+
+struct [[eosio::table("reserves")]] reserve_state {
+   symbol_code     sym_code;
+   name            token_contract;
+   uint64_t        max_ltv;                // basis points
+   uint64_t        liquidation_threshold;  // basis points
+   uint64_t        liquidation_bonus;      // basis points
+   uint64_t        reserve_factor;         // basis points
+   uint64_t        u_opt;                  // basis points utilization
+   uint64_t        r0;                     // basis points borrow rate at 0% utilization
+   uint64_t        r_opt;                  // basis points borrow rate at optimal utilization
+   uint64_t        r_max;                  // basis points borrow rate at 100% utilization
+   asset           total_liquidity;        // deposit principal + accrued supply interest
+   asset           total_debt;             // borrowed principal + accrued interest
+   asset           total_supply_shares;    // aggregate supply shares
+   asset           total_borrow_shares;    // aggregate borrow shares
+   time_point      last_updated;
+   bool            paused = false;
+
+   uint64_t primary_key()const { return sym_code.raw(); }
+};
+
+struct [[eosio::table("positions")]] position_row {
+   uint64_t    id;
+   name        owner;
+   symbol_code sym_code;
+   asset       supply_shares;
+   asset       borrow_shares;
+   bool        collateral = true;
+
+   uint64_t primary_key()const { return id; }
+   uint64_t by_owner()const { return owner.value; }
+   uint128_t by_owner_reserve()const { return (uint128_t)owner.value << 64 | sym_code.raw(); }
+};
+
+using prices_t    = eosio::multi_index<"prices"_n, price_feed>;
+using reserves_t  = eosio::multi_index<"reserves"_n, reserve_state>;
+using positions_t = eosio::multi_index<
+   "positions"_n, position_row,
+   indexed_by<"byowner"_n, const_mem_fun<position_row, uint64_t, &position_row::by_owner>>,
+   indexed_by<"ownerreserve"_n, const_mem_fun<position_row, uint128_t, &position_row::by_owner_reserve>>>;
+
 class [[eosio::contract("tyche.market")]] tyche_market : public contract {
-   public:
-      using contract::contract;
+public:
+   using contract::contract;
 
-   tyche_market(eosio::name receiver, eosio::name code, datastream<const char*> ds): contract(receiver, code, ds),
-        _global(get_self(), get_self().value), _db(_self),
-        _global_state(global_state::make_global(get_self()))
-    {
-      _gstate = _global.exists() ? _global.get() : global_t{};
-    }
+   tyche_market(name receiver, name code, datastream<const char*> ds);
 
-    ~tyche_market() {
-      _global.set( _gstate, get_self() );
-      _global_state->save(get_self());
-    }
+   [[eosio::action]] void init(name admin);
+   [[eosio::action]] void setpause(bool paused);
+   [[eosio::action]] void setprice(symbol_code sym, uint64_t price);
+   [[eosio::action]] void addreserve(const extended_symbol& asset_sym,
+                                     uint64_t max_ltv,
+                                     uint64_t liq_threshold,
+                                     uint64_t liq_bonus,
+                                     uint64_t reserve_factor,
+                                     uint64_t u_opt,
+                                     uint64_t r0,
+                                     uint64_t r_opt,
+                                     uint64_t r_max);
 
-   [[eosio::on_notify("*::transfer")]]
-   void ontransfer(const name& from, const name& to, const asset& quants, const string& memo);
+   [[eosio::action]] void supply(name owner, asset quantity);
+   [[eosio::action]] void withdraw(name owner, asset quantity);
+   [[eosio::action]] void setcollat(name owner, symbol_code sym, bool enabled);
+   [[eosio::action]] void borrow(name owner, asset quantity);
+   [[eosio::action]] void repay(name payer, name borrower, asset quantity);
+   [[eosio::action]] void liquidate(name liquidator,
+                                    name borrower,
+                                    symbol_code debt_sym,
+                                    asset repay_amount,
+                                    symbol_code collateral_sym);
 
-   // admin
-   ACTION init(const name& admin, const name& price_oracle_contract, const bool& enabled);
-   ACTION setreserve(const extended_symbol& sym, const name& oracle_sym_name,
-                     const uint64_t& max_ltv_bps, const uint64_t& liq_threshold_bps,
-                     const uint64_t& liq_bonus_bps, const uint64_t& reserve_factor_bps,
-                     const uint64_t& u_opt_bps, const uint64_t& r0_ray,
-                     const uint64_t& r_opt_ray, const uint64_t& r_max_ray,
-                     const bool& paused);
-   ACTION pauserv(const symbol& sym, const bool& paused);
-   ACTION setclosefac(const uint64_t& close_factor_bps);
-   ACTION setoracle(const name& price_oracle_contract);
+private:
+   global_state _gstate;
 
-   // user
-   ACTION borrow(const name& from, const extended_symbol& borrow_sym, const asset& amount);
-   ACTION repay(const name& from, const name& on_behalf_of, const extended_symbol& borrow_sym, const asset& amount);
-   ACTION withdraw(const name& from, const extended_symbol& supply_sym, const asset& amount);
-   ACTION setcollat(const name& from, const extended_symbol& sym, const bool& enabled);
-   ACTION liquidate(const name& liquidator, const name& user,
-                    const extended_symbol& debt_sym, const extended_symbol& collateral_sym,
-                    const asset& repay_amount);
+   global_state _read_state()const;
+   void         _write_state(const global_state& state);
 
-   ACTION gethf(const name& user);
+   reserve_state _require_reserve(const symbol& sym);
+   reserve_state _accrue(reserve_state res);
+   int64_t       _calc_borrow_rate(const reserve_state& res, uint64_t util_bps)const;
 
-   private:
-      void _accrue_reserve(reserve_t& reserve);
-      int128_t _calc_borrow_rate_ray(const reserve_t& reserve) const;
-      int128_t _calc_supply_rate_ray(const reserve_t& reserve, const int128_t& borrow_rate) const;
+   asset _shares_from_amount(const asset& amount, const asset& total_shares, const asset& total_amount)const;
+   asset _amount_from_shares(const asset& shares, const asset& total_shares, const asset& total_amount)const;
 
-      asset _to_underlying(const asset& shares, const int128_t& index) const;
-      asset _to_shares(const asset& amount, const int128_t& index) const;
+   struct valuation {
+      int128_t collateral_value      = 0; // liquidation threshold weighted
+      int128_t max_borrowable_value  = 0; // max LTV weighted
+      int128_t debt_value            = 0;
+   };
 
-      uint64_t _health_factor_bps(const name& user) const;
-      void _get_account_values(const name& user, int128_t& collateral_value_ray, int128_t& borrow_value_ray) const;
+   valuation _compute_valuation(name owner);
+   void      _check_price_available(symbol_code sym)const;
 
-      uint64_t _get_price_ray(const name& oracle_sym_name) const;
-      const price_global_t& _price_conf() const;
-
-      reserve_t _get_reserve(const extended_symbol& sym) const;
-      void _set_reserve(const reserve_t& reserve);
-
-      global_singleton     _global;
-      global_t             _gstate;
-      dbc                  _db;
-      global_state::ptr_t  _global_state;
-
-      mutable std::unique_ptr<price_global_t::idx_t> _global_prices_tbl_ptr;
-      mutable std::unique_ptr<price_global_t> _global_prices_ptr;
+   position_row* _get_or_create_position(positions_t& table, name owner, symbol_code sym, const asset& base_symbol_amount);
+   void          _transfer_from(name token_contract, name from, const asset& quantity, const string& memo);
+   void          _transfer_out(name token_contract, name to, const asset& quantity, const string& memo);
 };
 
 } // namespace tychefi
