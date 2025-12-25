@@ -21,6 +21,8 @@ static constexpr uint32_t SECONDS_PER_YEAR = 31'536'000; // 365d * 24h * 60m * 6
 struct [[eosio::table("global")]] global_state {
    name        admin;
    bool        paused          = false;
+   uint32_t    price_ttl_sec   = 300;   // price freshness requirement
+   uint64_t    close_factor_bp = 5000;  // maximum portion of debt (in bps) that can be liquidated
 };
 
 struct [[eosio::table("prices")]] price_feed {
@@ -46,6 +48,7 @@ struct [[eosio::table("reserves")]] reserve_state {
    asset           total_debt;             // borrowed principal + accrued interest
    asset           total_supply_shares;    // aggregate supply shares
    asset           total_borrow_shares;    // aggregate borrow shares
+   asset           protocol_reserve;       // interest retained by protocol
    time_point      last_updated;
    bool            paused = false;
 
@@ -80,6 +83,8 @@ public:
 
    [[eosio::action]] void init(name admin);
    [[eosio::action]] void setpause(bool paused);
+   [[eosio::action]] void setpricettl(uint32_t ttl_sec);
+   [[eosio::action]] void setclosefac(uint64_t close_factor_bp);
    [[eosio::action]] void setprice(symbol_code sym, uint64_t price);
    [[eosio::action]] void addreserve(const extended_symbol& asset_sym,
                                      uint64_t max_ltv,
@@ -122,6 +127,7 @@ private:
    };
 
    valuation _compute_valuation(name owner);
+   uint64_t  _get_fresh_price(prices_t& prices, symbol_code sym)const;
    void      _check_price_available(symbol_code sym)const;
 
    position_row* _get_or_create_position(positions_t& table, name owner, symbol_code sym, const asset& base_symbol_amount);

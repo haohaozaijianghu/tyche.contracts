@@ -26,6 +26,20 @@ void tyche_market::setpause(bool paused) {
    _write_state(_gstate);
 }
 
+void tyche_market::setpricettl(uint32_t ttl_sec) {
+   require_auth(_gstate.admin);
+   check(ttl_sec > 0, "ttl must be positive");
+   _gstate.price_ttl_sec = ttl_sec;
+   _write_state(_gstate);
+}
+
+void tyche_market::setclosefac(uint64_t close_factor_bp) {
+   require_auth(_gstate.admin);
+   check(close_factor_bp > 0 && close_factor_bp <= RATE_SCALE, "close factor must be within 0-100% in bps");
+   _gstate.close_factor_bp = close_factor_bp;
+   _write_state(_gstate);
+}
+
 void tyche_market::setprice(symbol_code sym, uint64_t price) {
    require_auth(_gstate.admin);
    check(price > 0, "price must be positive");
@@ -80,6 +94,7 @@ void tyche_market::addreserve(const extended_symbol& asset_sym,
       row.total_debt          = asset(0, asset_sym.get_symbol());
       row.total_supply_shares = asset(0, asset_sym.get_symbol());
       row.total_borrow_shares = asset(0, asset_sym.get_symbol());
+      row.protocol_reserve    = asset(0, asset_sym.get_symbol());
       row.last_updated        = current_time_point();
       row.paused              = false;
    });
@@ -112,6 +127,7 @@ void tyche_market::supply(name owner, asset quantity) {
       row.total_liquidity     = res.total_liquidity + quantity;
       row.total_supply_shares = res.total_supply_shares + shares;
       row.total_debt          = res.total_debt;
+      row.protocol_reserve    = res.protocol_reserve;
       row.last_updated        = res.last_updated;
    });
 
@@ -127,6 +143,8 @@ void tyche_market::withdraw(name owner, asset quantity) {
    auto       res_itr = reserves.find(quantity.symbol.code().raw());
    check(res_itr != reserves.end(), "reserve not found");
    check(!res_itr->paused, "reserve paused");
+
+   _check_price_available(quantity.symbol.code());
 
    positions_t positions(get_self(), get_self().value);
    auto        owner_idx = positions.get_index<"ownerreserve"_n>();
@@ -155,6 +173,7 @@ void tyche_market::withdraw(name owner, asset quantity) {
       row.total_liquidity     = res.total_liquidity - quantity;
       row.total_supply_shares = res.total_supply_shares - share_delta;
       row.total_debt          = res.total_debt;
+      row.protocol_reserve    = res.protocol_reserve;
       row.last_updated        = res.last_updated;
    });
 
@@ -192,6 +211,8 @@ void tyche_market::borrow(name owner, asset quantity) {
    check(res_itr != reserves.end(), "reserve not found");
    check(!res_itr->paused, "reserve paused");
 
+   _check_price_available(quantity.symbol.code());
+
    auto res = _accrue(*res_itr);
 
    uint64_t available = res.total_liquidity.amount - res.total_debt.amount;
@@ -216,6 +237,7 @@ void tyche_market::borrow(name owner, asset quantity) {
       row.total_debt          = res.total_debt + quantity;
       row.total_borrow_shares = res.total_borrow_shares + borrow_shares;
       row.total_supply_shares = res.total_supply_shares;
+      row.protocol_reserve    = res.protocol_reserve;
       row.last_updated        = res.last_updated;
    });
 
@@ -256,6 +278,7 @@ void tyche_market::repay(name payer, name borrower, asset quantity) {
       row.total_borrow_shares = res.total_borrow_shares - share_delta;
       row.total_liquidity     = res.total_liquidity + repay_amount;
       row.total_supply_shares = res.total_supply_shares;
+      row.protocol_reserve    = res.protocol_reserve;
       row.last_updated        = res.last_updated;
    });
 
@@ -297,21 +320,21 @@ void tyche_market::liquidate(name liquidator,
       repay_amount = borrower_debt;
    }
 
-   // cap to 50% of borrower's debt value
+   // cap repayment based on configured close factor
    prices_t prices(get_self(), get_self().value);
-   auto     debt_price_itr = prices.find(debt_sym.raw());
-   auto     col_price_itr  = prices.find(collateral_sym.raw());
-   check(debt_price_itr != prices.end() && col_price_itr != prices.end(), "missing price feed");
+   uint64_t debt_price = _get_fresh_price(prices, debt_sym);
+   uint64_t col_price  = _get_fresh_price(prices, collateral_sym);
 
-   int128_t repay_value = (int128_t)repay_amount.amount * debt_price_itr->price / PRICE_SCALE;
-   int128_t max_repay   = (int128_t)borrower_debt.amount * debt_price_itr->price / PRICE_SCALE / 2;
+   int128_t debt_value = (int128_t)borrower_debt.amount * debt_price / PRICE_SCALE;
+   int128_t repay_value = (int128_t)repay_amount.amount * debt_price / PRICE_SCALE;
+   int128_t max_repay   = debt_value * _gstate.close_factor_bp / RATE_SCALE;
    check(repay_value <= max_repay, "repay amount exceeds close factor");
 
    asset debt_share_delta = _shares_from_amount(repay_amount, debt_res.total_borrow_shares, debt_res.total_debt);
 
    // collateral to seize with bonus
    int128_t seize_value = repay_value * (collat_res.liquidation_bonus) / RATE_SCALE;
-   int64_t  seize_amount = (int64_t)(seize_value * PRICE_SCALE / col_price_itr->price);
+   int64_t  seize_amount = (int64_t)(seize_value * PRICE_SCALE / col_price);
    asset    seize_asset  = asset(seize_amount, collat_res.total_liquidity.symbol);
 
    asset collateral_balance = _amount_from_shares(coll_pos->supply_shares, collat_res.total_supply_shares, collat_res.total_liquidity);
@@ -331,6 +354,7 @@ void tyche_market::liquidate(name liquidator,
       row.total_borrow_shares = debt_res.total_borrow_shares - debt_share_delta;
       row.total_liquidity     = debt_res.total_liquidity + repay_amount;
       row.total_supply_shares = debt_res.total_supply_shares;
+      row.protocol_reserve    = debt_res.protocol_reserve;
       row.last_updated        = debt_res.last_updated;
    });
 
@@ -339,6 +363,7 @@ void tyche_market::liquidate(name liquidator,
       row.total_supply_shares = collat_res.total_supply_shares - collat_share_delta;
       row.total_debt          = collat_res.total_debt;
       row.total_borrow_shares = collat_res.total_borrow_shares;
+      row.protocol_reserve    = collat_res.protocol_reserve;
       row.last_updated        = collat_res.last_updated;
    });
 
@@ -379,7 +404,10 @@ reserve_state tyche_market::_accrue(reserve_state res) {
    if (interest_i64 > 0) {
       res.total_debt.amount += interest_i64;
       int128_t supply_income = interest * (RATE_SCALE - res.reserve_factor) / RATE_SCALE;
+      int128_t protocol_income = interest - supply_income;
+
       res.total_liquidity.amount += static_cast<int64_t>(supply_income);
+      res.protocol_reserve.amount += static_cast<int64_t>(protocol_income);
    }
 
    res.last_updated = now;
@@ -443,10 +471,7 @@ tyche_market::valuation tyche_market::_compute_valuation(name owner) {
          reserves.modify(res_itr, same_payer, [&](auto& row) { row = res; });
       }
 
-      auto price_itr = prices.find(itr->sym_code.raw());
-      check(price_itr != prices.end(), "missing price for valuation");
-
-      int128_t price = price_itr->price;
+      uint64_t price = _get_fresh_price(prices, itr->sym_code);
 
       asset supply_amount = _amount_from_shares(itr->supply_shares, res.total_supply_shares, res.total_liquidity);
       asset debt_amount   = _amount_from_shares(itr->borrow_shares, res.total_borrow_shares, res.total_debt);
@@ -467,9 +492,20 @@ tyche_market::valuation tyche_market::_compute_valuation(name owner) {
    return result;
 }
 
+uint64_t tyche_market::_get_fresh_price(prices_t& prices, symbol_code sym) const {
+   auto itr = prices.find(sym.raw());
+   check(itr != prices.end(), "price not available");
+
+   auto freshness = current_time_point() - itr->updated_at;
+   int64_t ttl_us = static_cast<int64_t>(_gstate.price_ttl_sec) * 1'000'000;
+   check(freshness.count() <= ttl_us, "price stale");
+
+   return itr->price;
+}
+
 void tyche_market::_check_price_available(symbol_code sym) const {
    prices_t prices(get_self(), get_self().value);
-   check(prices.find(sym.raw()) != prices.end(), "price not available");
+   _get_fresh_price(prices, sym);
 }
 
 position_row* tyche_market::_get_or_create_position(positions_t& table,
