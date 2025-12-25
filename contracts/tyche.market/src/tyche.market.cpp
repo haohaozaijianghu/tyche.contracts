@@ -326,9 +326,25 @@ void tyche_market::liquidate(name liquidator,
    uint64_t col_price  = _get_fresh_price(prices, collateral_sym);
 
    int128_t debt_value = (int128_t)borrower_debt.amount * debt_price / PRICE_SCALE;
-   int128_t repay_value = (int128_t)repay_amount.amount * debt_price / PRICE_SCALE;
-   int128_t max_repay   = debt_value * _gstate.close_factor_bp / RATE_SCALE;
-   check(repay_value <= max_repay, "repay amount exceeds close factor");
+   int128_t repay_value      = (int128_t)repay_amount.amount * debt_price / PRICE_SCALE;
+   int128_t max_repay_close  = debt_value * _gstate.close_factor_bp / RATE_SCALE;
+
+   int128_t shortfall = val.debt_value - val.collateral_value; // guaranteed > 0 by eligibility
+   int128_t denom     = (int128_t)RATE_SCALE * RATE_SCALE -
+                        (int128_t)collat_res.liquidation_threshold * collat_res.liquidation_bonus;
+   int128_t max_repay_to_one = max_repay_close;
+   if (denom > 0) {
+      // minimum repayment (in value) that would bring HF back to 1 considering collateral seized
+      max_repay_to_one = (shortfall * (int128_t)RATE_SCALE * RATE_SCALE + denom - 1) / denom;
+   }
+
+   int128_t repay_value_cap = std::min<int128_t>(repay_value, std::min(max_repay_close, max_repay_to_one));
+   check(repay_value_cap > 0, "repay amount too small");
+
+   // adjust repay_amount to capped value
+   int64_t capped_amount = static_cast<int64_t>(repay_value_cap * PRICE_SCALE / debt_price);
+   repay_amount          = asset(capped_amount, repay_amount.symbol);
+   repay_value           = (int128_t)repay_amount.amount * debt_price / PRICE_SCALE;
 
    asset debt_share_delta = _shares_from_amount(repay_amount, debt_res.total_borrow_shares, debt_res.total_debt);
 
