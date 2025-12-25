@@ -44,6 +44,7 @@ struct [[eosio::table("reserves")]] reserve_state {
    uint64_t        r0;                     // basis points borrow rate at 0% utilization
    uint64_t        r_opt;                  // basis points borrow rate at optimal utilization
    uint64_t        r_max;                  // basis points borrow rate at 100% utilization
+   // Invariant: total_liquidity = on-chain cash + accrued supply interest (including repayments).
    asset           total_liquidity;        // deposit principal + accrued supply interest
    asset           total_debt;             // borrowed principal + accrued interest
    asset           total_supply_shares;    // aggregate supply shares
@@ -117,7 +118,10 @@ private:
    reserve_state _accrue(reserve_state res);
    int64_t       _calc_borrow_rate(const reserve_state& res, uint64_t util_bps)const;
 
-   asset _shares_from_amount(const asset& amount, const asset& total_shares, const asset& total_amount)const;
+   asset _supply_shares_from_amount(const asset& amount, const asset& total_shares, const asset& total_amount)const;
+   asset _borrow_shares_from_amount(const asset& amount, const asset& total_shares, const asset& total_amount)const;
+   asset _repay_shares_from_amount(const asset& amount, const asset& total_shares, const asset& total_amount)const;
+   asset _withdraw_shares_from_amount(const asset& amount, const asset& total_shares, const asset& total_amount)const;
    asset _amount_from_shares(const asset& shares, const asset& total_shares, const asset& total_amount)const;
 
    struct valuation {

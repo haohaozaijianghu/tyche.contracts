@@ -114,7 +114,9 @@ void tyche_market::supply(name owner, asset quantity) {
 
    auto res = _accrue(*res_itr);
 
-   asset shares = _shares_from_amount(quantity, res.total_supply_shares, res.total_liquidity);
+   asset shares = _supply_shares_from_amount(quantity, res.total_supply_shares, res.total_liquidity);
+
+   _transfer_from(res.token_contract, owner, quantity, "supply");
 
    positions_t positions(get_self(), get_self().value);
    auto        pos_ptr = _get_or_create_position(positions, owner, quantity.symbol.code(), quantity);
@@ -130,8 +132,6 @@ void tyche_market::supply(name owner, asset quantity) {
       row.protocol_reserve    = res.protocol_reserve;
       row.last_updated        = res.last_updated;
    });
-
-   _transfer_from(res.token_contract, owner, quantity, "supply");
 }
 
 void tyche_market::withdraw(name owner, asset quantity) {
@@ -160,14 +160,16 @@ void tyche_market::withdraw(name owner, asset quantity) {
    uint64_t available = res.total_liquidity.amount - res.total_debt.amount;
    check(quantity.amount <= (int64_t)available, "insufficient liquidity");
 
-   asset share_delta = _shares_from_amount(quantity, res.total_supply_shares, res.total_liquidity);
+   asset share_delta = _withdraw_shares_from_amount(quantity, res.total_supply_shares, res.total_liquidity);
+
+   valuation val = _compute_valuation(owner);
+   check(val.debt_value == 0 || val.collateral_value >= val.debt_value, "health factor below 1 after withdraw");
+
+   _transfer_out(res.token_contract, owner, quantity, "withdraw");
 
    owner_idx.modify(pos_itr, owner, [&](auto& row) {
       row.supply_shares -= share_delta;
    });
-
-   valuation val = _compute_valuation(owner);
-   check(val.debt_value == 0 || val.collateral_value >= val.debt_value, "health factor below 1 after withdraw");
 
    reserves.modify(res_itr, same_payer, [&](auto& row) {
       row.total_liquidity     = res.total_liquidity - quantity;
@@ -176,8 +178,6 @@ void tyche_market::withdraw(name owner, asset quantity) {
       row.protocol_reserve    = res.protocol_reserve;
       row.last_updated        = res.last_updated;
    });
-
-   _transfer_out(res.token_contract, owner, quantity, "withdraw");
 }
 
 void tyche_market::setcollat(name owner, symbol_code sym, bool enabled) {
@@ -221,16 +221,18 @@ void tyche_market::borrow(name owner, asset quantity) {
    positions_t positions(get_self(), get_self().value);
    auto        pos_ptr = _get_or_create_position(positions, owner, quantity.symbol.code(), quantity);
 
-   asset borrow_shares = _shares_from_amount(quantity, res.total_borrow_shares, res.total_debt);
-
-   positions.modify(*pos_ptr, same_payer, [&](auto& row) {
-      row.borrow_shares += borrow_shares;
-   });
+   asset borrow_shares = _borrow_shares_from_amount(quantity, res.total_borrow_shares, res.total_debt);
 
    valuation val = _compute_valuation(owner);
    check(val.debt_value > 0, "valuation error");
    check(val.debt_value <= val.max_borrowable_value, "exceeds max LTV");
    check(val.collateral_value >= val.debt_value, "health factor below 1 after borrow");
+
+   _transfer_out(res.token_contract, owner, quantity, "borrow");
+
+   positions.modify(*pos_ptr, same_payer, [&](auto& row) {
+      row.borrow_shares += borrow_shares;
+   });
 
    reserves.modify(res_itr, same_payer, [&](auto& row) {
       row.total_liquidity     = res.total_liquidity;
@@ -240,8 +242,6 @@ void tyche_market::borrow(name owner, asset quantity) {
       row.protocol_reserve    = res.protocol_reserve;
       row.last_updated        = res.last_updated;
    });
-
-   _transfer_out(res.token_contract, owner, quantity, "borrow");
 }
 
 void tyche_market::repay(name payer, name borrower, asset quantity) {
@@ -267,7 +267,9 @@ void tyche_market::repay(name payer, name borrower, asset quantity) {
       repay_amount = current_debt;
    }
 
-   asset share_delta = _shares_from_amount(repay_amount, res.total_borrow_shares, res.total_debt);
+   asset share_delta = _repay_shares_from_amount(repay_amount, res.total_borrow_shares, res.total_debt);
+
+   _transfer_from(res.token_contract, payer, repay_amount, "repay");
 
    owner_idx.modify(pos_itr, same_payer, [&](auto& row) {
       row.borrow_shares -= share_delta;
@@ -281,8 +283,6 @@ void tyche_market::repay(name payer, name borrower, asset quantity) {
       row.protocol_reserve    = res.protocol_reserve;
       row.last_updated        = res.last_updated;
    });
-
-   _transfer_from(res.token_contract, payer, repay_amount, "repay");
 }
 
 void tyche_market::liquidate(name liquidator,
@@ -342,25 +342,37 @@ void tyche_market::liquidate(name liquidator,
    check(repay_value_cap > 0, "repay amount too small");
 
    // adjust repay_amount to capped value
-   int64_t capped_amount = static_cast<int64_t>(repay_value_cap * PRICE_SCALE / debt_price);
+   int64_t capped_amount = static_cast<int64_t>((repay_value_cap * PRICE_SCALE + debt_price - 1) / debt_price);
    repay_amount          = asset(capped_amount, repay_amount.symbol);
    repay_value           = (int128_t)repay_amount.amount * debt_price / PRICE_SCALE;
 
-   asset debt_share_delta = _shares_from_amount(repay_amount, debt_res.total_borrow_shares, debt_res.total_debt);
+   if (repay_amount > borrower_debt) {
+      repay_amount = borrower_debt;
+      repay_value  = (int128_t)repay_amount.amount * debt_price / PRICE_SCALE;
+   }
+
+   asset debt_share_delta = _repay_shares_from_amount(repay_amount, debt_res.total_borrow_shares, debt_res.total_debt);
+   check(debt_share_delta.amount > 0, "repay too small");
 
    // collateral to seize with bonus
    int128_t seize_value = repay_value * (collat_res.liquidation_bonus) / RATE_SCALE;
+   check(seize_value <= (int128_t)std::numeric_limits<int64_t>::max() * col_price / PRICE_SCALE, "seize overflow");
    int64_t  seize_amount = (int64_t)(seize_value * PRICE_SCALE / col_price);
+   check(seize_amount > 0, "seize amount zero");
    asset    seize_asset  = asset(seize_amount, collat_res.total_liquidity.symbol);
 
    asset collateral_balance = _amount_from_shares(coll_pos->supply_shares, collat_res.total_supply_shares, collat_res.total_liquidity);
    check(collateral_balance.amount >= seize_asset.amount, "insufficient collateral");
 
+   asset collat_share_delta = _withdraw_shares_from_amount(seize_asset, collat_res.total_supply_shares, collat_res.total_liquidity);
+
+   _transfer_from(debt_res.token_contract, liquidator, repay_amount, "liquidate repay");
+   _transfer_out(collat_res.token_contract, liquidator, seize_asset, "liquidate seize");
+
    owner_idx.modify(debt_pos, same_payer, [&](auto& row) {
       row.borrow_shares -= debt_share_delta;
    });
 
-   asset collat_share_delta = _shares_from_amount(seize_asset, collat_res.total_supply_shares, collat_res.total_liquidity);
    owner_idx.modify(coll_pos, same_payer, [&](auto& row) {
       row.supply_shares -= collat_share_delta;
    });
@@ -382,9 +394,6 @@ void tyche_market::liquidate(name liquidator,
       row.protocol_reserve    = collat_res.protocol_reserve;
       row.last_updated        = collat_res.last_updated;
    });
-
-   _transfer_from(debt_res.token_contract, liquidator, repay_amount, "liquidate repay");
-   _transfer_out(collat_res.token_contract, liquidator, seize_asset, "liquidate seize");
 }
 
 reserve_state tyche_market::_require_reserve(const symbol& sym) {
@@ -444,13 +453,48 @@ int64_t tyche_market::_calc_borrow_rate(const reserve_state& res, uint64_t util_
    return res.r_opt + static_cast<int64_t>(slope);
 }
 
-asset tyche_market::_shares_from_amount(const asset& amount, const asset& total_shares, const asset& total_amount) const {
+asset tyche_market::_supply_shares_from_amount(const asset& amount, const asset& total_shares, const asset& total_amount) const {
    check(amount.symbol == total_amount.symbol, "symbol mismatch");
    if (total_amount.amount == 0 || total_shares.amount == 0) {
       return amount;
    }
    int128_t numerator   = (int128_t)amount.amount * total_shares.amount;
    int64_t  share_value = static_cast<int64_t>(numerator / total_amount.amount);
+   return asset(share_value, amount.symbol);
+}
+
+asset tyche_market::_borrow_shares_from_amount(const asset& amount, const asset& total_shares, const asset& total_amount) const {
+   check(amount.symbol == total_amount.symbol, "symbol mismatch");
+   if (total_amount.amount == 0 || total_shares.amount == 0) {
+      check(amount.amount > 0, "borrow too small");
+      return amount;
+   }
+   int128_t numerator   = (int128_t)amount.amount * total_shares.amount;
+   int128_t denominator = total_amount.amount;
+   int64_t  share_value = static_cast<int64_t>((numerator + denominator - 1) / denominator);
+   check(share_value > 0, "borrow too small");
+   return asset(share_value, amount.symbol);
+}
+
+asset tyche_market::_repay_shares_from_amount(const asset& amount, const asset& total_shares, const asset& total_amount) const {
+   check(amount.symbol == total_amount.symbol, "symbol mismatch");
+   if (total_amount.amount == 0 || total_shares.amount == 0) {
+      check(false, "repay too small");
+   }
+   int128_t numerator   = (int128_t)amount.amount * total_shares.amount;
+   int64_t  share_value = static_cast<int64_t>(numerator / total_amount.amount);
+   check(share_value > 0, "repay too small");
+   return asset(share_value, amount.symbol);
+}
+
+asset tyche_market::_withdraw_shares_from_amount(const asset& amount, const asset& total_shares, const asset& total_amount) const {
+   check(amount.symbol == total_amount.symbol, "symbol mismatch");
+   if (total_amount.amount == 0 || total_shares.amount == 0) {
+      return amount;
+   }
+   int128_t numerator   = (int128_t)amount.amount * total_shares.amount;
+   int128_t denominator = total_amount.amount;
+   int64_t  share_value = static_cast<int64_t>((numerator + denominator - 1) / denominator);
    return asset(share_value, amount.symbol);
 }
 
@@ -481,11 +525,6 @@ tyche_market::valuation tyche_market::_compute_valuation(name owner) {
       }
 
       reserve_state res = _accrue(*res_itr);
-      if (res.last_updated != res_itr->last_updated || res.total_debt != res_itr->total_debt ||
-          res.total_liquidity != res_itr->total_liquidity || res.total_borrow_shares != res_itr->total_borrow_shares ||
-          res.total_supply_shares != res_itr->total_supply_shares) {
-         reserves.modify(res_itr, same_payer, [&](auto& row) { row = res; });
-      }
 
       uint64_t price = _get_fresh_price(prices, itr->sym_code);
 
