@@ -9,41 +9,33 @@ namespace tychefi {
 
 static constexpr int128_t MAX_RATE_DELTA = static_cast<int128_t>(std::numeric_limits<int64_t>::max());
 
-tyche_market::tyche_market(name receiver, name code, datastream<const char*> ds)
-   : contract(receiver, code, ds) {
-   _gstate = _read_state();
-}
-
 void tyche_market::init(name admin) {
    require_auth(get_self());
-   check(admin != name(), "admin cannot be empty");
+   CHECKC(is_account(admin), err::ACCOUNT_INVALID, "admin not exist");
    _gstate.admin = admin;
-   _write_state(_gstate);
+
 }
 
 void tyche_market::setpause(bool paused) {
    require_auth(_gstate.admin);
    _gstate.paused = paused;
-   _write_state(_gstate);
 }
 
 void tyche_market::setpricettl(uint32_t ttl_sec) {
    require_auth(_gstate.admin);
-   check(ttl_sec > 0, "ttl must be positive");
+   CHECKC(ttl_sec > 0, err::NOT_POSITIVE, "ttl must be positive");
    _gstate.price_ttl_sec = ttl_sec;
-   _write_state(_gstate);
 }
 
 void tyche_market::setclosefac(uint64_t close_factor_bp) {
    require_auth(_gstate.admin);
-   check(close_factor_bp > 0 && close_factor_bp <= RATE_SCALE, "close factor must be within 0-100% in bps");
+   CHECKC(close_factor_bp > 0 && close_factor_bp <= RATE_SCALE, err::NOT_STARTED, "close factor must be within 0-100% in bps");
    _gstate.close_factor_bp = close_factor_bp;
-   _write_state(_gstate);
 }
 
 void tyche_market::setprice(symbol_code sym, uint64_t price) {
    require_auth(_gstate.admin);
-   check(price > 0, "price must be positive");
+   CHECKC(price > 0, err::NOT_POSITIVE, "price must be positive");
 
    prices_t prices(get_self(), get_self().value);
    auto     itr = prices.find(sym.raw());
@@ -137,7 +129,8 @@ void tyche_market::addreserve(const extended_symbol& asset_sym,
       row.r0                  = r0;
       row.r_opt               = r_opt;
       row.r_max               = r_max;
-
+      row.max_rate_step_bp    = 200;        // 默认值
+      row.last_borrow_rate_bp = r0;         // 初始化为 r0（最合理）
       row.total_liquidity     = asset(0, sym);
       row.total_debt          = asset(0, sym);
       row.total_supply_shares = asset(0, sym);
@@ -446,6 +439,8 @@ void tyche_market::liquidate(name liquidator,name borrower,symbol_code debt_sym,
    check(repay_amount.amount > 0, "repay amount must be positive");
    check(debt_sym != collateral_sym, "invalid liquidation asset");
 
+   _check_price_available(debt_sym);
+   _check_price_available(collateral_sym);
    // ---------- 1) 先拿表 + 基础校验 ----------
    reserves_t reserves(get_self(), get_self().value);
 
@@ -650,30 +645,52 @@ reserve_state tyche_market::_accrue(reserve_state res) {
       return res;
    }
 
-   uint32_t elapsed = (uint32_t)(now.sec_since_epoch() - res.last_updated.sec_since_epoch());
-   if (elapsed == 0 || res.total_debt.amount <= 0) {
+   uint32_t elapsed = (uint32_t)(
+      now.sec_since_epoch() - res.last_updated.sec_since_epoch()
+   );
+
+   if (elapsed == 0) {
+      res.last_updated = now;
+      return res;
+   }
+
+   // ===== 无债务：利率锚回 r0（v2 关键）=====
+   if (res.total_debt.amount <= 0) {
+      res.last_borrow_rate_bp = res.r0;
       res.last_updated = now;
       return res;
    }
 
    uint64_t util_bps = res.total_liquidity.amount == 0
-                          ? 0
-                          : static_cast<uint64_t>((int128_t)res.total_debt.amount * RATE_SCALE / res.total_liquidity.amount);
+      ? 0
+      : (uint64_t)((int128_t)res.total_debt.amount * RATE_SCALE
+                   / res.total_liquidity.amount);
+
    int64_t borrow_rate_bps = _calc_borrow_rate(res, util_bps);
 
-   int128_t interest = (int128_t)res.total_debt.amount * borrow_rate_bps * elapsed / (RATE_SCALE * SECONDS_PER_YEAR);
-   if (interest > MAX_RATE_DELTA) {
-      interest = MAX_RATE_DELTA;
-   }
+   check(borrow_rate_bps >= 0, "borrow rate underflow");
+   check(borrow_rate_bps <= (int64_t)res.r_max, "borrow rate overflow");
 
-   int64_t interest_i64 = static_cast<int64_t>(interest);
-   if (interest_i64 > 0) {
-      res.total_debt.amount += interest_i64;
-      int128_t supply_income = interest * (RATE_SCALE - res.reserve_factor) / RATE_SCALE;
+   // v2：写回锚点
+   res.last_borrow_rate_bp = (uint64_t)borrow_rate_bps;
+
+   int128_t interest =
+      (int128_t)res.total_debt.amount
+      * borrow_rate_bps
+      * elapsed
+      / (RATE_SCALE * SECONDS_PER_YEAR);
+
+   check(interest >= 0, "interest underflow");
+   interest = std::min<int128_t>(interest, MAX_RATE_DELTA);
+
+   if (interest > 0) {
+      int128_t supply_income =
+         interest * (RATE_SCALE - res.reserve_factor) / RATE_SCALE;
       int128_t protocol_income = interest - supply_income;
 
-      res.total_liquidity.amount += static_cast<int64_t>(supply_income);
-      res.protocol_reserve.amount += static_cast<int64_t>(protocol_income);
+      res.total_debt.amount       += (int64_t)interest;
+      res.total_liquidity.amount  += (int64_t)supply_income;
+      res.protocol_reserve.amount += (int64_t)protocol_income;
    }
 
    res.last_updated = now;
@@ -688,24 +705,58 @@ reserve_state tyche_market::_accrue_and_store(reserves_t& reserves, reserves_t::
     return res;
 }
 
+uint64_t tyche_market::_util_bps(const reserve_state& res) const {
+   if (res.total_liquidity.amount <= 0) return 0;
+   int128_t u = (int128_t)res.total_debt.amount * RATE_SCALE / res.total_liquidity.amount;
+   if (u < 0) u = 0;
+   if (u > (int128_t)RATE_SCALE) u = RATE_SCALE;
+   return (uint64_t)u;
+}
 
-int64_t tyche_market::_calc_borrow_rate(const reserve_state& res, uint64_t util_bps) const {
+uint64_t tyche_market::_buffer_bps_by_util(uint64_t util_bps) const {
+   // v2: util 越高 buffer 越厚
+   if (util_bps < 7000) return 100;   // <70%  => 1%
+   if (util_bps < 8500) return 200;   // 70-85 => 2%
+   if (util_bps < 9500) return 500;   // 85-95 => 5%
+   return 1000;                       // >=95% => 10%
+}
 
+int64_t tyche_market::_calc_target_borrow_rate(const reserve_state& res, uint64_t util_bps) const {
    check(res.u_opt > 0 && res.u_opt < RATE_SCALE, "u_opt must be in (0, 100%)");
    check(res.r0 <= res.r_opt && res.r_opt <= res.r_max, "invalid interest rate curve");
 
    if (util_bps <= res.u_opt) {
-      // linear from r0 to r_opt
       int128_t slope = (int128_t)(res.r_opt - res.r0) * util_bps / res.u_opt;
-      return res.r0 + static_cast<int64_t>(slope);
+      return res.r0 + (int64_t)slope;
    }
 
-   // from u_opt to 100%
    uint64_t excess = util_bps > RATE_SCALE ? RATE_SCALE : util_bps;
    excess -= res.u_opt;
    int128_t slope = (int128_t)(res.r_max - res.r_opt) * excess / (RATE_SCALE - res.u_opt);
-   return res.r_opt + static_cast<int64_t>(slope);
+   return res.r_opt + (int64_t)slope;
 }
+
+int64_t tyche_market::_calc_borrow_rate(const reserve_state& res, uint64_t util_bps) const {
+   int64_t target = _calc_target_borrow_rate(res, util_bps);
+
+   // 首次/旧数据兼容：last_borrow_rate_bp = 0 时，直接用 target 或 r0
+   int64_t last = (res.last_borrow_rate_bp == 0) ? (int64_t)res.r0 : (int64_t)res.last_borrow_rate_bp;
+
+   int64_t step = (int64_t)res.max_rate_step_bp;
+   if (step <= 0) return target;
+
+   int64_t delta = target - last;
+   if (delta >  step) delta =  step;
+   if (delta < -step) delta = -step;
+
+   int64_t applied = last + delta;
+
+   // guardrail：保持在[r0, r_max]
+   if (applied < (int64_t)res.r0)   applied = (int64_t)res.r0;
+   if (applied > (int64_t)res.r_max) applied = (int64_t)res.r_max;
+   return applied;
+}
+
 
 asset tyche_market::_supply_shares_from_amount(const asset& amount, const asset& total_shares, const asset& total_amount) const {
    check(amount.symbol == total_amount.symbol, "symbol mismatch");
@@ -856,20 +907,6 @@ void tyche_market::_transfer_out(name token_contract, name to, const asset& quan
       token_contract,
       "transfer"_n,
       std::make_tuple(get_self(), to, quantity, memo)).send();
-}
-
-global_state tyche_market::_read_state() const {
-   global_state state;
-   eosio::singleton<"state"_n, global_state> state_sing(get_self(), get_self().value);
-   if (state_sing.exists()) {
-      state = state_sing.get();
-   }
-   return state;
-}
-
-void tyche_market::_write_state(const global_state& state) {
-   eosio::singleton<"state"_n, global_state> state_sing(get_self(), get_self().value);
-   state_sing.set(state, get_self());
 }
 
 } // namespace tychefi

@@ -74,7 +74,13 @@ private:
    reserve_state _accrue(reserve_state res);
    reserve_state _accrue_and_store(reserves_t& reserves, reserves_t::iterator itr);
 
-   int64_t _calc_borrow_rate(const reserve_state& res, uint64_t util_bps)const;
+   uint64_t _util_bps(const reserve_state& res) const;
+   uint64_t _buffer_bps_by_util(uint64_t util_bps) const;
+
+   // v1的曲线函数保持不变：计算“目标利率”
+   int64_t _calc_target_borrow_rate(const reserve_state& res, uint64_t util_bps) const;
+   // v2：对目标利率做 step cap，产出“本次生效利率”
+   int64_t  _calc_borrow_rate(const reserve_state& res, uint64_t util_bps) const;
 
    asset _supply_shares_from_amount(const asset& amount,
                                     const asset& total_shares,
@@ -96,9 +102,6 @@ private:
                              const asset& total_shares,
                              const asset& total_amount)const;
 
-   // =======================
-   // Valuation
-   // =======================
    struct valuation {
       int128_t collateral_value     = 0;
       int128_t max_borrowable_value = 0;
@@ -106,9 +109,16 @@ private:
    };
 
    int64_t available_liquidity(const reserve_state& res) {
-      // 只能借 / 提：
-      // total_liquidity - protocol_reserve - 保留缓冲
-      return res.total_liquidity.amount - res.protocol_reserve.amount;
+      uint64_t util_bps = _util_bps(res);
+      uint64_t buffer_bps = _buffer_bps_by_util(util_bps);
+
+      int128_t buffer = (int128_t)res.total_liquidity.amount * buffer_bps / RATE_SCALE;
+      int128_t avail  = (int128_t)res.total_liquidity.amount
+                     - (int128_t)res.protocol_reserve.amount
+                     - buffer;
+
+      if (avail <= 0) return 0;
+      return (int64_t)avail;
    }
 
    valuation _compute_valuation(name owner);

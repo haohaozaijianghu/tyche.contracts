@@ -12,6 +12,30 @@ static constexpr uint64_t RATE_SCALE  = 10'000;          // basis points
 static constexpr uint64_t PRICE_SCALE = 10'000;          // price precision
 static constexpr uint32_t SECONDS_PER_YEAR = 31'536'000; // 365 days
 
+enum class err: uint8_t {
+   NONE                 = 0,
+   TIME_INVALID         = 1,
+   RECORD_EXISTING      = 2,
+   RECORD_NOT_FOUND     = 3,
+   SYMBOL_MISMATCH      = 4,
+   PARAM_ERROR          = 5,
+   PAUSED               = 6,
+   NO_AUTH              = 7,
+   NOT_POSITIVE         = 8,
+   NOT_STARTED          = 9,
+   OVERSIZED            = 10,
+   TIME_EXPIRED         = 11,
+   NOTIFY_UNRELATED     = 12,
+   ACTION_REDUNDANT     = 13,
+   ACCOUNT_INVALID      = 14,
+   CONTENT_LENGTH_INVALID = 15,
+   NOT_DISABLED          = 16,
+
+};
+
+#define CHECKC(exp, code, msg) \
+   { if (!(exp)) eosio::check(false, string("[[") + to_string((int)code) + string("]] ") + msg); }
+
 #define TBL struct [[eosio::table, eosio::contract("tyche.market")]]
 #define NTBL(name) struct [[eosio::table(name), eosio::contract("tyche.market")]]
 
@@ -50,6 +74,9 @@ NTBL("reserves") reserve_state {
    uint64_t r0;
    uint64_t r_opt;
    uint64_t r_max;
+   // ===== V2: rate step cap =====
+   uint64_t max_rate_step_bp = 200;  // 每次accrue最多变化 200 bps（2%年化）
+   uint64_t last_borrow_rate_bp = 0; // 上次生效的借款利率（bps）
 
    // accounting
    asset     total_liquidity;
@@ -64,7 +91,7 @@ NTBL("reserves") reserve_state {
    uint64_t primary_key()const { return sym_code.raw(); }
    EOSLIB_SERIALIZE( reserve_state, (sym_code)(token_contract)(max_ltv) (liquidation_threshold)
                                  (liquidation_bonus)(reserve_factor)(u_opt)
-                                 (r0)(r_opt)(r_max)(total_liquidity)
+                                 (r0)(r_opt)(r_max)(max_rate_step_bp)(last_borrow_rate_bp)(total_liquidity)
                                  (total_debt)(total_supply_shares)(total_borrow_shares)
                                  (protocol_reserve)(last_updated)(paused) )
 };
