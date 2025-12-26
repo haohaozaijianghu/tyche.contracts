@@ -3,7 +3,8 @@
 #include <cmath>
 #include <limits>
 #include <tuple>
-#include "tyche.market.hpp"
+#include "flon.token.hpp"
+#include "utils.hpp"
 
 namespace tychefi {
 
@@ -52,7 +53,7 @@ void tyche_market::setprice(symbol_code sym, uint64_t price) {
 
    } else {
 
-      // === 防止同块多次改价（可选但强烈建议）===
+      // === 防止同块多次改价 ===
       check(itr->updated_at < now,"price already updated in this block");
 
       // === 限制单次价格变动幅度 ===
@@ -62,17 +63,26 @@ void tyche_market::setprice(symbol_code sym, uint64_t price) {
                         ? (int128_t)price - last_price
                         : (int128_t)last_price - price;
 
-      // diff / last_price <= MAX_PRICE_CHANGE_BP / RATE_SCALE
-      check(
-         diff * RATE_SCALE <= (int128_t)last_price * MAX_PRICE_CHANGE_BP,
-         "price change exceeds max allowed range"
-      );
+      check(diff * RATE_SCALE <= (int128_t)last_price * MAX_PRICE_CHANGE_BP,"price change exceeds max allowed range");
 
       prices.modify(itr, get_self(), [&](auto& row) {
          row.price      = price;
          row.updated_at = now;
       });
    }
+}
+
+void tyche_market::setemergency(bool enabled){
+      require_auth(_gstate.admin);
+      _gstate.emergency_mode = enabled;
+}
+
+void tyche_market::setemcfg(uint64_t bonus_bp, uint64_t max_bonus_bp, uint64_t backstop_min){
+      require_auth(_gstate.admin);
+      check(bonus_bp <= max_bonus_bp, "bonus exceeds max");
+      _gstate.emergency_bonus_bp     = bonus_bp;
+      _gstate.max_emergency_bonus_bp = max_bonus_bp;
+      _gstate.backstop_min_reserve   = backstop_min;
 }
 
 void tyche_market::addreserve(const extended_symbol& asset_sym,
@@ -158,20 +168,11 @@ void tyche_market::_on_supply(const name& owner, const asset& quantity) {
    auto res = _accrue_and_store(reserves, res_itr);
 
    // 计算 supply shares
-   asset shares = _supply_shares_from_amount(
-      quantity,
-      res.total_supply_shares,
-      res.total_liquidity
-   );
+   asset shares = _supply_shares_from_amount(quantity,res.total_supply_shares,res.total_liquidity);
 
    // === 更新用户仓位 ===
    positions_t positions(get_self(), get_self().value);
-   auto pos_ptr = _get_or_create_position(
-      positions,
-      owner,
-      quantity.symbol.code(),
-      quantity
-   );
+   auto pos_ptr = _get_or_create_position(positions,owner,quantity.symbol.code(),quantity);
 
    positions.modify(*pos_ptr, same_payer, [&](auto& row) {
       row.supply_shares += shares;
@@ -321,12 +322,7 @@ void tyche_market::borrow(name owner, asset quantity) {
 
    // 获取 / 创建仓位
    positions_t positions(get_self(), get_self().value);
-   auto pos_ptr = _get_or_create_position(
-      positions,
-      owner,
-      quantity.symbol.code(),
-      quantity
-   );
+   auto pos_ptr = _get_or_create_position(positions,owner,quantity.symbol.code(),quantity);
 
    // === 计算 borrow shares ===
    asset borrow_shares = _borrow_shares_from_amount(quantity,res.total_borrow_shares,res.total_debt);
@@ -432,15 +428,13 @@ void tyche_market::_on_repay(const name& payer,const name& borrower,const asset&
    });
 }
 
-void tyche_market::liquidate(name liquidator,name borrower,symbol_code debt_sym,asset repay_amount,symbol_code collateral_sym) {
+void tyche_market::_on_liquidate(name liquidator,name borrower,symbol_code debt_sym,asset repay_amount,symbol_code collateral_sym) {
    require_auth(liquidator);
    check(!_gstate.paused, "market paused");
    check(liquidator != borrower, "self liquidation not allowed");
    check(repay_amount.amount > 0, "repay amount must be positive");
    check(debt_sym != collateral_sym, "invalid liquidation asset");
 
-   _check_price_available(debt_sym);
-   _check_price_available(collateral_sym);
    // ---------- 1) 先拿表 + 基础校验 ----------
    reserves_t reserves(get_self(), get_self().value);
 
@@ -539,8 +533,22 @@ void tyche_market::liquidate(name liquidator,name borrower,symbol_code debt_sym,
    check(debt_share_delta.amount > 0, "repay too small");
 
    // ---------- 10) 计算要 seize 的 collateral（含 bonus） ----------
-   // seize_value = repay_value * bonus / RATE
-   int128_t seize_value = repay_value * (int128_t)coll_res.liquidation_bonus / RATE_SCALE;
+   uint64_t bonus_bp = coll_res.liquidation_bonus;
+
+   if (_gstate.emergency_mode) {
+      uint64_t emergency_bonus = _gstate.emergency_bonus_bp;
+      bonus_bp += emergency_bonus;
+
+      uint64_t max_bonus = RATE_SCALE + _gstate.max_emergency_bonus_bp;
+      bonus_bp = std::min(bonus_bp, max_bonus);
+
+      check(
+         debt_res.protocol_reserve.amount >= (int64_t)_gstate.backstop_min_reserve,
+         "protocol backstop reserve too low"
+      );
+   }
+
+   int128_t seize_value = repay_value * (int128_t)bonus_bp / RATE_SCALE;
    check(seize_value > 0, "seize value zero");
 
    // seize_amount = floor(seize_value * PRICE_SCALE / col_price)
@@ -563,8 +571,7 @@ void tyche_market::liquidate(name liquidator,name borrower,symbol_code debt_sym,
    check(coll_share_delta.amount > 0, "seize too small");
    check(coll_share_delta.amount <= coll_pos->supply_shares.amount, "seize exceeds collateral shares");
 
-   // ---------- 12) 执行转账（先收债务token，再放出抵押token） ----------
-   _transfer_from(debt_res.token_contract, liquidator, repay_amount, "liquidate repay");
+   // ---------- 12) 执行转账 ----------
    _transfer_out(coll_res.token_contract, liquidator, seize_asset, "liquidate seize");
 
    // ---------- 13) 写仓位 ----------
@@ -602,33 +609,55 @@ void tyche_market::liquidate(name liquidator,name borrower,symbol_code debt_sym,
    });
 }
 
-void tyche_market::on_transfer(
-   const name& from,
-   const name& to,
-   const asset& quantity,
-   const string& memo
-) {
+void tyche_market::on_transfer(const name& from,const name& to,const asset& quantity,const string& memo) {
    if (to != get_self()) return;
    if (from == get_self()) return;
 
    check(!_gstate.paused, "market paused");
    check(quantity.amount > 0, "quantity must be positive");
 
+   auto parts = split(memo, ":");
+   check(parts.size() >= 1, "invalid memo");
+
+   const string& cmd = parts[0];
+
    // ---- supply ----
-   if (memo == "supply") {
+   if (cmd == "supply") {
+      check(parts.size() == 1, "invalid supply memo");
       _on_supply(from, quantity);
       return;
    }
 
    // ---- repay ----
-   if (memo.rfind("repay:", 0) == 0) {
-      name borrower = name(memo.substr(6));
+   if (cmd == "repay") {
+      // repay:borrower
+      check(parts.size() == 2, "invalid repay memo");
+      name borrower = name(parts[1]);
       check(is_account(borrower), "invalid borrower");
       _on_repay(from, borrower, quantity);
       return;
    }
 
-   check(false, "invalid memo (use supply | repay:account)");
+   // ---- liquidate ----
+   if (cmd == "liquidate") {
+      // liquidate:borrower:DEBT:COLL
+      check(parts.size() == 4, "invalid liquidate memo");
+
+      name borrower = name(parts[1]);
+      symbol_code debt_sym(parts[2]);
+      symbol_code coll_sym(parts[3]);
+
+      _on_liquidate(
+         from,        // liquidator
+         borrower,
+         debt_sym,
+         quantity,    // repay_amount
+         coll_sym
+      );
+      return;
+   }
+
+   check(false, "invalid memo command");
 }
 
 reserve_state tyche_market::_require_reserve(const symbol &sym)
@@ -650,7 +679,6 @@ reserve_state tyche_market::_accrue(reserve_state res) {
    );
 
    if (elapsed == 0) {
-      res.last_updated = now;
       return res;
    }
 
@@ -697,7 +725,7 @@ reserve_state tyche_market::_accrue(reserve_state res) {
    return res;
 }
 
-reserve_state tyche_market::_accrue_and_store(reserves_t& reserves, reserves_t::iterator itr) {
+reserve_state tyche_market::_accrue_and_store(reserves_t& reserves, reserves_t::const_iterator itr) {
     auto res = _accrue(*itr);
     reserves.modify(itr, same_payer, [&](auto& row) {
         row = res;
@@ -857,7 +885,10 @@ uint64_t tyche_market::_get_fresh_price(prices_t& prices, symbol_code sym) const
    check(itr != prices.end(), "price not available");
 
    auto freshness = current_time_point() - itr->updated_at;
-   int64_t ttl_us = static_cast<int64_t>(_gstate.price_ttl_sec) * 1'000'000;
+   int64_t ttl_us = (int64_t)_gstate.price_ttl_sec * 1'000'000;
+   if (_gstate.emergency_mode) {
+      ttl_us *= 2; // 或 3
+   }
    check(freshness.count() <= ttl_us, "price stale");
 
    return itr->price;
@@ -893,13 +924,6 @@ position_row* tyche_market::_get_or_create_position(positions_t& table,
    return const_cast<position_row*>(&(*new_itr));
 }
 
-void tyche_market::_transfer_from(name token_contract, name from, const asset& quantity, const string& memo) {
-   eosio::action(
-      permission_level{from, "active"_n},
-      token_contract,
-      "transfer"_n,
-      std::make_tuple(from, get_self(), quantity, memo)).send();
-}
 
 void tyche_market::_transfer_out(name token_contract, name to, const asset& quantity, const string& memo) {
    eosio::action(

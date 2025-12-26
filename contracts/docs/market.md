@@ -1,91 +1,272 @@
-# Tyche Market 需求概览
 
-> 说明：原先拆分的 Earn 与 Loan 产品形态不再需要，统一为 Market（Aave 式抵押借贷市场）。
+# Tyche Market 需求概览（最新版）
 
-## 产品形态
-- 链上抵押借贷市场（Aave-like Money Market）。
-- 用户可以存入资产赚取利息，也可以用资产作抵押借出其他资产。
-- 系统按利用率自动调节利率，并在风险失控时自动清算。
+> 说明：原先拆分的 Earn / Loan 产品形态已废弃，统一为 **Tyche Market** ——
+> 一个 Aave-like 的多资产抵押借贷市场，所有资金行为均通过 **token transfer + memo** 驱动。
 
-## 核心参与者
-- **存款人（Supplier）**：提供流动性并赚取利息。
-- **借款人（Borrower）**：抵押资产并借出资产。
-- **清算人（Liquidator）**：为系统清理坏账并赚取清算奖励。
-- **协议（Tyche）**：管理资金池、利率与风险。
+---
 
-## 核心业务实体
-### Reserve（资产池）
-- 每一种可借贷资产对应一个独立的 Reserve。
-- 关键要素：底层资产（token 合约与符号）、风控规则、利率模型、实时资金状态。
-- 业务示例：ETH 池、USDT 池、BTC 池各自独立运行。
+## 一、产品形态
 
-### User Position（用户仓位）
-- 每个用户在单个 Reserve 上可以进行两类操作：存（Supply）与借（Borrow）。
-- 存入的资产可选择开启或关闭抵押属性（Collateral）。
+- 链上多资产抵押借贷市场（Aave v3 风格）。
+- 同一市场内支持：
+  - 存款赚取利息（Supplier）
+  - 抵押借款（Borrower）
+  - 风险清算（Liquidator）
+- 利率由利用率自动调节，风险失控时通过清算与应急机制收敛。
 
-### 协议状态（全局）
-- 池子侧：总存款、总借款、利息指数。
-- 用户侧：抵押价值、借款价值、健康因子（HF）。
+**设计原则**
+- 不遍历用户
+- 利息指数化、按需结算
+- 所有资金流动必须先发生 transfer，再修改状态（EOSIO 安全模型）
 
-## 生命周期（从 0 到清算）
-### 1. 创建资产池（Reserve Setup）
-管理员上线一个可借贷资产，需要配置：
-- **max_ltv**：抵押后最大可借比例。
-- **liquidation_threshold**：触发风险警戒阈值。
-- **liquidation_bonus**：清算人奖励比例。
-- **reserve_factor**：协议抽成。
-- **U_opt**：最优利用率。
-- **r0 / r_opt / r_max**：借款利率曲线参数。
+---
 
-业务规则：
-- Reserve 上线后用户才能存/借，可随时暂停（Pause）。
+## 二、核心参与者
 
-### 2. 存款（Deposit / Supply）
-用户将代币转入 Tyche，系统依次执行：
-1. 更新利息（推进指数）。
-2. 换算存款份额（Supply Shares）。
-3. 增加池子总存款。
-4. 记录用户份额。
-5. 默认开启抵押属性。
+- **Supplier（存款人）**
+  - 向 Market 转入资产
+  - 获得 supply shares
+  - 持续获得利息收益
+- **Borrower（借款人）**
+  - 将已开启 collateral 的资产作为抵押
+  - 借出其他资产
+  - 必须始终满足健康因子约束
+- **Liquidator（清算人）**
+  - 在 HF < 1 时替用户还债
+  - 获得抵押资产与清算奖励
+- **Protocol（Tyche）**
+  - 维护资产池状态
+  - 管理利率、风险参数与应急模式
+  - 累积 protocol reserve 作为系统缓冲
 
-要点：存款本身不等于抵押，只是可用于抵押的资产。
+---
 
-### 3. 开关抵押（Enable / Disable Collateral）
-- 用户可以关闭抵押：该资产不再计入 HF，但继续赚利息。
-- 风险规则：关闭操作不得导致 HF < 1，否则直接拒绝。
+## 三、核心业务实体
 
-### 4. 借款（Borrow）
-用户借出另一种资产时，系统必须：
-1. 更新相关 Reserve 的利息（借出池与抵押池）。
-2. 计算借款后的 HF。
-   - 公式：HF = 抵押价值 × 清算阈值 / 借款价值。
-3. 校验 HF ≥ 1、不超过 max_ltv、池子流动性充足。
-4. 生成 Borrow Shares 并增加 total_borrowed。
-5. 将资产打给用户。
+### 1. Reserve（资产池）
 
-原则：借款后仍需保持安全。
+每一种可借贷资产对应一个独立的 Reserve。
 
-### 5. 利息模型
-- 不定时结算，不遍历用户，依靠利息指数。
-- 利用率 U = 总借款 / 总存款。
-- 借款利率分段：
-  - U ≤ U_opt：线性增长。
-  - U > U_opt：陡峭增长（惩罚）。
-- 存款利率 = 借款利率 × 利用率 × (1 - reserve_factor)。
+#### 资产属性
+- token 合约
+- symbol_code
 
-效果：借得越多，借款越贵；借得越多，存款越赚钱。
+#### 风控参数
+- **max_ltv**：最大借款比例
+- **liquidation_threshold**：清算阈值（HF 计算用）
+- **liquidation_bonus**：基础清算奖励
+- **reserve_factor**：协议抽成比例
 
-### 6. 还款（Repay）
-- 系统流程：更新利息 → 计算当前真实债务 → 扣减 Borrow Shares → 退回多还部分 → 更新池子状态。
-- 支持代还与部分还款。
+#### 利率模型（v2）
+- **U_opt**：最优利用率
+- **r0 / r_opt / r_max**：分段借款利率曲线
+- **max_rate_step_bp**：单次利率变化上限（防瞬变）
+- **last_borrow_rate_bp**：当前生效利率锚点
 
-### 7. 提现（Withdraw）
-- 校验流程：更新利息 → 扣减 Supply Shares → 确认提现后 HF ≥ 1 → 检查池子流动性。
-- 提现后仍需保持整体仓位安全。
+#### 动态状态
+- total_liquidity
+- total_debt
+- total_supply_shares
+- total_borrow_shares
+- protocol_reserve
+- last_updated
+- paused
 
-### 8. 清算（Liquidation）
-- 触发：HF < 1。
-- 清算人用资产替用户还债，获得其抵押资产和奖励。
-- 系统步骤：校验可清算 → 限制最大清算比例（如 50%）→ 计算偿还与可领取抵押 → 更新双方仓位 → 资产转账。
+---
 
-目标：防止系统坏账并确保清算激励。
+### 2. User Position（用户仓位）
+
+- 以 **用户 × Reserve** 为粒度
+- 不做跨资产合并
+
+字段：
+- supply_shares
+- borrow_shares
+- collateral（是否作为抵押）
+
+---
+
+### 3. Global State（协议级）
+
+- 全局暂停
+- 价格 TTL
+- 清算比例（close factor）
+- emergency 模式与应急奖励
+- backstop（协议储备下限）
+
+---
+
+## 四、完整生命周期
+
+### 1️⃣ Reserve 上线（addreserve）
+
+管理员创建资产池，需配置：
+
+- max_ltv
+- liquidation_threshold
+- liquidation_bonus
+- reserve_factor
+- U_opt
+- r0 / r_opt / r_max
+
+**约束不变量**
+
+liquidation_threshold × liquidation_bonus < 1
+
+Reserve 可随时暂停，但不会清空历史仓位。
+
+---
+
+### 2️⃣ 存款（Supply）
+
+触发方式：
+```text
+token.transfer(user → market, amount, "supply")
+
+系统流程：
+	1.	校验价格存在且未过期
+	2.	推进 Reserve 计息
+	3.	按当前比例换算 supply shares
+	4.	更新用户仓位
+	5.	默认开启 collateral
+
+说明：
+	•	存款 ≠ 借款
+	•	是否作为抵押由 collateral 标志决定
+
+⸻
+
+3️⃣ 抵押开关（setcollat）
+	•	用户可关闭抵押属性
+	•	关闭后仍可继续赚取利息
+	•	风险约束：关闭后必须满足 HF ≥ 1
+
+禁止：
+	•	对 supply_shares = 0 的仓位开启抵押
+
+⸻
+
+4️⃣ 借款（Borrow）
+
+用户借出资产时，系统执行：
+	1.	校验目标 Reserve 状态与价格
+	2.	推进计息
+	3.	校验可用流动性（含 buffer）
+	4.	计算 borrow shares
+	5.	模拟写入 → 重新估值
+	6.	校验：
+	•	debt ≤ max_borrowable_value
+	•	HF ≥ 1
+	7.	回滚模拟
+	8.	实际转账 + 写入状态
+
+原则：
+	•	借款不会破坏系统整体安全
+	•	利率随利用率动态变化
+
+⸻
+
+5️⃣ 利息模型（v2）
+	•	利息不定时结算，仅在操作时推进
+	•	利用率：
+
+U = total_debt / total_liquidity
+
+借款利率：
+	•	U ≤ U_opt：线性上升
+	•	U > U_opt：陡峭惩罚段
+
+稳定机制：
+	•	利率变动受 max_rate_step_bp 限制
+	•	无债务时自动锚回 r0
+
+利息分配：
+	•	(1 - reserve_factor) → 存款人
+	•	reserve_factor → protocol_reserve
+
+⸻
+
+6️⃣ 还款（Repay）
+
+触发方式：
+
+token.transfer(payer → market, amount, "repay:borrower")
+
+流程：
+	1.	推进计息
+	2.	计算真实债务
+	3.	自动 clamp（防多还）
+	4.	扣减 borrow shares
+	5.	回补池子流动性
+
+支持：
+	•	部分还款
+	•	第三方代还
+
+⸻
+
+7️⃣ 提现（Withdraw）
+
+用户提现时系统校验：
+	1.	推进计息
+	2.	计算可提最大金额
+	3.	校验池子可用流动性
+	4.	提现后 HF ≥ 1
+	5.	转账并扣减 supply shares
+
+⸻
+
+8️⃣ 清算（Liquidation，v3）
+
+触发方式（必须先转账）：
+
+token.transfer(
+  liquidator → market,
+  repay_amount,
+  "liquidate:borrower:DEBT:COLL"
+)
+
+清算前置条件
+	•	borrower HF < 1
+	•	抵押资产已开启 collateral
+
+清算额度上限（三重约束）
+	1.	清算人转入的 repay_amount
+	2.	close_factor 限制
+	3.	恢复 HF = 1 的理论上限
+
+清算奖励
+	•	基础奖励：liquidation_bonus
+	•	emergency 模式下：
+	•	额外奖励（有上限）
+	•	要求 protocol_reserve ≥ backstop_min
+	•	放宽价格 TTL
+
+资金流顺序
+	1.	liquidator 转入债务资产
+	2.	market 释放抵押资产
+	3.	更新 borrower / reserve 状态
+
+⸻
+
+五、应急模式（Emergency Mode）
+
+启用后：
+	•	清算奖励提高（受上限约束）
+	•	价格 TTL 放宽
+	•	启用 protocol reserve 作为系统 backstop
+
+目标：
+	•	极端行情下快速去杠杆
+	•	鼓励清算，防止系统坏账
+
+⸻
+
+六、当前状态总结
+	•	Tyche Market 已完整实现：
+	•	多资产抵押借贷
+	•	稳定利率模型（v2）
+	•	严格清算决策树（v3）
+	•	transfer-driven 的清算执行模型
+	•	emergency 应急风控
