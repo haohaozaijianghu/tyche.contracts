@@ -5,1301 +5,621 @@
 #include <tuple>
 #include "flon.token.hpp"
 #include "utils.hpp"
-#include "tyche.market.hpp"
 
 namespace tychefi {
 
-static constexpr int128_t MAX_RATE_DELTA = static_cast<int128_t>(std::numeric_limits<int64_t>::max());
+using namespace eosio;
+using std::string;
 
-static int128_t pow10_i128(uint8_t p) {
-      int128_t x = 1;
-      for (uint8_t i = 0; i < p; ++i) x *= 10;
-      return x;
+void tyche_market::init(const name& admin) {
+    require_auth(get_self());
+    CHECKC(!_global.exists(), err::RECORD_EXISTING, "already initialized");
+    _gstate.admin = admin;
 }
 
-// 价格估值：token_amt * price（都按各自精度还原） => quote 的“最小单位”整数
-static int128_t value_of(const asset& token_amt, const asset& price) {
-      check(token_amt.amount >= 0, "value_of: token_amt must be non-negative");
-      check(price.amount > 0, "value_of: price must be positive");
-      return ( (int128_t)token_amt.amount * (int128_t)price.amount )
-            / pow10_i128(token_amt.symbol.precision())
-            / pow10_i128(price.symbol.precision());
+void tyche_market::setpause(const bool& paused) {
+    require_auth(_gstate.admin);
+    _gstate.paused = paused;
 }
 
-void tyche_market::init(name admin) {
-      require_auth(get_self());
-      CHECKC(is_account(admin), err::ACCOUNT_INVALID, "admin not exist");
-      _gstate.admin = admin;
-
+void tyche_market::setpricettl(const uint32_t& ttl_sec) {
+    require_auth(_gstate.admin);
+    _gstate.price_ttl_sec = ttl_sec;
 }
 
-void tyche_market::setpause(bool paused) {
-      require_auth(_gstate.admin);
-      _gstate.paused = paused;
+void tyche_market::setclosefac(const uint64_t& close_factor_bp) {
+    require_auth(_gstate.admin);
+    CHECKC(close_factor_bp <= RATE_SCALE, err::PARAM_ERROR, "invalid close factor");
+    _gstate.close_factor_bp = close_factor_bp;
 }
 
-void tyche_market::setpricettl(uint32_t ttl_sec) {
-      require_auth(_gstate.admin);
-      CHECKC(ttl_sec > 0, err::NOT_POSITIVE, "ttl must be positive");
-      _gstate.price_ttl_sec = ttl_sec;
-}
-
-void tyche_market::setclosefac(uint64_t close_factor_bp) {
-      require_auth(_gstate.admin);
-      CHECKC(close_factor_bp > 0 && close_factor_bp <= RATE_SCALE, err::NOT_STARTED, "close factor must be within 0-100% in bps");
-      _gstate.close_factor_bp = close_factor_bp;
-}
-
-void tyche_market::setprice(symbol_code sym, asset price) {
-      require_auth(_gstate.admin);
-      check(!_gstate.paused, "market paused");
-      check(sym.is_valid(), "invalid symbol");
-      check(price.amount > 0, "price must be positive");
-
-      // 1) reserve 必须存在（定价白名单）
-      reserves_t reserves(get_self(), get_self().value);
-      auto res_itr = reserves.find(sym.raw());
-      check(res_itr != reserves.end(), "reserve not found");
-
-      // 2) 价格符号必须匹配（避免出现“USDT 价格写成 BTC 符号”的脏数据）
-      // 你当前 price_feed.price 是 asset，symbol 允许你自定义为“报价币种”（例如 USDT）
-      // 但至少要保证精度一致/固定。这里做最小约束：symbol 必须有效 & amount > 0
-      check(price.symbol.is_valid(), "invalid price symbol");
-
-      // 3) 单次最大变动限制（可选，但你 db.hpp 里定义了 MAX_PRICE_CHANGE_BP，建议启用）
-      prices_t prices(get_self(), get_self().value);
-      auto price_itr = prices.find(sym.raw());
-      auto now = current_time_point();
-
-      if (price_itr != prices.end()) {
-         // 旧价存在：限制单次跳变
-         // change_bp = |new-old| / old
-         int128_t oldp = (int128_t)price_itr->price.amount;
-         int128_t newp = (int128_t)price.amount;
-         check(oldp > 0, "invalid stored old price");
-
-         int128_t diff = (newp > oldp) ? (newp - oldp) : (oldp - newp);
-         int128_t change_bp = diff * (int128_t)RATE_SCALE / oldp;
-
-         check(change_bp <= (int128_t)MAX_PRICE_CHANGE_BP,
-               "price change too large in one update");
-      }
-
-      // 4) 写入 prices 表
-      if (price_itr == prices.end()) {
-         prices.emplace(get_self(), [&](auto& row) {
-            row.sym_code   = sym;
-            row.price      = price;
-            row.updated_at = now;
-         });
-      } else {
-         prices.modify(price_itr, same_payer, [&](auto& row) {
-            row.price      = price;
-            row.updated_at = now;
-         });
-      }
-}
-
-void tyche_market::setemergency(bool enabled){
+void tyche_market::setemergency(const bool& enabled){
       require_auth(_gstate.admin);
       _gstate.emergency_mode = enabled;
 }
 
-void tyche_market::setemcfg(uint64_t bonus_bp, uint64_t max_bonus_bp, uint64_t backstop_min) {
+void tyche_market::setemcfg(uint64_t bonus_bp, uint64_t max_bonus_bp) {
       require_auth(_gstate.admin);
 
       check(max_bonus_bp <= RATE_SCALE, "max_bonus_bp must be <= 10000");
-      check(bonus_bp <= max_bonus_bp, "bonus exceeds max");
+      check(bonus_bp     <= max_bonus_bp, "bonus exceeds max");
 
       _gstate.emergency_bonus_bp     = bonus_bp;
       _gstate.max_emergency_bonus_bp = max_bonus_bp;
-      _gstate.backstop_min_reserve   = backstop_min;
 }
 
-void tyche_market::setreserve(const symbol_code sym,
-                              const uint64_t max_ltv,
-                              const uint64_t liq_threshold,
-                              const uint64_t liq_bonus,
-                              const uint64_t reserve_factor) {
-   require_auth(_gstate.admin);
-   check(!_gstate.paused, "market paused");
 
-   reserves_t reserves(get_self(), get_self().value);
-   auto itr = reserves.find(sym.raw());
-   check(itr != reserves.end(), "reserve not found");
+void tyche_market::setprice(const symbol_code& sym,const asset& price) {
+    require_auth(_gstate.admin);
+    CHECKC(price.symbol == USDT_SYM, err::PARAM_ERROR, "price must be USDT");
 
-   // ========= 风控参数 =========
-   check(max_ltv <= RATE_SCALE, "max_ltv too large");
+    prices_t prices = prices_t(get_self(), get_self().value);
+    auto itr = prices.find(sym.raw());
 
-   if (max_ltv > 0) {
-      // ---- 可抵押资产 ----
-      check(liq_threshold <= RATE_SCALE, "liquidation threshold too large");
-      check(liq_threshold >= max_ltv, "liquidation threshold < max ltv");
-      check(liq_bonus >= RATE_SCALE && liq_bonus <= RATE_SCALE * 2,"liquidation bonus must be between 1x and 2x");
-
-      // liquidation 数学不变量
-      check( (int128_t)liq_threshold * liq_bonus <(int128_t)RATE_SCALE * RATE_SCALE, "invalid liquidation parameters");
-   } else {
-      // ---- 不可抵押资产（如 USDT）----
-      check(liq_threshold == 0, "liq_threshold must be 0 when max_ltv == 0");
-   }
-
-   // reserve factor：最多 50%
-   check(reserve_factor <= RATE_SCALE / 2, "reserve factor too high");
-   _accrue_and_store(reserves, itr);
-   auto res = *itr;
-   // ❗ 不触碰 borrow_accrual / interest_reward（计息连续性）
-   reserves.modify(itr, same_payer, [&](auto& row) {
-      row.max_ltv               = max_ltv;
-      row.liquidation_threshold = liq_threshold;
-      row.liquidation_bonus     = liq_bonus;
-      row.reserve_factor        = reserve_factor;
-   });
+    if (itr == prices.end()) {
+        prices.emplace(get_self(), [&](auto& r){
+            r.sym_code = sym;
+            r.price = price;
+            r.updated_at = current_time_point();
+        });
+    } else {
+        prices.modify(itr, same_payer, [&](auto& r){
+            r.price = price;
+            r.updated_at = current_time_point();
+        });
+    }
 }
 
 void tyche_market::addreserve(const extended_symbol& asset_sym,
-                                       const uint64_t& max_ltv,
-                                       const uint64_t& liq_threshold,
-                                       const uint64_t& liq_bonus,
-                                       const uint64_t& reserve_factor,
-                                       const uint64_t& u_opt,
-                                       const uint64_t& r0,
-                                       const uint64_t& r_opt,
-                                       const uint64_t& r_max) {
-   require_auth(_gstate.admin);
-   check(!_gstate.paused, "market paused");
+                              const uint64_t& max_ltv,
+                              const uint64_t& liq_threshold,
+                              const uint64_t& liq_bonus,
+                              const uint64_t& reserve_factor,
+                              const uint64_t& u_opt,
+                              const uint64_t& r0,
+                              const uint64_t& r_opt,
+                              const uint64_t& r_max) {
+    require_auth(_gstate.admin);
 
-   symbol sym = asset_sym.get_symbol();
+    reserves_t reserves =  reserves_t(get_self(), get_self().value);
+    auto pk = asset_sym.get_symbol().code().raw();
+    CHECKC(reserves.find(pk) == reserves.end(), err::RECORD_EXISTING, "reserve exists");
 
-   // 1. symbol 校验
-   check(sym.is_valid(), "invalid symbol");
-   check(sym.precision() <= 8, "token precision too large");
+    reserves.emplace(get_self(), [&](auto& r){
+        r.sym_code              = asset_sym.get_symbol().code();
+        r.token_contract        = asset_sym.get_contract();
+        r.total_liquidity       = asset(0, asset_sym.get_symbol());
+        r.total_debt            = asset(0, asset_sym.get_symbol());
+        r.total_supply_shares   = asset(0, asset_sym.get_symbol());
+        r.interest_realized     = asset(0, asset_sym.get_symbol());
+        r.interest_claimed      = asset(0, asset_sym.get_symbol());
 
-   // 2. 风控参数校验
-   check(max_ltv <= RATE_SCALE, "max_ltv too large");
+        r.max_ltv = max_ltv;
+        r.liquidation_threshold = liq_threshold;
+        r.liquidation_bonus = liq_bonus;
+        r.reserve_factor = reserve_factor;
 
-   if (max_ltv > 0) {
-      check(liq_threshold <= RATE_SCALE, "liquidation threshold too large");
-      check(liq_threshold >= max_ltv, "liq_threshold < max_ltv");
+        r.u_opt = u_opt;
+        r.r0 = r0;
+        r.r_opt = r_opt;
+        r.r_max = r_max;
+        r.max_rate_step_bp = 200;
 
-      // liquidation_bonus 用 bp 表示，1.0x ~ 2.0x
-      check(liq_bonus >= RATE_SCALE &&liq_bonus <= RATE_SCALE * 2,"liquidation bonus must be between 1x and 2x");
-
-      // 数学安全性约束
-      check((int128_t)liq_threshold * liq_bonus < (int128_t)RATE_SCALE * RATE_SCALE,"invalid liquidation parameters");
-   } else {
-      // 不可抵押资产（如稳定币）
-      check(liq_threshold == 0, "liq_threshold must be 0 if max_ltv == 0");
-   }
-
-   // 协议抽成最多 50%
-   check(reserve_factor <= RATE_SCALE / 2, "reserve factor too high");
-
-   // =====================================================
-   // 3. 利率模型校验
-   // =====================================================
-   check(u_opt > 0 && u_opt < RATE_SCALE, "u_opt must be in (0, 100%)");
-   check(r0 <= r_opt && r_opt <= r_max, "invalid interest rate curve");
-
-   // =====================================================
-   // 4. reserve 唯一性
-   // =====================================================
-   reserves_t reserves(get_self(), get_self().value);
-   check(reserves.find(sym.code().raw()) == reserves.end(),"reserve already exists");
-
-   // =====================================================
-   // 5. 初始化 reserve
-   // =====================================================
-   auto now = time_point_sec(current_time_point());
-
-   reserves.emplace(get_self(), [&](auto& row) {
-      // ---- identity ----
-      row.sym_code       = sym.code();
-      row.token_contract = asset_sym.get_contract();
-
-      // ---- 风控参数 ----
-      row.max_ltv               = max_ltv;
-      row.liquidation_threshold = liq_threshold;
-      row.liquidation_bonus     = liq_bonus;
-      row.reserve_factor        = reserve_factor;
-
-      // ---- 利率模型 ----
-      row.u_opt            = u_opt;
-      row.r0               = r0;
-      row.r_opt            = r_opt;
-      row.r_max            = r_max;
-      row.max_rate_step_bp = 200;
-
-      // ---- 资金状态（全为 0）----
-      row.total_liquidity     = asset(0, sym);
-      row.total_debt          = asset(0, sym);
-      row.total_supply_shares = asset(0, sym);
-      row.total_borrow_shares = asset(0, sym);
-      row.interest_realized   = asset(0, sym);
-      row.interest_claimed    = asset(0, sym);
-      // =================================================
-      // 借款指数（borrow_index）
-      // =================================================
-      row.borrow_index.index_id               = 0;
-      row.borrow_index.interest_per_share     = 0;     // 从 0 开始
-      row.borrow_index.borrow_rate_bp         = r0;    // 初始利率
-      row.borrow_index.last_borrow_rate_bp    = r0;
-      row.borrow_index.last_updated           = now;
-
-      // =================================================
-      // 存款利息指数（supply_index）
-      // =================================================
-      row.supply_index.index_id            = 0;
-      row.supply_index.reward_per_share    = 0;        // 从 0 开始
-      row.supply_index.last_updated        = now;
-
-      row.paused = false;
-   });
+        r.borrow_index.index = HIGH_PRECISION;
+        r.borrow_index.borrow_rate_bp = r0;
+        r.borrow_index.last_updated = current_time_point();
+    });
 }
 
-void tyche_market::_on_supply(const name& owner, const asset& quantity) {
-    check(quantity.amount > 0, "quantity must be positive");
+void tyche_market::setreserve(symbol_code sym, uint64_t max_ltv,uint64_t liq_threshold,uint64_t liq_bonus, uint64_t reserve_factor) {
+    require_auth(_gstate.admin);
+    check(!_gstate.paused, "market paused");
+
+    // ========= 基础校验 =========
+    check(max_ltv <= RATE_SCALE, "max_ltv overflow");
+    check(liq_threshold <= RATE_SCALE, "liq_threshold overflow");
+    check(liq_bonus >= RATE_SCALE, "liq_bonus must be >= 100%");
+    check(reserve_factor <= RATE_SCALE, "reserve_factor overflow");
+
+    // 关系约束（核心风控不变量）
+    // max_ltv <= liquidation_threshold <= 100%
+    check(max_ltv <= liq_threshold, "max_ltv must be <= liquidation_threshold");
 
     reserves_t reserves(get_self(), get_self().value);
-    auto res_itr = reserves.find(quantity.symbol.code().raw());
-    check(res_itr != reserves.end(), "reserve not found");
-    check(!res_itr->paused, "reserve paused");
+    auto itr = reserves.find(sym.raw());
+    check(itr != reserves.end(), "reserve not found");
 
-    if (res_itr->max_ltv > 0 || res_itr->liquidation_threshold > 0) {
-        _check_price_available(quantity.symbol.code());
-    }
+    // ========= 不允许在 paused reserve 上修改 =========
+    check(!itr->paused, "reserve paused");
 
-    // 1️⃣ 先推进池子指数
-    _accrue_and_store(reserves, res_itr);
-    res_itr = reserves.find(quantity.symbol.code().raw());
-    auto res = *res_itr;
-
-    // 2️⃣ 算 shares
-    asset shares = _supply_shares_from_amount(quantity,res.total_supply_shares,res.total_liquidity);
-    check(shares.amount > 0, "supply amount too small");
-
-    positions_t positions(get_self(), get_self().value);
-    auto pos_ptr = _get_or_create_position(positions, owner, quantity.symbol.code(), quantity);
-
-    const bool can_be_collateral =
-        (res.max_ltv > 0 && res.liquidation_threshold > 0);
-
-    positions.modify(*pos_ptr, same_payer, [&](auto& row) {
-        // 先结算历史利息
-        _settle_supply_interest(row, res);
-
-        bool first_supply = (row.supply_shares.amount == 0);
-        row.supply_shares += shares;
-
-        if (can_be_collateral && first_supply) {
-            row.collateral = true;
-        }
-    });
-
-    // 3️⃣ 更新池子现金与份额
-    reserves.modify(res_itr, same_payer, [&](auto& row) {
-        row.total_liquidity     += quantity;
-        row.total_supply_shares += shares;
+    // ========= 写入（只改参数） =========
+    reserves.modify(itr, same_payer, [&](auto& row) {
+        row.max_ltv               = max_ltv;
+        row.liquidation_threshold = liq_threshold;
+        row.liquidation_bonus     = liq_bonus;
+        row.reserve_factor        = reserve_factor;
     });
 }
+
+void tyche_market::borrow(name owner, asset quantity) {
+    require_auth(owner);
+    check(!_gstate.paused, "market paused");
+    check(quantity.amount > 0, "borrow must be positive");
+
+    action_ctx ctx{ .now = current_time_point() };
+    const symbol_code sym = quantity.symbol.code();
+    _check_price_available(sym);
+
+    reserves_t  reserves(get_self(), get_self().value);
+    positions_t positions(get_self(), owner.value);
+
+    // ① 推进 reserve（历史利息结算）
+    reserve_state& res = _get_reserve(ctx, reserves, sym);
+
+    // ② HF 模拟
+    position_change ch{};
+    ch.borrow_scaled_delta = _scaled_from_amount(quantity.amount, res.borrow_index.index);
+    check(ch.borrow_scaled_delta > 0, "borrow too small");
+    _simulate_position_change(ctx, owner, reserves, positions, sym, ch);
+
+    // ③ 流动性检查
+    check(quantity.amount <= _available_liquidity(res), "insufficient liquidity");
+
+    // ④ load / create position
+    auto pos_itr = positions.find(sym.raw());
+    position_row pos =
+        (pos_itr == positions.end())
+        ? *(_get_or_create_position(positions, res, sym))
+        : *pos_itr;
+
+    // ⑤ 结息 or 建锚点（唯一位置）
+    if (pos.borrow.borrow_scaled > 0) {
+        _settle_borrow_interest(res, pos);
+    } else {
+        pos.borrow.last_borrow_index = res.borrow_index.index;
+        pos.borrow.id                = res.borrow_index.id;
+    }
+
+    // ⑥ 借款入账
+    int128_t scaled_add = _scaled_from_amount(quantity.amount, res.borrow_index.index);
+    pos.borrow.borrow_scaled += scaled_add;
+    pos.borrow.last_updated   = ctx.now;
+
+    res.total_borrow_scaled += scaled_add;
+    res.total_liquidity     -= quantity;
+
+    // ⑦ 更新利率（用于下一时间段）
+    _update_borrow_rate(res);
+
+    // ⑧ commit
+    positions.modify(positions.find(sym.raw()), same_payer, [&](auto& r){
+        r = pos;
+    });
+    _flush_reserve(ctx, reserves, sym);
+
+    _transfer_out(res.token_contract, owner, quantity, "borrow");
+}
+
 void tyche_market::withdraw(name owner, asset quantity) {
     require_auth(owner);
     check(!_gstate.paused, "market paused");
     check(quantity.amount > 0, "quantity must be positive");
 
-    // ===== reserve =====
-    reserves_t reserves(get_self(), get_self().value);
-    auto res_itr = reserves.find(quantity.symbol.code().raw());
-    check(res_itr != reserves.end(), "reserve not found");
-    check(!res_itr->paused, "reserve paused");
+    action_ctx ctx{ .now = current_time_point() };
+    const symbol_code sym = quantity.symbol.code();
+    reserves_t  reserves(get_self(), get_self().value);
+    positions_t positions(get_self(), owner.value);
 
-    if (res_itr->max_ltv > 0 || res_itr->liquidation_threshold > 0) {
-        _check_price_available(quantity.symbol.code());
-    }
+    auto pos_itr = positions.find(sym.raw());
+    check(pos_itr != positions.end(), "no position");
+    check(pos_itr->supply_shares.amount > 0, "no supply");
 
-    // ===== position =====
-    positions_t positions(get_self(), get_self().value);
-    auto owner_idx = positions.get_index<"ownerreserve"_n>();
-    auto pos_itr =
-        owner_idx.find((uint128_t(owner.value) << 64) | quantity.symbol.code().raw());
+    reserve_state& res = _get_reserve(ctx, reserves, sym);
+    position_row   pos = *pos_itr;
 
-    check(pos_itr != owner_idx.end(), "no position found");
-    check(pos_itr->supply_shares.amount > 0, "no supply shares");
+    // settle supply interest（withdraw 的余额计算依赖）
+    _settle_supply_interest(pos, res);
+    asset max_withdrawable = _amount_from_shares(pos.supply_shares,res.total_supply_shares,res.total_liquidity);
+    check(quantity <= max_withdrawable, "withdraw exceeds balance");
 
-    // =====================================================
-    // 1️⃣ 推进池子指数
-    // =====================================================
-    _accrue_and_store(reserves, res_itr);
+    int64_t avail = _available_liquidity(res);
+    check(quantity.amount <= avail, "insufficient liquidity");
+    asset share_delta = _withdraw_shares_from_amount(quantity,res.total_supply_shares,res.total_liquidity);
 
-    res_itr = reserves.find(quantity.symbol.code().raw());
-    auto res = *res_itr;
+    // 额外：份额赎回时等价领取对应比例的已分配利息，防止重复 claim
+    int64_t original_shares = pos.supply_shares.amount;
+    if (original_shares > 0 && pos.supply_interest.pending_interest.amount > 0 && share_delta.amount > 0) {
+        int128_t interest_i128 = (int128_t)pos.supply_interest.pending_interest.amount * share_delta.amount / original_shares;
+        int64_t interest_paid  = (int64_t)interest_i128;
+        if (interest_paid > 0) {
+            check(res.interest_claimed.amount <= std::numeric_limits<int64_t>::max() - interest_paid, "interest_claimed overflow");
+            check(res.interest_claimed.amount + interest_paid <= res.interest_realized.amount, "interest exceeds realized");
+            check(res.supply_index.indexed_available >= (uint64_t)interest_paid, "indexed_available underflow");
 
-    // =====================================================
-    // 2️⃣ 结算用户应计利息（pending_interest）
-    // =====================================================
-    owner_idx.modify(pos_itr, same_payer, [&](auto& row) {
-        _settle_supply_interest(row, res);
-    });
-
-    // 重新读 position（避免引用旧值）
-    pos_itr = owner_idx.find((uint128_t(owner.value) << 64) | quantity.symbol.code().raw());
-
-    // =====================================================
-    // 3️⃣ 自动 claim 利息（现金约束）
-    // =====================================================
-    asset available_interest = res.interest_realized - res.interest_claimed;
-
-    asset claimable(0, quantity.symbol);
-
-    if (available_interest.amount > 0 &&
-        pos_itr->supply_interest.pending_interest.amount > 0) {
-
-        int64_t claim_amt = std::min( pos_itr->supply_interest.pending_interest.amount, available_interest.amount);
-
-        if (claim_amt > 0) {
-            claimable = asset(claim_amt, quantity.symbol);
-
-            // 转账利息
-            _transfer_out(res.token_contract, owner, claimable, "claim interest");
-
-            // 写回 position
-            owner_idx.modify(pos_itr, same_payer, [&](auto& row) {
-                row.supply_interest.pending_interest.amount -= claim_amt;
-                row.supply_interest.claimed_interest        += claimable;
-            });
-
-            // 写回 reserve（现金真的出去）
-            reserves.modify(res_itr, same_payer, [&](auto& row) {
-                row.interest_claimed += claimable;
-                row.total_liquidity  -= claimable;
-            });
-
-            // 刷新 res
-            res_itr = reserves.find(quantity.symbol.code().raw());
-            res = *res_itr;
+            pos.supply_interest.pending_interest.amount -= interest_paid;
+            pos.supply_interest.claimed_interest.amount += interest_paid;
+            res.interest_claimed.amount += interest_paid;
+            res.supply_index.indexed_available -= (uint64_t)interest_paid;
         }
     }
 
-    // =====================================================
-    // 4️⃣ 计算可提本金
-    // =====================================================
-    asset max_withdrawable = _amount_from_shares(pos_itr->supply_shares,res.total_supply_shares,res.total_liquidity );
-
-    check(quantity <= max_withdrawable, "withdraw exceeds balance");
-    check(quantity.amount <= res.total_liquidity.amount, "insufficient liquidity");
-
-    asset share_delta = _withdraw_shares_from_amount( quantity,res.total_supply_shares,res.total_liquidity);
-
-    // =====================================================
-    // 5️⃣ 风控模拟（仅 collateral）
-    // =====================================================
-    if (pos_itr->collateral) {
-        owner_idx.modify(pos_itr, same_payer, [&](auto& row) {
-            row.supply_shares -= share_delta;
-        });
-
-        valuation v = _compute_valuation(owner);
-        check(v.debt_value == 0 || v.collateral_value >= v.debt_value, "health factor below 1 after withdraw");
-
-        // rollback
-        owner_idx.modify(pos_itr, same_payer, [&](auto& row) {
-            row.supply_shares += share_delta;
-        });
+    // ① HF 模拟（语义唯一）
+    if (pos.collateral) {
+        position_change ch{};
+        ch.supply_shares_delta = -share_delta.amount;
+        _simulate_position_change(ctx, owner, reserves, positions, sym, ch);
     }
 
-    // =====================================================
-    // 6️⃣ 转账本金
-    // =====================================================
+    // ② Mutate
+    pos.supply_shares -= share_delta;
+    if (pos.supply_shares.amount == 0) pos.collateral = false;
+
+    res.total_supply_shares -= share_delta;
+    res.total_liquidity     -= quantity;
+
+    // ③ Commit
+    positions.modify(pos_itr, same_payer, [&](auto& r){ r = pos; });
+
+     _flush_reserve(ctx, reserves, sym);
     _transfer_out(res.token_contract, owner, quantity, "withdraw");
 
-    // =====================================================
-    // 7️⃣ 提交仓位
-    // =====================================================
-    owner_idx.modify(pos_itr, owner, [&](auto& row) {
-        row.supply_shares -= share_delta;
-        if (row.supply_shares.amount == 0) {
-            row.collateral = false;
-        }
-    });
-
-    // =====================================================
-    // 8️⃣ 更新池子
-    // =====================================================
-    reserves.modify(res_itr, same_payer, [&](auto& row) {
-        row.total_liquidity     -= quantity;
-        row.total_supply_shares -= share_delta;
-    });
 }
+// 在当前 reserve 状态下，计算“在不破坏系统流动性安全的前提下，最多还能被拿走的现金量”
+int64_t tyche_market::_available_liquidity(const reserve_state& res) const {
+    uint64_t util = _util_bps(res);
+    uint64_t buffer_bp = _buffer_bps_by_util(util);
 
+    int128_t buffer = (int128_t)res.total_liquidity.amount * (int128_t)buffer_bp / (int128_t)RATE_SCALE;
+    int128_t avail  = (int128_t)res.total_liquidity.amount - buffer;
+    return (avail > 0) ? (int64_t)avail : 0;
+}
+// 将“已经记账但尚未提走的供应利息”，从池子里安全地转给用户
 void tyche_market::claimint(name owner, symbol_code sym) {
     require_auth(owner);
     check(!_gstate.paused, "market paused");
 
-    // ===== reserve =====
-    reserves_t reserves(get_self(), get_self().value);
+    action_ctx ctx{ .now = current_time_point() };
+    reserves_t  reserves(get_self(), get_self().value);
+    positions_t positions(get_self(), owner.value);
+
+    auto pos_itr = positions.find(sym.raw());
+    check(pos_itr != positions.end(), "no position");
+
+    auto& res = _get_reserve(ctx, reserves, sym);
+    position_row pos = *pos_itr;
+
+    // ① settle supply interest（只推进用户）
+    _settle_supply_interest(pos, res);
+    int64_t pending = pos.supply_interest.pending_interest.amount;
+    check(pending > 0, "no interest");
+
+    asset available = res.interest_realized - res.interest_claimed;
+    check(available.amount > 0, "no distributable interest");
+    int64_t claim_amt = std::min(pending, available.amount);
+
+    check(claim_amt > 0, "claim zero");
+    asset claim_asset(claim_amt, res.total_liquidity.symbol);
+    // ② commit position
+    positions.modify(pos_itr, same_payer, [&](auto& r){
+        r = pos;
+        r.supply_interest.pending_interest.amount -= claim_amt;
+        r.supply_interest.claimed_interest        += claim_asset;
+    });
+
+    // ③ commit reserve
     auto res_itr = reserves.find(sym.raw());
-    check(res_itr != reserves.end(), "reserve not found");
-    check(!res_itr->paused, "reserve paused");
+    reserves.modify(res_itr, same_payer, [&](auto& r){
+        r.interest_claimed += claim_asset;
+        check(r.supply_index.indexed_available >= (uint64_t)claim_amt, "indexed_available underflow");
+        r.supply_index.indexed_available -= (uint64_t)claim_amt;
+    });
 
-    // 推进池子指数（不动现金）
-    _accrue_and_store(reserves, res_itr);
-
-    res_itr = reserves.find(sym.raw());
-    auto res = *res_itr;
-
-    // ===== position =====
-    positions_t positions(get_self(), get_self().value);
-    auto owner_idx = positions.get_index<"ownerreserve"_n>();
-    auto pos_itr = owner_idx.find((uint128_t(owner.value) << 64) | sym.raw());
-
-    check(pos_itr != owner_idx.end(), "no position");
-    check(pos_itr->supply_shares.amount > 0, "no supply");
-
-    auto& user = pos_itr->supply_interest;
-    auto& pool = res.supply_index;
-
-    // ===== 双重锚点 ①：指数锚点 =====
-    int128_t delta_rps =(int128_t)pool.reward_per_share - (int128_t)user.last_reward_per_share;
-
-    check(delta_rps > 0, "no interest accrued");
-
-    int128_t theoretical_interest = delta_rps * (int128_t)pos_itr->supply_shares.amount / (int128_t)HIGH_PRECISION;
-
-    check(theoretical_interest > 0, "interest too small");
-
-    // ===== 双重锚点 ②：现金锚点 =====
-    asset available =
-        res.interest_realized - res.interest_claimed;
-
-    check(available.amount > 0, "no interest available");
-
-    int64_t claim_amt =
-        std::min<int128_t>(theoretical_interest, available.amount);
-
-    check(claim_amt > 0, "claim amount zero");
-
-    asset claim_asset(claim_amt, available.symbol);
-
-    // ===== 转账 =====
     _transfer_out(res.token_contract, owner, claim_asset, "claim interest");
-
-    // ===== 写回 position =====
-    owner_idx.modify(pos_itr, same_payer, [&](auto& row) {
-        row.supply_interest.last_reward_per_share = pool.reward_per_share;
-        row.supply_interest.claimed_interest += claim_asset;
-    });
-
-    // ===== 写回 reserve =====
-    reserves.modify(res_itr, same_payer, [&](auto& row) {
-        row.interest_claimed += claim_asset;
-        row.total_liquidity  -= claim_asset; // 🔴 现金真的出去
-    });
 }
-
-
+// 切换某个仓位是否作为抵押品（collateral），且必须保证切换后 Health Factor 仍然 ≥ 1
 void tyche_market::setcollat(name owner, symbol_code sym, bool enabled) {
-   require_auth(owner);
-   check(!_gstate.paused, "market paused");
+    require_auth(owner);
+    check(!_gstate.paused, "market paused");
 
-   reserves_t reserves(get_self(), get_self().value);
-   auto res_itr = reserves.find(sym.raw());
-   check(res_itr != reserves.end(), "reserve not found");
-   check(!res_itr->paused, "reserve paused");
+    action_ctx ctx{ .now = current_time_point() };
+    reserves_t  reserves(get_self(), get_self().value);
+    positions_t positions(get_self(), owner.value);
 
-   positions_t positions(get_self(), get_self().value);
-   auto owner_idx = positions.get_index<"ownerreserve"_n>();
-   auto pos_itr   = owner_idx.find((uint128_t(owner.value) << 64) | sym.raw());
-   check(pos_itr != owner_idx.end(), "no position found");
+    auto pos_itr = positions.find(sym.raw());
+    check(pos_itr != positions.end(), "no position");
+    reserve_state& res = _get_reserve(ctx, reserves, sym);
 
-   // 不允许对空仓位开启抵押
-   check(!enabled || pos_itr->supply_shares.amount > 0,
-         "cannot enable collateral with zero supply");
-
-   // 资产是否允许作为抵押（按你当前语义：max_ltv==0 就禁止抵押）
-   check(!enabled || res_itr->max_ltv > 0,
-         "asset cannot be used as collateral");
-
-   if (pos_itr->collateral == enabled) return;
-
-   // 开启/关闭 collateral 都会影响估值（至少当 owner 有 debt 时）
-   // 开启时：必须要价格可用（避免开启后 valuation 读不到价）
-   if (enabled) {
-      _check_price_available(sym);
-   }
-
-   // 如果 owner 没有 debt，关闭 collateral 永远安全；开启也只是打标
-   // 但为了保持规则统一，我们只在“会导致 HF<1”的情况下阻止
-   // => 简化：只要 owner 有 debt，就做模拟校验
-   valuation before = _compute_valuation(owner);
-
-   if (before.debt_value > 0) {
-      owner_idx.modify(pos_itr, same_payer, [&](auto& row) {
-         row.collateral = enabled;
-      });
-
-      valuation after = _compute_valuation(owner);
-      check(after.collateral_value >= after.debt_value,
-            "health factor below 1 after collateral change");
-
-      // rollback
-      owner_idx.modify(pos_itr, same_payer, [&](auto& row) {
-         row.collateral = !enabled;
-      });
-   }
-
-   // commit
-   owner_idx.modify(pos_itr, owner, [&](auto& row) {
-      row.collateral = enabled;
-   });
-}
-
-void tyche_market::borrow(name owner, asset quantity) {
-   require_auth(owner);
-   check(!_gstate.paused, "market paused");
-   check(quantity.amount > 0, "quantity must be positive");
-
-   reserves_t reserves(get_self(), get_self().value);
-   auto res_itr = reserves.find(quantity.symbol.code().raw());
-   check(res_itr != reserves.end(), "reserve not found");
-   check(!res_itr->paused, "reserve paused");
-
-   // 借款资产必须允许借（max_ltv > 0）
-   check(res_itr->max_ltv > 0, "borrowing disabled for this asset");
-
-   // 债务资产价格必须可用
-   _check_price_available(quantity.symbol.code());
-
-   positions_t positions(get_self(), get_self().value);
-
-   // ===== accrue borrower 相关的所有 reserve（去重）=====
-   std::set<uint64_t> touched;
-   auto byowner = positions.get_index<"byowner"_n>();
-   for (auto it = byowner.lower_bound(owner.value);
-        it != byowner.end() && it->owner == owner; ++it) {
-      uint64_t key = it->sym_code.raw();
-      if (touched.insert(key).second) {
-         auto ritr = reserves.find(key);
-         if (ritr != reserves.end()) {
-            _accrue_and_store(reserves, ritr);
-         }
-      }
-   }
-
-   // 重新获取当前 reserve（已 accrue）
-   res_itr = reserves.find(quantity.symbol.code().raw());
-   auto res = *res_itr;
-
-   // ===== cash semantics：池子必须有足够流动性 =====
-   check(quantity.amount <= res.total_liquidity.amount, "insufficient liquidity");
-
-   // 获取 / 创建 position
-   auto pos_ptr = _get_or_create_position(
-      positions, owner, quantity.symbol.code(), quantity
-   );
-
-   // 计算 borrow shares（ceil）
-   asset borrow_shares = _borrow_shares_from_amount(
-      quantity, res.total_borrow_shares, res.total_debt
-   );
-   check(borrow_shares.amount > 0, "borrow amount too small");
-
-   // 溢出护栏
-   check(res.total_debt.amount <= std::numeric_limits<int64_t>::max() - quantity.amount,
-         "debt overflow");
-   check(res.total_borrow_shares.amount <=
-         std::numeric_limits<int64_t>::max() - borrow_shares.amount,
-         "borrow shares overflow");
-
-   // ===== 模拟写入，用于风控 =====
-   positions.modify(*pos_ptr, same_payer, [&](auto& row) {
-      row.borrow_shares += borrow_shares;
-   });
-
-   valuation val = _compute_valuation(owner);
-   check(val.max_borrowable_value > 0, "no collateral enabled");
-   check(val.debt_value <= val.max_borrowable_value, "exceeds max LTV");
-   check(val.collateral_value >= val.debt_value,
-         "health factor below 1 after borrow");
-
-   // rollback
-   positions.modify(*pos_ptr, same_payer, [&](auto& row) {
-      row.borrow_shares -= borrow_shares;
-   });
-
-   // ===== 实际放款 =====
-   _transfer_out(res.token_contract, owner, quantity, "borrow");
-
-   // ===== commit position =====
-   positions.modify(*pos_ptr, owner, [&](auto& row) {
-      row.borrow_shares += borrow_shares;
-   });
-
-   // ===== commit reserve（只改本动作影响的字段）=====
-   reserves.modify(res_itr, same_payer, [&](auto& row) {
-      row.total_debt          += quantity;
-      row.total_borrow_shares += borrow_shares;
-      row.total_liquidity     -= quantity;   // cash semantics
-   });
-}
-
-void tyche_market::_on_repay(
-    const name& payer,
-    const name& borrower,
-    const asset& quantity
-) {
-    // ================= 基础校验 =================
-    check(quantity.amount > 0, "repay amount must be positive");
-    check(is_account(borrower), "invalid borrower");
-
-    // ================= reserve =================
-    reserves_t reserves(get_self(), get_self().value);
-    auto res_itr = reserves.find(quantity.symbol.code().raw());
-    check(res_itr != reserves.end(), "reserve not found");
-    check(!res_itr->paused, "reserve paused");
-
-    // token 合约必须匹配
-    check(res_itr->token_contract == get_first_receiver(),
-          "invalid token contract");
-
-    // ================= borrower position =================
-    positions_t positions(get_self(), get_self().value);
-    auto owner_idx = positions.get_index<"ownerreserve"_n>();
-    auto pos_itr =
-        owner_idx.find((uint128_t(borrower.value) << 64)
-                        | quantity.symbol.code().raw());
-
-    check(pos_itr != owner_idx.end(), "no borrow position");
-    check(pos_itr->borrow_shares.amount > 0, "no debt to repay");
-
-    // ================= accrue（推进指数） =================
-    _accrue_and_store(reserves, res_itr);
-
-    // 刷新快照
-    res_itr = reserves.find(quantity.symbol.code().raw());
-    auto res = *res_itr;
-
-    // ================= 当前债务（含利息） =================
-    asset current_debt = _amount_from_shares(
-        pos_itr->borrow_shares,
-        res.total_borrow_shares,
-        res.total_debt
-    );
-    check(current_debt.amount > 0, "no outstanding debt");
-
-    // clamp repay
-    asset repay = quantity;
-    if (repay > current_debt) {
-        repay = current_debt;
-    }
-    check(repay.amount > 0, "repay too small");
-
-    // ================= 计算 shares delta =================
-    asset share_delta = _repay_shares_from_amount(
-        repay,
-        res.total_borrow_shares,
-        res.total_debt
-    );
-
-    // 全额还清兜底
-    if (repay == current_debt) {
-        share_delta = pos_itr->borrow_shares;
+    if (enabled) {
+        check(pos_itr->supply_shares.amount > 0, "no supply");
+        check(res.max_ltv > 0, "asset not collateralizable");
+        _check_price_available(sym);
     }
 
-    check(share_delta.amount > 0, "repay too small");
-    check(share_delta.amount <= pos_itr->borrow_shares.amount,
-          "repay exceeds borrow shares");
+    if (pos_itr->collateral == enabled) return;
 
-    // ================= 拆分：先还利息，再还本金 =================
-    // 估算该用户当前“应计利息”
-    int128_t theoretical_principal =
-        (int128_t)res.total_debt.amount
-        * (int128_t)pos_itr->borrow_shares.amount
-        / (int128_t)res.total_borrow_shares.amount;
+    // ① HF 模拟（语义唯一）
+    position_change ch{};
+    ch.collateral_override     = enabled;
+    _simulate_position_change(ctx, owner, reserves, positions, sym, ch);
 
-    int128_t interest_outstanding =
-        (int128_t)current_debt.amount - theoretical_principal;
-
-    if (interest_outstanding < 0) interest_outstanding = 0;
-
-    int128_t interest_pay =
-        std::min<int128_t>(interest_outstanding, repay.amount);
-
-    int128_t principal_pay =
-        (int128_t)repay.amount - interest_pay;
-
-    asset interest_repaid(
-        (int64_t)interest_pay,
-        repay.symbol
-    );
-    asset principal_repaid(
-        (int64_t)principal_pay,
-        repay.symbol
-    );
-
-    // ================= 更新 borrower 仓位 =================
-    owner_idx.modify(pos_itr, same_payer, [&](auto& row) {
-        row.borrow_shares -= share_delta;
-    });
-
-    // ================= 更新 reserve =================
-    reserves.modify(res_itr, same_payer, [&](auto& row) {
-        // 本金才会减少 total_debt
-        row.total_debt          -= principal_repaid;
-        row.total_borrow_shares -= share_delta;
-
-        // 现金：本金 + 利息 都进入池子
-        row.total_liquidity     += repay;
-
-        // 🔴 真实收到的利息（关键修复点）
-        if (interest_repaid.amount > 0) {
-            row.interest_realized += interest_repaid;
-        }
+    // ② Commit
+    positions.modify(pos_itr, same_payer, [&](auto& r){
+        r.collateral = enabled;
     });
 }
 
-void tyche_market::_on_liquidate(name liquidator,name borrower,symbol_code debt_sym,asset repay_amount,symbol_code collateral_sym) {
-   require_auth(liquidator);
-   check(!_gstate.paused, "market paused");
-   check(liquidator != borrower, "self liquidation not allowed");
-   check(repay_amount.amount > 0, "repay amount must be positive");
-   check(debt_sym != collateral_sym, "invalid liquidation asset");
+void tyche_market::on_transfer(const name& from,const name& to,const asset& quantity, const string& memo) {
+    if (from == get_self() || to != get_self()) return;
+    CHECKC(!_gstate.paused, err::PAUSED, "market paused");
+    CHECKC(quantity.amount > 0, err::NOT_POSITIVE, "invalid amount");
 
-   asset paid_in = repay_amount; // 原始转入
-
-   // ---------- reserves ----------
-   reserves_t reserves(get_self(), get_self().value);
-   auto debt_itr = reserves.find(debt_sym.raw());
-   auto coll_itr = reserves.find(collateral_sym.raw());
-
-   check(debt_itr != reserves.end(), "debt reserve not found");
-   check(coll_itr != reserves.end(), "collateral reserve not found");
-   check(!debt_itr->paused, "debt reserve paused");
-   check(!coll_itr->paused, "collateral reserve paused");
-
-   // token 来源校验（本次 liquidate 是通过 on_transfer 触发）
-   check(get_first_receiver() == debt_itr->token_contract, "invalid debt token contract");
-   check(repay_amount.symbol.code() == debt_sym, "repay symbol mismatch");
-
-   // ---------- positions ----------
-   positions_t positions(get_self(), get_self().value);
-   auto owner_idx = positions.get_index<"ownerreserve"_n>();
-
-   auto debt_pos = owner_idx.find(((uint128_t)borrower.value << 64) | debt_sym.raw());
-   auto coll_pos = owner_idx.find(((uint128_t)borrower.value << 64) | collateral_sym.raw());
-
-   check(debt_pos != owner_idx.end(), "borrow position not found");
-   check(coll_pos != owner_idx.end(), "collateral position not found");
-   check(debt_pos->borrow_shares.amount > 0, "no outstanding debt");
-   check(coll_pos->supply_shares.amount > 0, "no collateral supplied");
-   check(coll_pos->collateral, "asset not enabled as collateral");
-
-   // ---------- accrue ALL borrower reserves ----------
-   auto byowner = positions.get_index<"byowner"_n>();
-   for (auto it = byowner.lower_bound(borrower.value); it != byowner.end() && it->owner == borrower; ++it) {
-      auto ritr = reserves.find(it->sym_code.raw());
-      if (ritr != reserves.end()) _accrue_and_store(reserves, ritr);
-   }
-
-   // refresh
-   debt_itr = reserves.find(debt_sym.raw());
-   coll_itr = reserves.find(collateral_sym.raw());
-   auto debt_res = *debt_itr;
-   auto coll_res = *coll_itr;
-
-   // ---------- eligibility ----------
-   valuation val = _compute_valuation(borrower);
-   check(val.debt_value > 0, "no debt");
-   check(val.collateral_value < val.debt_value, "position not eligible for liquidation");
-
-   // ---------- current debt ----------
-   asset borrower_debt = _amount_from_shares(
-      debt_pos->borrow_shares,
-      debt_res.total_borrow_shares,
-      debt_res.total_debt
-   );
-   check(borrower_debt.amount > 0, "no outstanding debt");
-   if (repay_amount > borrower_debt) repay_amount = borrower_debt;
-
-   // ---------- prices (asset) ----------
-   prices_t prices(get_self(), get_self().value);
-   asset debt_price_asset = _get_fresh_price(prices, debt_sym);
-   asset coll_price_asset = _get_fresh_price(prices, collateral_sym);
-
-   // ---------- values (quote minimal unit) ----------
-   int128_t debt_value  = value_of(borrower_debt, debt_price_asset);
-   int128_t repay_value = value_of(repay_amount,  debt_price_asset);
-
-   // ---------- close factor cap ----------
-   int128_t max_repay_close = debt_value * _gstate.close_factor_bp / RATE_SCALE;
-
-   // ---------- HF -> 1 cap ----------
-   int128_t shortfall = val.debt_value - val.collateral_value; // >0
-   int128_t denom =
-      (int128_t)RATE_SCALE * RATE_SCALE
-      - (int128_t)coll_res.liquidation_threshold * coll_res.liquidation_bonus;
-
-   int128_t max_repay_to_one = max_repay_close;
-   if (denom > 0) {
-      max_repay_to_one =
-         (shortfall * (int128_t)RATE_SCALE * RATE_SCALE + denom - 1) / denom;
-   }
-
-   // ---------- final repay value cap ----------
-   int128_t repay_value_cap =
-      std::min<int128_t>(repay_value, std::min(max_repay_close, max_repay_to_one));
-   check(repay_value_cap > 0, "repay amount too small");
-
-   // ---------- value -> debt amount (ceil) ----------
-   // repay_value_cap 的单位：quote 的最小单位（由 value_of 定义）
-   // repay_amount.amount 的单位：debt token 最小单位
-   // 反推：amount = ceil( repay_value_cap * 10^debt_precision * 10^price_precision / price_amount )
-   {
-      int128_t num =
-         repay_value_cap
-         * pow10_i128(repay_amount.symbol.precision())
-         * pow10_i128(debt_price_asset.symbol.precision());
-
-      int128_t den = (int128_t)debt_price_asset.amount;
-      check(den > 0, "invalid debt price");
-
-      int64_t capped_amt = (int64_t)((num + den - 1) / den);
-      check(capped_amt > 0, "repay amount too small");
-
-      repay_amount = asset(capped_amt, paid_in.symbol);
-      if (repay_amount > borrower_debt) repay_amount = borrower_debt;
-   }
-
-   // ---------- refund extra paid_in ----------
-   asset refund = paid_in - repay_amount;
-   if (refund.amount > 0) {
-      _transfer_out(debt_res.token_contract, liquidator, refund, "liquidate refund");
-   }
-
-   // ---------- recompute repay_value after cap ----------
-   repay_value = value_of(repay_amount, debt_price_asset);
-   check(repay_value > 0, "repay amount too small");
-
-   // ---------- repay shares ----------
-   asset debt_share_delta = _repay_shares_from_amount(
-      repay_amount,
-      debt_res.total_borrow_shares,
-      debt_res.total_debt
-   );
-   check(debt_share_delta.amount > 0, "repay too small");
-
-   // ---------- liquidation bonus ----------
-   uint64_t bonus_bp = coll_res.liquidation_bonus;
-   if (_gstate.emergency_mode) {
-      uint64_t max_bonus = RATE_SCALE + _gstate.max_emergency_bonus_bp;
-      bonus_bp = std::min<uint64_t>(max_bonus, bonus_bp + _gstate.emergency_bonus_bp);
-   }
-
-   // repay_value(quote) -> seize_value(quote)
-   int128_t seize_value = repay_value * (int128_t)bonus_bp / RATE_SCALE;
-   check(seize_value > 0, "seize value zero");
-
-   // ---------- seize_value(quote) -> collateral amount (floor) ----------
-   // amount = floor( seize_value * 10^coll_precision * 10^price_precision / price_amount )
-   int128_t seize_amt_128 =
-      seize_value
-      * pow10_i128(coll_res.total_liquidity.symbol.precision())
-      * pow10_i128(coll_price_asset.symbol.precision())
-      / (int128_t)coll_price_asset.amount;
-
-   check(seize_amt_128 > 0, "seize amount zero");
-   check(seize_amt_128 <= (int128_t)std::numeric_limits<int64_t>::max(), "seize overflow");
-
-   asset seize_asset((int64_t)seize_amt_128, coll_res.total_liquidity.symbol);
-
-   // ---------- collateral balance ----------
-   asset collateral_balance = _amount_from_shares(
-      coll_pos->supply_shares,
-      coll_res.total_supply_shares,
-      coll_res.total_liquidity
-   );
-   check(collateral_balance.amount >= seize_asset.amount, "insufficient collateral");
-
-   asset coll_share_delta = _withdraw_shares_from_amount(
-      seize_asset,
-      coll_res.total_supply_shares,
-      coll_res.total_liquidity
-   );
-   check(coll_share_delta.amount > 0, "seize too small");
-   check(coll_share_delta.amount <= coll_pos->supply_shares.amount, "seize exceeds collateral shares");
-
-   // ---------- payout collateral ----------
-   _transfer_out(coll_res.token_contract, liquidator, seize_asset, "liquidate seize");
-
-   // ---------- write positions ----------
-   owner_idx.modify(debt_pos, _self, [&](auto& row) {
-      row.borrow_shares -= debt_share_delta;
-   });
-   owner_idx.modify(coll_pos, _self, [&](auto& row) {
-      _settle_supply_interest(row, coll_res);
-      row.supply_shares -= coll_share_delta;
-   });
-
-   // ---------- write reserves ----------
-   reserves.modify(debt_itr, _self, [&](auto& row) {
-      row.total_debt          = debt_res.total_debt - repay_amount;
-      row.total_borrow_shares = debt_res.total_borrow_shares - debt_share_delta;
-      row.total_liquidity     = debt_res.total_liquidity + repay_amount;
-
-      // 下面这些字段：如果你 struct 里没有，就删掉；要以你 reserve_state 为准
-      // row.last_updated        = debt_res.last_updated;
-      // row.protocol_reserve    = debt_res.protocol_reserve;
-      // row.total_supply_shares = debt_res.total_supply_shares;
-   });
-
-   reserves.modify(coll_itr, _self, [&](auto& row) {
-      row.total_liquidity     = coll_res.total_liquidity - seize_asset;
-      row.total_supply_shares = coll_res.total_supply_shares - coll_share_delta;
-
-      // 下面这些字段：如果你 struct 里没有，就删掉；要以你 reserve_state 为准
-      // row.last_updated        = coll_res.last_updated;
-      // row.protocol_reserve    = coll_res.protocol_reserve;
-      // row.total_debt          = coll_res.total_debt;
-      // row.total_borrow_shares = coll_res.total_borrow_shares;
-   });
-}
-
-void tyche_market::on_transfer(const name& from,const name& to,const asset& quantity,const string& memo) {
-   if (to != get_self()) return;
-   if (from == get_self()) return;
-
-   check(!_gstate.paused, "market paused");
-   check(quantity.amount > 0, "quantity must be positive");
-
-   auto parts = split(memo, ":");
-   check(parts.size() >= 1, "invalid memo");
-
-   const string& cmd = parts[0];
-
-   // ---- supply ----
-   if (cmd == "supply") {
-      check(parts.size() == 1, "invalid supply memo");
-      _on_supply(from, quantity);
-      return;
-   }
-
-   // ---- repay ----
-   if (cmd == "repay") {
-      // repay:borrower
-      check(parts.size() == 2, "invalid repay memo");
-      name borrower = name(parts[1]);
-      check(is_account(borrower), "invalid borrower");
-      _on_repay(from, borrower, quantity);
-      return;
-   }
-
-   // ---- liquidate ----
-   if (cmd == "liquidate") {
-      // liquidate:borrower:DEBT:COLL
-      check(parts.size() == 4, "invalid liquidate memo");
-
-      name borrower = name(parts[1]);
-      symbol_code debt_sym(parts[2]);
-      symbol_code coll_sym(parts[3]);
-
-      _on_liquidate(
-         from,        // liquidator
-         borrower,
-         debt_sym,
-         quantity,    // repay_amount
-         coll_sym
-      );
-      return;
-   }
-
-   check(false, "invalid memo command");
-}
-
-reserve_state tyche_market::_require_reserve(const symbol &sym)
-{
-    reserves_t reserves(get_self(), get_self().value);
-    auto itr = reserves.find(sym.code().raw());
-    check(itr != reserves.end(), "reserve not found");
-    return *itr;
-}
-
-static inline int64_t mul_div_i128_to_i64(int64_t a, int128_t b, int128_t den) {
-   int128_t x = (int128_t)a * b;
-   x /= den;
-   if (x <= 0) return 0;
-   check(x <= (int128_t)std::numeric_limits<int64_t>::max(), "mul_div overflow");
-   return (int64_t)x;
-}
-
-
-void tyche_market::_accrue_inplace(reserve_state& res, time_point_sec now) {
-    auto& bidx = res.borrow_index;
-    auto& sidx = res.supply_index;
-
-    if (now <= bidx.last_updated) return;
-
-    uint32_t elapsed =
-        now.sec_since_epoch() - bidx.last_updated.sec_since_epoch();
-
-    if (elapsed == 0) {
-        bidx.last_updated = now;
+    auto parts = split(memo, ":");
+    // -------- supply --------
+    if (parts[0] == "supply") {
+        _on_supply(from, quantity);
         return;
     }
 
-    // ===== 无债务：只更新时间，不滚指数 =====
-    if (res.total_debt.amount <= 0 || res.total_borrow_shares.amount <= 0) {
-        bidx.borrow_rate_bp = res.r0;
-        bidx.last_updated  = now;
+    // repay:<borrower>
+    if (parts[0] == "repay") {
+        CHECKC(parts.size() == 2, err::PARAM_ERROR, "invalid repay memo");
+        name borrower{ parts[1].c_str() };
+        check(is_account(borrower), "borrower not exists");
+        _on_repay(from, borrower, quantity);
         return;
     }
 
-    // ===== 计算利率 =====
-    uint64_t util = _util_bps(res);
-    uint64_t rate = (uint64_t)_calc_borrow_rate(res, util);
-    bidx.borrow_rate_bp = rate;
+    // liquidate:<borrower>:<DEBT>:<COLL>
+    // DEBT = 被偿还的债务资产（repay asset）
+    // COLL = 被扣走的抵押资产（seize asset）
+    if (parts[0] == "liquidate") {
+        CHECKC(parts.size() == 4, err::PARAM_ERROR, "invalid liquidate memo");
 
-    // Δborrow_rps = rate * dt / year
-    int128_t delta_borrow_rps = (int128_t)rate * elapsed * HIGH_PRECISION / (int128_t)(RATE_SCALE * SECONDS_PER_YEAR);
+        name borrower{ parts[1].c_str() };
+        check(is_account(borrower), "borrower not exists");
+        symbol_code debt_sym(parts[2]);
+        symbol_code coll_sym(parts[3]);
 
-    if (delta_borrow_rps > 0) {
-        bidx.interest_per_share += delta_borrow_rps;
-
-        // ===== 同步存款指数 =====
-        int128_t total_interest =(int128_t)res.total_debt.amount * rate * elapsed / (int128_t)(RATE_SCALE * SECONDS_PER_YEAR);
-
-        if (total_interest > 0 && res.total_supply_shares.amount > 0) {
-            int128_t supplier_part = total_interest * (RATE_SCALE - res.reserve_factor) / RATE_SCALE;
-
-            int128_t delta_supply_rps = supplier_part * HIGH_PRECISION / res.total_supply_shares.amount;
-
-            if (delta_supply_rps > 0) {
-                sidx.reward_per_share += delta_supply_rps;
-                sidx.index_id += 1;
-            }
-        }
+        _on_liquidate(from, borrower, debt_sym, quantity, coll_sym);
+        return;
     }
 
-    bidx.last_updated = now;
+    CHECKC(false, err::PARAM_ERROR, "unknown transfer memo");
 }
 
-void tyche_market::_accrue_and_store(reserves_t& reserves, reserves_t::const_iterator itr) {
-    auto now = time_point_sec(current_time_point());
-    reserves.modify(itr, same_payer, [&](auto& row) {
-        _accrue_inplace(row, now);
+void tyche_market::_on_supply(const name& owner, const asset& quantity) {
+    action_ctx ctx{ .now = current_time_point() };
+
+    reserves_t reserves(get_self(), get_self().value);
+    positions_t positions(get_self(), owner.value);
+
+    auto& res = _get_reserve(ctx, reserves, quantity.symbol.code());
+    check(res.token_contract == get_first_receiver(), "invalid token");
+    check(!res.paused, "reserve paused");
+
+    auto pos_ptr = _get_or_create_position(positions, res, quantity.symbol.code());
+    auto pos_itr = positions.find(pos_ptr->sym_code.raw());
+
+    position_row pos = *pos_itr;
+
+    // settle supply interest（基于 ctx snapshot）
+    _settle_supply_interest(pos, res);
+    asset share_delta = _supply_shares_from_amount(quantity, res.total_supply_shares,res.total_liquidity);
+    pos.supply_shares += share_delta;
+
+    // commit
+    positions.modify(pos_itr, same_payer, [&](auto& r){ r = pos; });
+    reserves.modify(reserves.find(res.sym_code.raw()), same_payer, [&](auto& r){
+        r = res;
+        r.total_liquidity     += quantity;
+        r.total_supply_shares += share_delta;
     });
 }
 
-uint64_t tyche_market::_util_bps(const reserve_state& res) const {
-   if (res.total_liquidity.amount <= 0) return 0;
-   int128_t u = (int128_t)res.total_debt.amount * RATE_SCALE / res.total_liquidity.amount;
-   if (u < 0) u = 0;
-   if (u > (int128_t)RATE_SCALE) u = RATE_SCALE;
-   return (uint64_t)u;
-}
-
-uint64_t tyche_market::_buffer_bps_by_util(uint64_t util_bps) const {
-   // v2: util 越高 buffer 越厚
-   if (util_bps < 7000) return 100;   // <70%  => 1%
-   if (util_bps < 8500) return 200;   // 70-85 => 2%
-   if (util_bps < 9500) return 500;   // 85-95 => 5%
-   return 1000;                       // >=95% => 10%
-}
-
-int64_t tyche_market::_calc_target_borrow_rate(const reserve_state& res, uint64_t util_bps) const {
-   check(res.u_opt > 0 && res.u_opt < RATE_SCALE, "u_opt must be in (0, 100%)");
-   check(res.r0 <= res.r_opt && res.r_opt <= res.r_max, "invalid interest rate curve");
-
-   if (util_bps <= res.u_opt) {
-      int128_t slope = (int128_t)(res.r_opt - res.r0) * util_bps / res.u_opt;
-      return res.r0 + (int64_t)slope;
-   }
-
-   uint64_t excess = util_bps > RATE_SCALE ? RATE_SCALE : util_bps;
-   excess -= res.u_opt;
-   int128_t slope = (int128_t)(res.r_max - res.r_opt) * excess / (RATE_SCALE - res.u_opt);
-   return res.r_opt + (int64_t)slope;
-}
-
-int64_t tyche_market::_calc_borrow_rate(const reserve_state& res, uint64_t util_bps) const {
-   int64_t target = _calc_target_borrow_rate(res, util_bps);
-
-   // 首次/旧数据兼容：last_borrow_rate_bp = 0 时，直接用 target 或 r0
-   int64_t last =
-            (res.borrow_index.borrow_rate_bp == 0)
-            ? (int64_t)res.r0
-            : (int64_t)res.borrow_index.borrow_rate_bp;
-
-   int64_t step = (int64_t)res.max_rate_step_bp;
-   if (step <= 0) return target;
-
-   int64_t delta = target - last;
-   if (delta >  step) delta =  step;
-   if (delta < -step) delta = -step;
-
-   int64_t applied = last + delta;
-
-   // guardrail：保持在[r0, r_max]
-   if (applied < (int64_t)res.r0)   applied = (int64_t)res.r0;
-   if (applied > (int64_t)res.r_max) applied = (int64_t)res.r_max;
-   return applied;
-}
-
-
-asset tyche_market::_supply_shares_from_amount(const asset& amount, const asset& total_shares, const asset& total_amount) const {
-   check(amount.symbol == total_amount.symbol, "symbol mismatch");
-   if (total_amount.amount == 0 || total_shares.amount == 0) {
-      return amount;
-   }
-   int128_t numerator   = (int128_t)amount.amount * total_shares.amount;
-   int64_t  share_value = static_cast<int64_t>(numerator / total_amount.amount);
-   check(share_value > 0, "supply amount too small");
-   return asset(share_value, amount.symbol);
-}
-
-asset tyche_market::_borrow_shares_from_amount(const asset& amount, const asset& total_shares, const asset& total_amount) const {
-   check(amount.symbol == total_amount.symbol, "symbol mismatch");
-   if (total_amount.amount == 0 || total_shares.amount == 0) {
-      check(amount.amount > 0, "borrow too small");
-      return amount;
-   }
-   int128_t numerator   = (int128_t)amount.amount * total_shares.amount;
-   int128_t denominator = total_amount.amount;
-   int64_t  share_value = static_cast<int64_t>((numerator + denominator - 1) / denominator);
-   check(share_value > 0, "borrow too small");
-   return asset(share_value, amount.symbol);
-}
-
-asset tyche_market::_repay_shares_from_amount(const asset& amount,const asset& total_shares,const asset& total_amount) const {
-   check(amount.symbol == total_amount.symbol, "symbol mismatch");
-   check(total_amount.amount > 0 && total_shares.amount > 0, "repay too small");
-
-   int128_t numerator   = (int128_t)amount.amount * total_shares.amount;
-   int128_t denominator = total_amount.amount;
-
-   int64_t share_value = static_cast<int64_t>( numerator / denominator);
-
-   check(share_value > 0, "repay too small");
-   return asset(share_value, amount.symbol);
-}
-
-asset tyche_market::_withdraw_shares_from_amount(const asset& amount,const asset& total_shares,const asset& total_amount) const {
-   check(amount.symbol == total_amount.symbol, "symbol mismatch");
-
-   // 不允许在异常池状态下 withdraw
-   check(total_amount.amount > 0 && total_shares.amount > 0, "withdraw too small");
-
-   int128_t numerator   = (int128_t)amount.amount * total_shares.amount;
-   int128_t denominator = total_amount.amount;
-
-   // withdraw：必须 ceil，多扣 shares，防止用户多提
-   int64_t share_value = static_cast<int64_t>((numerator + denominator - 1) / denominator);
-
-   check(share_value > 0, "withdraw too small");
-   return asset(share_value, amount.symbol);
-}
-
-asset tyche_market::_amount_from_shares(const asset& shares, const asset& total_shares, const asset& total_amount) const {
-   check(shares.symbol == total_shares.symbol, "symbol mismatch");
-   if (total_shares.amount == 0 || total_amount.amount == 0) {
-      return asset(0, total_amount.symbol);
-   }
-   int128_t numerator    = (int128_t)shares.amount * total_amount.amount;
-   int64_t  asset_amount = static_cast<int64_t>(numerator / total_shares.amount);
-   return asset(asset_amount, total_amount.symbol);
-}
-
-int64_t tyche_market::available_liquidity(const reserve_state& res) const {
-    uint64_t util = _util_bps(res);
-    uint64_t buffer_bp = _buffer_bps_by_util(util);
-
-    int128_t buffer =
-        (int128_t)res.total_liquidity.amount * buffer_bp / RATE_SCALE;
-
-    int128_t avail = (int128_t)res.total_liquidity.amount  - buffer;
-
-    if (avail <= 0) return 0;
-    return (int64_t)avail;
-}
-
-tyche_market::valuation tyche_market::_compute_valuation(name owner)
-{
-    positions_t positions(get_self(), get_self().value);
-    auto owner_idx = positions.get_index<"byowner"_n>();
-
-    prices_t prices(get_self(), get_self().value);
-    reserves_t reserves(get_self(), get_self().value);
-
-    valuation result{};
-
-    auto itr = owner_idx.lower_bound(owner.value);
-
-    while (itr != owner_idx.end() && itr->owner == owner)
-    {
-
-        auto res_itr = reserves.find(itr->sym_code.raw());
-        if (res_itr == reserves.end())
-        {
-            ++itr;
-            continue;
-        }
-
-        // reserve_state res = _accrue(*res_itr);
-        const reserve_state &res = *res_itr;
-
-        // ---------- supply / debt amount ----------
-        asset supply_amount = _amount_from_shares(itr->supply_shares, res.total_supply_shares, res.total_liquidity);
-        asset debt_amount = _amount_from_shares(itr->borrow_shares, res.total_borrow_shares, res.total_debt);
-
-        // ---------- 是否需要价格 ----------
-        bool need_price = (debt_amount.amount > 0) || (itr->collateral && res.max_ltv > 0 && supply_amount.amount > 0);
-
-        if (!need_price)
-        {
-            ++itr;
-            continue;
-        }
-
-        // ---------- price ----------
-        asset price = _get_fresh_price(prices, itr->sym_code);
-
-        // ---------- collateral value ----------
-        if (itr->collateral && supply_amount.amount > 0 && res.max_ltv > 0)
-        {
-            int128_t v = value_of(supply_amount, price);
-            result.collateral_value += v * res.liquidation_threshold / RATE_SCALE;
-            result.max_borrowable_value += v * res.max_ltv / RATE_SCALE;
-        }
-
-        // ---------- debt value ----------
-        if (debt_amount.amount > 0)
-        {
-            int128_t v = value_of(debt_amount, price);
-            result.debt_value += v;
-        }
-
-        ++itr;
+position_row* tyche_market::_get_or_create_position(positions_t& table,const reserve_state& res,symbol_code sym) {
+    auto itr = table.find(sym.raw());
+    if (itr != table.end()) {
+        return const_cast<position_row*>(&(*itr));
     }
 
-    return result;
+    const symbol canonical_sym = res.total_liquidity.symbol;
+
+    table.emplace(get_self(), [&](auto& row) {
+        row.sym_code = sym;
+
+        // supply side
+        row.supply_shares = asset(0, canonical_sym);
+
+        // borrow side
+        row.borrow.borrow_scaled     = 0;
+        row.borrow.accrued_interest  = 0;
+        row.borrow.last_borrow_index = 0;
+        row.borrow.id                = 0;
+        row.borrow.last_updated      = current_time_point();
+
+        // supply interest
+        row.supply_interest.pending_interest = asset(0, canonical_sym);
+        row.supply_interest.claimed_interest = asset(0, canonical_sym);
+        row.supply_interest.id               = res.supply_index.id;
+        row.supply_interest.last_reward_per_share = res.supply_index.reward_per_share;
+
+        // collateral
+        row.collateral = false;
+    });
+
+    auto new_itr = table.find(sym.raw());
+    check(new_itr != table.end(), "failed to create position");
+    return const_cast<position_row*>(&(*new_itr));
+}
+void tyche_market::_on_repay(const name& payer,const name& borrower,const asset& quantity) {
+    check(quantity.amount > 0, "repay must be positive");
+    action_ctx ctx{ .now = current_time_point() };
+    const symbol_code sym = quantity.symbol.code();
+
+    reserves_t  reserves(get_self(), get_self().value);
+    positions_t positions(get_self(), borrower.value);
+
+    // 获取已推进的 debt reserve（语义唯一）
+    reserve_state& res = _get_reserve(ctx, reserves, sym);
+    check(res.token_contract == get_first_receiver(), "invalid token contract");
+    // load position
+    auto pos_itr    =  positions.find(sym.raw());
+    check(pos_itr   != positions.end(), "no debt position");
+
+    position_row pos = *pos_itr;
+
+    // repay（内部会先 settle borrow interest）
+    repay_result rr = _repay_by_snapshot(res, pos, quantity.amount, /*do_settle=*/true);
+    check(rr.paid > 0, "repay too small");
+    if (pos.borrow.borrow_scaled == 0) {
+        pos.borrow.accrued_interest  = 0;
+        pos.borrow.last_borrow_index = 0;
+        pos.borrow.id                = 0;
+    }
+
+    // 更新利率（action 内即可）
+    _update_borrow_rate(res);
+    // commit
+    positions.modify(pos_itr, same_payer, [&](auto& r){
+        r = pos;
+    });
+
+    _flush_reserve(ctx, reserves, sym);
+    // ⑥ refund
+    if (rr.refund > 0) {
+        _transfer_out( res.token_contract, payer, asset(rr.refund, quantity.symbol), "repay refund");
+    }
+
 }
 
-asset tyche_market::_get_fresh_price(prices_t& prices, symbol_code sym) const {
-    auto itr = prices.find(sym.raw());
-    check(itr != prices.end(), "price not available");
+void tyche_market::_on_liquidate(const name& liquidator,const name& borrower,const symbol_code& debt_sym,const asset& repay_amount,const symbol_code& coll_sym) {
 
-    auto now = current_time_point();
-    auto freshness = now - itr->updated_at;
+    check(repay_amount.amount > 0, "repay > 0");
+    action_ctx ctx{ .now = current_time_point() };
 
-    int64_t ttl_us = (int64_t)_gstate.price_ttl_sec * 1'000'000;
+    reserves_t  reserves(get_self(), get_self().value);
+    positions_t positions(get_self(), borrower.value);
+    prices_t    prices(get_self(), get_self().value);
 
-    // v3：emergency 下放宽价格有效期（防止 oracle 抖动）
+    auto& debt_res = _get_reserve(ctx, reserves, debt_sym);
+    auto& coll_res = _get_reserve(ctx, reserves, coll_sym);
+    check(debt_res.token_contract == get_first_receiver(), "invalid debt token contract");
+
+    auto debt_pos_itr = positions.find(debt_sym.raw());
+    auto coll_pos_itr = positions.find(coll_sym.raw());
+    check(debt_pos_itr != positions.end(), "no debt position");
+    check(coll_pos_itr != positions.end(), "no collateral position");
+    check(coll_pos_itr->collateral, "collateral disabled");
+    check(coll_pos_itr->supply_shares.amount > 0, "no collateral supply");
+
+    position_row debt_pos = *debt_pos_itr;
+    position_row coll_pos = *coll_pos_itr;
+
+    asset debt_price = _get_fresh_price(prices, debt_sym);
+    asset coll_price = _get_fresh_price(prices, coll_sym);
+
+    liquidate_result lr = _liquidate_internal(debt_res, coll_res,debt_pos, coll_pos,repay_amount.amount,debt_price, coll_price);
+
+    // 1) commit positions
+    positions.modify(debt_pos_itr, same_payer, [&](auto& r){ r = debt_pos; });
+    positions.modify(coll_pos_itr, same_payer, [&](auto& r){ r = coll_pos; });
+
+    // 2) flush 两个 reserve（顺序无关）
+    _flush_reserve(ctx, reserves, debt_sym);
+    _flush_reserve(ctx, reserves, coll_sym);
+
+    // 3) refund（多余的 debt token 退给清算人）
+    if (lr.refund > 0) {
+        check(repay_amount.symbol == debt_res.total_liquidity.symbol,"refund token must be debt token");
+        check(repay_amount.symbol.code() == debt_sym,"repay symbol must match debt_sym");
+        _transfer_out(debt_res.token_contract,liquidator,asset(lr.refund, repay_amount.symbol),"liquidate refund");
+    }
+    // 4) seize collateral token 给清算人
+    _transfer_out(coll_res.token_contract,liquidator,asset(lr.seized, coll_res.total_liquidity.symbol),"liquidate seize");
+
+}
+// 在一个确定时间截面内，把 一笔还债 精确地转化为 等值（含奖励）的抵押物扣减，并严格维护池子与仓位的不变量
+liquidate_result tyche_market::_liquidate_internal(reserve_state& debt_res,
+                                                    reserve_state& coll_res,
+                                                    position_row&  debt_pos,
+                                                    position_row&  coll_pos,
+                                                    int64_t        repay_amount,   // 用户转进来的最大愿付额（debt token）
+                                                    asset          debt_price,
+                                                    asset          coll_price) {
+    liquidate_result out{};
+
+    check(repay_amount > 0, "repay amount must be positive");
+    check(debt_price.symbol == USDT_SYM, "debt price must be USDT");
+    check(coll_price.symbol == USDT_SYM, "coll price must be USDT");
+    check(debt_price.amount > 0, "invalid debt price");
+    check(coll_price.amount > 0, "invalid coll price");
+
+    // 0) 清算截面内：仅在这里 settle 一次
+    int64_t old_ai = debt_pos.borrow.accrued_interest;
+    _settle_borrow_interest(debt_res, debt_pos);
+    int64_t delta_ai = debt_pos.borrow.accrued_interest - old_ai;
+
+    if (delta_ai > 0) {
+        _safe_add_i64(debt_res.total_accrued_interest, delta_ai, "total_accrued_interest overflow");
+    }
+
+    // int64_t principal_amt = _amount_from_scaled(debt_pos.borrow.borrow_scaled, HIGH_PRECISION);
+    int64_t principal_amt = _amount_from_scaled(debt_pos.borrow.borrow_scaled, debt_res.borrow_index.index);
+    int64_t debt_before   = debt_pos.borrow.accrued_interest + principal_amt;
+    check(debt_before > 0, "no debt");
+
+    // 1) close factor clamp
+    int64_t max_close = (int64_t)((__int128)debt_before * (__int128)_gstate.close_factor_bp / (__int128)RATE_SCALE);
+    check(max_close > 0, "close factor too small");
+
+    int64_t actual = std::min(std::min(repay_amount, debt_before), max_close);
+    check(actual > 0, "repay too small");
+
+    // 2) 偿还（do_settle=false，避免重复结息）
+    repay_result rr = _repay_by_snapshot(debt_res, debt_pos, actual, /*do_settle=*/false);
+    check(rr.paid > 0, "repay failed");
+
+    out.paid   = rr.paid;
+    out.refund = repay_amount - rr.paid;      // ✅ 多余都退给清算人（实际转入 - 实际消耗）
+    if (out.refund < 0) out.refund = 0;
+
+    // 3) repaid value（USDT）
+    asset repaid_asset(out.paid, debt_res.total_liquidity.symbol);
+    int128_t repay_value = value_of(repaid_asset, debt_price);
+    check(repay_value > 0, "repay value too small");
+
+    // 4) bonus
+    uint64_t bonus_bp = coll_res.liquidation_bonus;
     if (_gstate.emergency_mode) {
-        ttl_us *= 2;   // 或 3，取决于你的风险偏好
+        bonus_bp = std::min<uint64_t>( RATE_SCALE + _gstate.max_emergency_bonus_bp,bonus_bp + _gstate.emergency_bonus_bp);
     }
+    check(bonus_bp >= RATE_SCALE, "invalid liquidation bonus");
 
-    check(freshness.count() <= ttl_us, "price stale");
+    int128_t seize_value = repay_value * (int128_t)bonus_bp / (int128_t)RATE_SCALE;
+    check(seize_value > 0, "seize value too small");
 
-    // asset：price.amount + price.symbol
-    return itr->price;
+    // 5) USDT value -> collateral amount
+    symbol coll_sym = coll_res.total_liquidity.symbol;
+    int128_t seize_amt = seize_value * pow10_i128(coll_sym.precision()) / (int128_t)coll_price.amount;
+    check(seize_amt > 0, "seize too small");
+    check(seize_amt <= (int128_t)std::numeric_limits<int64_t>::max(), "seize overflow");
+
+    asset seize_asset((int64_t)seize_amt, coll_sym);
+
+    // 6) 扣 collateral shares（ceil）
+    asset share_delta = _withdraw_shares_from_amount(seize_asset,coll_res.total_supply_shares,coll_res.total_liquidity);
+    check(share_delta.amount > 0, "share delta too small");
+    check(share_delta.amount <= coll_pos.supply_shares.amount, "exceeds collateral shares");
+
+    coll_pos.supply_shares       -= share_delta;
+    coll_res.total_supply_shares -= share_delta;
+    coll_res.total_liquidity     -= seize_asset;
+
+    // 7) 清算后刷新利率（debt_res）
+    _update_borrow_rate(debt_res);
+    out.seized = seize_asset.amount;
+
+    return out;
 }
 
 void tyche_market::_check_price_available(symbol_code sym) const {
@@ -1307,70 +627,575 @@ void tyche_market::_check_price_available(symbol_code sym) const {
    _get_fresh_price(prices, sym);
 }
 
-position_row* tyche_market::_get_or_create_position(positions_t& table,name owner,symbol_code sym,const asset& base_symbol_amount) {
-    auto idx = table.get_index<"ownerreserve"_n>();
-    auto itr = idx.find(((uint128_t)owner.value << 64) | sym.raw());
-
-    // 已存在，直接返回 canonical 行
-    if (itr != idx.end()) {
-        auto canonical = table.find(itr->id);
-        return const_cast<position_row*>(&(*canonical));
-    }
-
-    // 新建 position（不隐式开启 collateral）
-    auto pk = table.available_primary_key();
-    table.emplace(get_self(), [&](auto& row) {
-        row.id            = pk;
-        row.owner         = owner;
-        row.sym_code      = sym;
-        row.supply_shares = asset(0, base_symbol_amount.symbol);
-        row.borrow_shares = asset(0, base_symbol_amount.symbol);
-        row.collateral    = false;
-    });
-
-    auto new_itr = table.find(pk);
-    return const_cast<position_row*>(&(*new_itr));
-}
-
-
-void tyche_market::_transfer_out(name token_contract, name to, const asset& quantity, const string& memo) {
-   eosio::action(
-      permission_level{get_self(), "active"_n},
-      token_contract,
-      "transfer"_n,
-      std::make_tuple(get_self(), to, quantity, memo)).send();
-}
-
-
 // 用户存款利息结算（指数差值 × 份额）
-void tyche_market::_settle_supply_interest( position_row& pos, const reserve_state& res) {
+void tyche_market::_settle_supply_interest(position_row& pos, const reserve_state& res) {
     auto& pool = res.supply_index;
     auto& user = pos.supply_interest;
 
-    // 首次结算：只记录锚点，不给利息
-   if (user.index_id == 0) {
-      user.last_reward_per_share = pool.reward_per_share;
-      user.index_id = pool.index_id;
-      return;
-   }
+    // === ① 首次结算：只建立锚点（以 id 为准）===
+    if (user.id == 0) {
+        user.id = pool.id;
+        user.last_reward_per_share = pool.reward_per_share;
+        return;
+    }
 
-    // delta_rps = pool_rps - user_rps
-    int128_t delta_rps =
-        (int128_t)pool.reward_per_share -
-        (int128_t)user.last_reward_per_share;
+    // === ② 若 index 未变化，可直接快进锚点 ===
+    if (user.id == pool.id) {
+        user.last_reward_per_share = pool.reward_per_share;
+        return;
+    }
 
+    // === ③ 计算 delta_rps ===
+    int128_t delta_rps = (int128_t)pool.reward_per_share - (int128_t)user.last_reward_per_share;
+
+    // === ④ 结算利息 ===
     if (delta_rps > 0 && pos.supply_shares.amount > 0) {
-        int128_t pending = delta_rps * pos.supply_shares.amount / HIGH_PRECISION;
-
+        int128_t pending = delta_rps * (int128_t)pos.supply_shares.amount / HIGH_PRECISION;
         if (pending > 0) {
-            check(user.pending_interest.amount <=std::numeric_limits<int64_t>::max() - (int64_t)pending,"interest overflow");
+            check(user.pending_interest.amount <= std::numeric_limits<int64_t>::max() - (int64_t)pending,"interest overflow");
             user.pending_interest.amount += (int64_t)pending;
         }
     }
 
-    // 推进用户锚点
+    // === ⑤ 推进用户锚点 ===
     user.last_reward_per_share = pool.reward_per_share;
-    user.index_id = pool.index_id;
+    user.id = pool.id;
+}
+
+void tyche_market::_settle_borrow_interest(const reserve_state& res,position_row& pos) {
+    auto& b = pos.borrow;
+
+    // ① 无本金：只同步锚点
+    if (b.borrow_scaled <= 0) {
+        b.accrued_interest  = 0;
+        b.last_borrow_index = 0;
+        b.id                = res.borrow_index.id;
+        return;
+    }
+
+    // ② 首次结算：建立锚点
+    if (b.last_borrow_index == 0) {
+        b.last_borrow_index = res.borrow_index.index;
+        b.id                = res.borrow_index.id;
+        return;
+    }
+
+    // ③ index 未变化：快进锚点
+    if (b.id == res.borrow_index.id) {
+        b.last_borrow_index = res.borrow_index.index;
+        return;
+    }
+
+    // ④ 计算 delta index
+    int128_t delta_index =
+        (int128_t)res.borrow_index.index -
+        (int128_t)b.last_borrow_index;
+
+    if (delta_index <= 0) {
+        b.last_borrow_index = res.borrow_index.index;
+        b.id                = res.borrow_index.id;
+        return;
+    }
+
+    // ⑤ 计算利息
+    int128_t interest_i128 =
+        (int128_t)b.borrow_scaled * delta_index / HIGH_PRECISION;
+
+    if (interest_i128 > 0) {
+        check(
+            interest_i128 <= (int128_t)std::numeric_limits<int64_t>::max(),
+            "borrow interest overflow"
+        );
+        b.accrued_interest += (int64_t)interest_i128;
+    }
+
+    // ⑥ 推进锚点
+    b.last_borrow_index = res.borrow_index.index;
+    b.id                = res.borrow_index.id;
+}
+
+uint64_t tyche_market::_buffer_bps_by_util(uint64_t util_bps) const {
+    if (util_bps > RATE_SCALE) util_bps = RATE_SCALE;
+
+    if (util_bps < 7000) return 100;   // <70%  => 1%
+    if (util_bps < 8500) return 200;   // 70-85 => 2%
+    if (util_bps < 9500) return 500;   // 85-95 => 5%
+    return 1000;                       // >=95% => 10%
+}
+
+//当前时刻的借款利率是多少
+void tyche_market::_update_borrow_rate(reserve_state& res) {
+    uint64_t util = _util_bps(res);
+    int64_t applied = _calc_borrow_rate(res, util);
+
+    if (res.borrow_index.borrow_rate_bp == (uint64_t)applied) {
+        return;
+    }
+
+    res.borrow_index.borrow_rate_bp = (uint64_t)applied;
+
+}
+//在给定目标利率的前提下，结合“上一时刻利率 + 单次变化上限 + 安全护栏”，计算当前 action 实际采用的借款利率
+int64_t tyche_market::_calc_borrow_rate(const reserve_state& res, uint64_t util_bps) const {
+    int64_t target = _calc_target_borrow_rate(res, util_bps);
+
+    // 统一：borrow_rate_bp 既是当前利率，也是 last
+    int64_t last =  (res.borrow_index.borrow_rate_bp == 0)
+                    ? (int64_t)res.r0
+                    : (int64_t)res.borrow_index.borrow_rate_bp;
+
+    int64_t step = (int64_t)res.max_rate_step_bp;
+    if (step <= 0) return target;
+
+    int64_t delta = target - last;
+    if (delta >  step) delta =  step;
+    if (delta < -step) delta = -step;
+
+    int64_t applied = last + delta;
+
+    // guardrail
+    if (applied < (int64_t)res.r0)   applied = (int64_t)res.r0;
+    if (applied > (int64_t)res.r_max) applied = (int64_t)res.r_max;
+
+    return applied;
+}
+// 在某个 utilization 下，借款人理论上应该付多少年化利率
+int64_t tyche_market::_calc_target_borrow_rate(const reserve_state& res,uint64_t util_bps) const {
+    check(res.u_opt > 0 && res.u_opt < RATE_SCALE, "u_opt must be in (0, 100%)");
+    check(res.r0 <= res.r_opt && res.r_opt <= res.r_max, "invalid interest rate curve");
+
+    if (util_bps <= res.u_opt) {
+        int128_t slope = (int128_t)(res.r_opt - res.r0) * util_bps / res.u_opt;
+        return res.r0 + (int64_t)slope;
+    }
+
+    uint64_t capped = util_bps > RATE_SCALE ? RATE_SCALE : util_bps;
+    uint64_t denom = RATE_SCALE - res.u_opt;
+    check(denom > 0, "invalid u_opt");
+
+    uint64_t excess = capped - res.u_opt;
+    int128_t slope = (int128_t)(res.r_max - res.r_opt) * excess / denom;
+    return res.r_opt + (int64_t)slope;
+}
+
+//借款人债务如何随时间增长
+void tyche_market::_accrue_borrow_index(reserve_state& res, time_point_sec now) {
+    auto& idx = res.borrow_index;
+    if (now <= idx.last_updated) return;
+
+    uint32_t dt = now.sec_since_epoch() - idx.last_updated.sec_since_epoch();
+    if (dt == 0 || res.total_borrow_scaled == 0) {
+        idx.last_updated = now;
+        return;
+    }
+
+    int128_t delta = (int128_t)idx.index * idx.borrow_rate_bp * dt / (RATE_SCALE * SECONDS_PER_YEAR);
+
+    if (delta > 0) {
+        idx.index += (uint128_t)delta;
+        idx.id += 1;   // 真实产生了利息
+
+        int128_t interest = res.total_borrow_scaled * delta / HIGH_PRECISION;
+        res.total_accrued_interest += (int64_t)interest;
+    }
+
+    idx.last_updated = now;
+}
+// 把已经产生的利息，分配到“每一份 supply share”上
+void tyche_market::_accrue_supply_index(reserve_state& res, time_point_sec now) {
+    auto& sidx = res.supply_index;
+
+    if (now <= sidx.last_updated) return;
+
+    // 没有供应份额，无法分发
+    if (res.total_supply_shares.amount == 0) {
+        sidx.last_updated = now;
+        return;
+    }
+
+    // 当前「可分配的真实利息现金」
+    int64_t available = res.interest_realized.amount - res.interest_claimed.amount;
+
+    if (available <= 0) {
+        sidx.last_updated = now;
+        return;
+    }
+
+    // ⭐ 只分发“增量部分”
+    int64_t delta_available = available - sidx.indexed_available;
+    if (delta_available <= 0) {
+        // 没有新的可分配利息，禁止重复分发
+        sidx.last_updated = now;
+        return;
+    }
+
+    // 计算本次 rps 增量
+    int128_t delta_rps = (int128_t)delta_available * HIGH_PRECISION / res.total_supply_shares.amount;
+
+    if (delta_rps > 0) {
+        sidx.reward_per_share += (uint128_t)delta_rps;
+        sidx.id += 1;  // 进入新的 supply 分发 epoch
+        sidx.indexed_available = available; // ⭐ 记账到这里为止
+    }
+
+    sidx.last_updated = now;
+}
+//把一笔还款金额严格按「先利息、后本金」规则结算，同步维护用户仓位与资金池的所有会计不变量，并返回“实际支付了多少 / 剩余退款多少
+repay_result tyche_market::_repay_by_snapshot(reserve_state& res,position_row&  pos,int64_t pay_amount, bool do_settle) {
+    repay_result rr{};
+    check(pay_amount > 0, "pay_amount must be positive");
+
+    // 0) 只在这里结一次用户利息
+    if (do_settle) {
+        _settle_borrow_interest(res, pos);
+    }
+
+    const int64_t principal_amt =
+        _amount_from_scaled(pos.borrow.borrow_scaled, res.borrow_index.index);
+
+    rr.debt_before = pos.borrow.accrued_interest + principal_amt;
+    if (rr.debt_before <= 0) {
+        rr.refund = pay_amount;
+        return rr;
+    }
+
+    int64_t pay_left = pay_amount;
+
+    // 1) 先还利息
+    int64_t pay_interest = std::min(pay_left, pos.borrow.accrued_interest);
+    if (pay_interest > 0) {
+        pos.borrow.accrued_interest -= pay_interest;
+
+        _safe_sub_i64(res.total_accrued_interest, pay_interest,"total_accrued_interest underflow");
+        res.interest_realized.amount += pay_interest;
+
+        rr.paid += pay_interest;
+        pay_left -= pay_interest;
+    }
+
+    // 2) 再还本金（scaled）
+    if (pay_left > 0 && pos.borrow.borrow_scaled > 0) {
+        int128_t scaled_delta = _scaled_from_amount(pay_left, res.borrow_index.index);
+        if (scaled_delta > pos.borrow.borrow_scaled)
+            scaled_delta = pos.borrow.borrow_scaled;
+
+        int64_t pay_principal = _amount_from_scaled(scaled_delta, res.borrow_index.index);
+
+        if (pay_principal > 0) {
+            pos.borrow.borrow_scaled -= scaled_delta;
+            res.total_borrow_scaled  -= scaled_delta;
+            res.total_liquidity.amount += pay_principal;
+
+            rr.scaled_delta = scaled_delta;
+            rr.paid += pay_principal;
+            pay_left -= pay_principal;
+        }
+    }
+
+    rr.refund = pay_left > 0 ? pay_left : 0;
+    pos.borrow.last_updated = current_time_point();
+
+    if (pos.borrow.borrow_scaled == 0) {
+        pos.borrow.accrued_interest  = 0;
+        pos.borrow.last_borrow_index = 0;
+        pos.borrow.id                = res.borrow_index.id;
+    }
+
+    return rr;
+}
+
+uint64_t tyche_market::_util_bps(const reserve_state& res) const {
+    int128_t debt =
+        (int128_t)res.total_borrow_scaled
+        * (int128_t)res.borrow_index.index
+        / (int128_t)HIGH_PRECISION
+        + (int128_t)res.total_accrued_interest;
+
+    int128_t cash = (int128_t)res.total_liquidity.amount;
+    if (debt + cash == 0) return 0;
+
+    return (uint64_t)(debt * RATE_SCALE / (debt + cash));
+}
+
+int128_t tyche_market::_scaled_from_amount(int64_t amt, uint128_t idx) const {
+    return (int128_t)amt * HIGH_PRECISION / idx;
+}
+
+int64_t tyche_market::_amount_from_scaled(int128_t scaled, uint128_t idx) const {
+    return (int64_t)(scaled * idx / HIGH_PRECISION);
+}
+
+tyche_market::valuation tyche_market::_compute_valuation(action_ctx& ctx,name owner,const position_row* override_pos,symbol_code override_sym) {
+    valuation v{};
+
+    prices_t    prices(get_self(), get_self().value);
+    positions_t positions(get_self(), owner.value);
+
+    bool seen_override = false;
+
+    auto apply_one = [&](const position_row& pos) {
+        const uint64_t key = pos.sym_code.raw();
+
+        auto rc = ctx.reserve_cache.find(key);
+        if (rc == ctx.reserve_cache.end()) return;
+
+        const reserve_state& res = rc->second;
+
+        // ---- debt ----
+        if (pos.borrow.borrow_scaled > 0 || pos.borrow.accrued_interest > 0) {
+            int64_t principal = _amount_from_scaled(pos.borrow.borrow_scaled, res.borrow_index.index);
+            int64_t debt_amt  = principal + pos.borrow.accrued_interest;
+
+            if (debt_amt > 0) {
+                asset price = _get_fresh_price(prices, pos.sym_code);
+                v.debt_value += value_of(asset(debt_amt, res.total_liquidity.symbol), price);
+            }
+        }
+
+        // ---- collateral ----
+        if (pos.collateral && pos.supply_shares.amount > 0 && res.max_ltv > 0) {
+            asset price      = _get_fresh_price(prices, pos.sym_code);
+            asset supply_amt = _amount_from_shares(pos.supply_shares, res.total_supply_shares, res.total_liquidity);
+
+            int128_t value = value_of(supply_amt, price);
+            v.collateral_value      += value * res.liquidation_threshold / RATE_SCALE;
+            v.max_borrowable_value  += value * res.max_ltv / RATE_SCALE;
+        }
+    };
+
+    for (auto it = positions.begin(); it != positions.end(); ++it) {
+        const position_row& pos =
+            (override_pos != nullptr && it->sym_code == override_sym)
+            ? (seen_override = true, *override_pos)
+            : *it;
+
+        apply_one(pos);
+    }
+
+    // ⭐ 关键补丁：第一次借该币种，没有 position 行时，也要把 override_pos 算进去
+    if (override_pos != nullptr && !seen_override) {
+        apply_one(*override_pos);
+    }
+
+    return v;
+}
+
+static std::string i128_to_string(int128_t value) {
+    if (value == 0) return "0";
+
+    bool neg = value < 0;
+    if (neg) value = -value;
+
+    std::string s;
+    while (value > 0) {
+        int digit = (int)(value % 10);
+        s.push_back('0' + digit);
+        value /= 10;
+    }
+
+    if (neg) s.push_back('-');
+    std::reverse(s.begin(), s.end());
+    return s;
+}
+
+void tyche_market::_check_health_factor( action_ctx& ctx,name owner,const position_row* override_pos,symbol_code override_sym) {
+    valuation v = _compute_valuation(ctx, owner, override_pos, override_sym);
+    // check(
+    //     false,
+    //     (
+    //         std::string("HF DEBUG coll=") + i128_to_string(v.collateral_value) +
+    //         " debt=" + i128_to_string(v.debt_value) +
+    //         " max="  + i128_to_string(v.max_borrowable_value)
+    //     ).c_str()
+    // );
+    if (v.debt_value == 0) return;
+
+    // 1) 清算安全线（liquidation_threshold）
+    check(v.collateral_value >= v.debt_value,"health factor below 1");
+
+    // 2) 借款上限线（max_ltv），防止借到清算线才被拒
+    check(v.debt_value <= v.max_borrowable_value, "exceeds max LTV");
+}
+
+asset tyche_market::_get_fresh_price(prices_t& prices, symbol_code sym) const {
+    if (sym == USDT_SYM.code()) {
+        return asset((int64_t)pow10(USDT_SYM.precision()), USDT_SYM);
+    }
+
+    auto itr = prices.find(sym.raw());
+    check(itr != prices.end(), "price not found");
+
+    auto now = current_time_point();
+    auto age = now - itr->updated_at;
+
+    int64_t ttl_us = (int64_t)_gstate.price_ttl_sec * 1'000'000;
+    if (_gstate.emergency_mode) ttl_us *= 2;
+
+    check(age.count() <= ttl_us, "price stale");
+    check(itr->price.symbol == USDT_SYM, "price must be USDT");
+    check(itr->price.amount > 0, "invalid price");
+
+    return itr->price;
+}
+
+// 根据 shares 数量，算出对应的 amount 数量
+asset tyche_market::_amount_from_shares(const asset& shares,const asset& total_shares,const asset& total_amount) const {
+    if (shares.amount == 0 || total_shares.amount == 0) {
+        return asset(0, total_amount.symbol);
+    }
+
+    int128_t num = (int128_t)shares.amount * total_amount.amount;
+    int64_t amt = (int64_t)(num / total_shares.amount);
+
+    return asset(amt, total_amount.symbol);
+}
+// 用户想拿走 amount，必须至少付出足够多的 shares，宁多不少
+asset tyche_market::_withdraw_shares_from_amount(const asset& amount,const asset& total_shares,const asset& total_amount) const {
+    check(amount.symbol == total_amount.symbol, "symbol mismatch");
+    check(total_amount.amount > 0 && total_shares.amount > 0, "invalid pool");
+
+    int128_t num = (int128_t)amount.amount * total_shares.amount;
+    int128_t den = total_amount.amount;
+
+    int64_t shares = (int64_t)((num + den - 1) / den); // ceil
+    check(shares > 0, "withdraw too small");
+
+    return asset(shares, amount.symbol);
+}
+
+asset tyche_market::_supply_shares_from_amount(const asset& amount,const asset& total_shares,const asset& total_amount) const {
+    check(amount.symbol == total_amount.symbol, "symbol mismatch");
+
+    if (total_amount.amount == 0 || total_shares.amount == 0) {
+        return amount; // 1:1
+    }
+
+    int128_t num = (int128_t)amount.amount * total_shares.amount;
+    int64_t shares = (int64_t)(num / total_amount.amount);
+    check(shares > 0, "supply too small");
+
+    return asset(shares, amount.symbol);
+}
+
+void tyche_market::_transfer_out(name token_contract,name to,const asset& quantity, const string& memo) {
+    if (quantity.amount <= 0) return;
+
+    TRANSFER(token_contract, to, quantity, memo);
+}
+
+// action 内唯一时间锚点 ctx.now
+// 只负责：加载 -> 推进指数 -> refresh total_debt -> cache
+// 不在这里 reserves.modify，避免“先写一次旧snap，后面 action 又改 res 导致 total_debt/borrow_scaled 不一致”
+reserve_state& tyche_market::_get_reserve(action_ctx& ctx, reserves_t& reserves, symbol_code sym) {
+    const uint64_t key = sym.raw();
+    if (auto it = ctx.reserve_cache.find(key); it != ctx.reserve_cache.end()) return it->second;
+
+    auto itr = reserves.find(key);
+    check(itr != reserves.end(), "reserve not found");
+
+    reserve_state snap = *itr;
+    const time_point_sec& now = ctx.now;
+
+    // 1) 用“旧 borrow_rate_bp”把 [last_updated, now) 的历史利息结算掉
+    _accrue_borrow_index(snap, now);      // ✅ 这里如果 delta>0，idx.id++（利息epoch）
+
+    // 2) 历史结算完毕后，再根据当前util算出“新利率”，用于下一段时间
+    _update_borrow_rate(snap);            // ✅ 这里只改 borrow_rate_bp（不改 id）
+
+    // 3) supply 分发（也可放前后，只要语义一致）
+    _accrue_supply_index(snap, now);
+
+    auto [inserted_it, ok] = ctx.reserve_cache.emplace(key, snap);
+    return inserted_it->second;
+}
+
+// 在不写任何用户状态、不结息、不真实修改仓位的前提下，假设“某个仓位发生了一次变化”，并验证这次变化是否仍然满足 Health Factor（HF ≥ 1）
+void tyche_market::_simulate_position_change(action_ctx& ctx,name owner,reserves_t& reserves,positions_t& positions,symbol_code sym,const position_change& change) {
+    // ① 推进 owner 相关的所有 reserve（语义唯一）
+    for (auto it = positions.begin(); it != positions.end(); ++it) {
+        _get_reserve(ctx, reserves, it->sym_code);
+    }
+    reserve_state& res = _get_reserve(ctx, reserves, sym);
+
+    // ② 构造模拟仓位（不写表）
+    position_row sim_pos{};
+    auto pos_itr = positions.find(sym.raw());
+    if (pos_itr != positions.end()) {
+        sim_pos = *pos_itr;
+    } else {
+        // 纯影子仓位
+        sim_pos.sym_code = sym;
+        sim_pos.supply_shares = asset(0, res.total_liquidity.symbol);
+
+        sim_pos.borrow.borrow_scaled     = 0;
+        sim_pos.borrow.accrued_interest  = 0;
+        sim_pos.borrow.last_borrow_index = 0;
+        sim_pos.borrow.id                = 0;   // 影子仓位不继承 epoch
+
+        sim_pos.collateral = false;
+    }
+
+    // ③ 影子结息（只在已有本金时才有意义）
+    if (sim_pos.borrow.borrow_scaled > 0) {
+        _settle_borrow_interest(res, sim_pos);
+    }
+
+    // ④ 应用 borrow 变化（scaled）
+    if (change.borrow_scaled_delta != 0) {
+        sim_pos.borrow.borrow_scaled += change.borrow_scaled_delta;
+        check(sim_pos.borrow.borrow_scaled >= 0, "borrow underflow");
+    }
+
+    // ⑤ 应用 supply shares 变化
+    if (change.supply_shares_delta != 0) {
+        int128_t new_amt = (int128_t)sim_pos.supply_shares.amount + change.supply_shares_delta;
+        check(new_amt >= 0, "supply underflow");
+        sim_pos.supply_shares.amount = (int64_t)new_amt;
+    }
+
+    // ⑥ collateral override（三态）
+    if (change.collateral_override.has_value()) {
+        sim_pos.collateral = *change.collateral_override;
+    }
+
+    // ⑦ HF 校验（唯一出口）
+    _check_health_factor(ctx, owner, &sim_pos, sym);
+}
+// 用户真实债务
+int64_t tyche_market::_user_real_debt_amt(const reserve_state& res,const position_row& pos) const {
+    int64_t principal = _amount_from_scaled(pos.borrow.borrow_scaled, res.borrow_index.index);
+
+    int64_t debt = principal + pos.borrow.accrued_interest;
+
+    // 展示安全：逻辑上不应该 < 0
+    return debt > 0 ? debt : 0;
+}
+// 池子真实总债务（UI / 总览专用）
+int64_t tyche_market::_reserve_real_total_debt_amt(const reserve_state& res) const {
+    int128_t debt =
+        (int128_t)res.total_borrow_scaled
+        * (int128_t)res.borrow_index.index
+        / (int128_t)HIGH_PRECISION
+        + (int128_t)res.total_accrued_interest;
+    check(debt <= (int128_t)std::numeric_limits<int64_t>::max(), "overflow");
+    return (int64_t)debt;
+}
+
+void tyche_market::_flush_reserve(action_ctx& ctx, reserves_t& reserves, symbol_code sym) {
+    const uint64_t key = sym.raw();
+
+    auto it = ctx.reserve_cache.find(key);
+    if (it == ctx.reserve_cache.end()) return;
+
+    auto itr = reserves.find(key);
+    check(itr != reserves.end(), "reserve not found");
+
+    // 落盘前再 refresh 一次，保证 borrow/repay/liquidate 修改后 total_debt 一定正确
+    it->second.total_debt.amount = _reserve_real_total_debt_amt(it->second);
+
+    reserves.modify(itr, same_payer, [&](auto& r) {
+        r = it->second;
+    });
 }
 
 
