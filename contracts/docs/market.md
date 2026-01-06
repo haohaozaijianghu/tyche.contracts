@@ -110,23 +110,59 @@
 
 ---
 
-## 6. 全生命周期时序（示意）
-```text
-User            Market                 Reserve(state)                     Notes
----------------------------------------------------------------------------------------------------------
-supply ----> | transfer | -> [_get_reserve] accrue idx -> settle supply -> mint shares, total_liquidity+
-borrow ----> | action   | -> [_get_reserve] -> HF simulate -> add borrow_scaled, total_liquidity- ->
-              rate update -> flush -> transfer out
-repay  ----> | transfer | -> [_get_reserve] -> settle borrow -> pay interest -> interest_realized+
-                                        -> pay principal -> total_liquidity+
-                                        -> flush -> refund(if)
-claim  ----> | action   | -> settle supply -> claim from (interest_realized - interest_claimed) ->
-              interest_claimed+, indexed_available-
-withdraw--> | action   | -> settle supply -> share->amount -> HF check -> burn shares, total_liquidity-
-              proportional pending->claimed -> interest_claimed+, indexed_available-
-liquidate-> | transfer | -> [_get_reserve debt+coll] -> settle debt interest -> close_factor clamp
-              repay (interest->interest_pool, principal->principal_pool)
-              seize = paid*price*bonus -> burn coll shares, total_liquidity(coll)- -> flush both -> refund/seize out
+## 6. 全生命周期时序（mermaid 示意）
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Admin
+    participant Supplier
+    participant Borrower
+    participant Liquidator
+    participant Token as TokenContract
+    participant Market
+
+    %% 上线与定价
+    Admin ->> Market: init / addreserve / setprice
+
+    %% 存款
+    Supplier ->> Token: transfer amount, memo="supply"
+    Token ->> Market: on_notify transfer
+    Market ->> Market: _get_reserve (accrue idx)
+    Market ->> Market: settle supply interest
+    Market ->> Market: mint shares, total_liquidity += amount
+
+    %% 借款
+    Borrower ->> Market: borrow(amount)
+    Market ->> Market: _get_reserve, HF simulate, buffer check
+    Market ->> Market: settle borrow interest / set anchor
+    Market ->> Borrower: transfer loan
+
+    %% 还款（利息入利息池，本金回本金池）
+    Borrower ->> Token: transfer repay, memo="repay:borrower"
+    Token ->> Market: on_notify transfer
+    Market ->> Market: settle borrow interest
+    Market ->> Market: pay interest -> interest_realized+
+    Market ->> Market: pay principal -> total_liquidity+
+    Market ->> Borrower: refund(if)
+
+    %% 领取利息
+    Borrower ->> Market: claimint(sym)
+    Market ->> Market: settle supply interest
+    Market ->> Borrower: transfer interest (from interest pool)
+
+    %% 提现（按赎回比例冲减 pending）
+    Borrower ->> Market: withdraw(amount)
+    Market ->> Market: settle supply interest, HF check
+    Market ->> Market: burn shares, total_liquidity -= amount
+    Market ->> Borrower: transfer principal
+
+    %% 清算
+    Liquidator ->> Token: transfer repay, memo="liquidate:borrower:DEBT:COLL"
+    Token ->> Market: on_notify transfer
+    Market ->> Market: _get_reserve(debt+coll), settle debt interest
+    Market ->> Market: apply close_factor, repay (interest->interest pool, principal->principal pool)
+    Market ->> Market: seize coll shares, total_liquidity(coll)-
+    Market ->> Liquidator: refund(if) & transfer seized collateral
 ```
 
 ---
